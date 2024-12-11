@@ -1,6 +1,5 @@
-#include "Camera3D.h"
+#include "engine/Camera3D.h"
 #include <_types/_uint32_t.h>
-#include <filesystem>
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -325,7 +324,6 @@ private:
         createImageViews();
         createRenderPass();
         createDescriptorSetLayout();
-        //createGraphicsPipeline();
         createGraphicsPipelines();
         createCommandPool();
         createDepthResources();
@@ -550,7 +548,7 @@ private:
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
         appInfo.pEngineName = "No Engine";
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.apiVersion = VK_API_VERSION_1_0;
+        appInfo.apiVersion = VK_API_VERSION_1_2;
 
         VkInstanceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -661,17 +659,40 @@ private:
             queueCreateInfos.push_back(queueCreateInfo);
         }
 
-        VkPhysicalDeviceFeatures deviceFeatures{};
-        deviceFeatures.samplerAnisotropy = VK_TRUE;
+        // enable bindless descriptors if available, otherwise just quit for now
+        VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures{};
+        descriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+        descriptorIndexingFeatures.pNext = nullptr;
+
+        VkPhysicalDeviceFeatures2 deviceFeatures2{};
+        deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        deviceFeatures2.pNext = &descriptorIndexingFeatures;
+
+        vkGetPhysicalDeviceFeatures2(physicalDevice, &deviceFeatures2);
+
+        bool bindlessSupported = descriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing &&    
+            descriptorIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind &&
+            descriptorIndexingFeatures.shaderUniformBufferArrayNonUniformIndexing &&
+            descriptorIndexingFeatures.descriptorBindingUniformBufferUpdateAfterBind &&
+            descriptorIndexingFeatures.shaderStorageBufferArrayNonUniformIndexing &&
+            descriptorIndexingFeatures.descriptorBindingStorageBufferUpdateAfterBind;
+
+        VkPhysicalDeviceFeatures2 physicalFeatures2 = {};
+        physicalFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        vkGetPhysicalDeviceFeatures2(physicalDevice, &physicalFeatures2);
+
+        physicalFeatures2.features.samplerAnisotropy = VK_TRUE;
 
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        createInfo.pNext = &physicalFeatures2;
+
+        if(bindlessSupported) {
+            physicalFeatures2.pNext = &descriptorIndexingFeatures;
+        }
 
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
-
-        createInfo.pEnabledFeatures = &deviceFeatures;
-
         createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
         createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
@@ -934,7 +955,6 @@ private:
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = 1.0f;
-        // rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
         rasterizer.cullMode = VK_CULL_MODE_NONE;
         rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizer.depthBiasEnable = VK_FALSE;
