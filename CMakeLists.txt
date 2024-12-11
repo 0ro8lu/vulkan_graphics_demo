@@ -12,28 +12,43 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # want to keep this main file easy to read).
 include(utils.cmake)
 
-file(GLOB_RECURSE sources src/*.cpp src/*.h)
-
-# Create the App executable target with one source file
-add_executable(App
-    ${sources}
-)
+file(GLOB_RECURSE COMMON_SOURCES src/engine/*.cpp src/engine/*.h)
+file(GLOB_RECURSE EXAMPLE_SOURCES src/examples/*.cpp src/examples/*.h)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/deps/glfw)
 add_subdirectory(${CMAKE_SOURCE_DIR}/deps/VulkanMemoryAllocator-3.1.0 SYSTEM)
 
-target_include_directories(App PRIVATE "${CMAKE_SOURCE_DIR}/deps/glm")
-target_include_directories(App PRIVATE "${CMAKE_SOURCE_DIR}/deps/stb_image")
-
-# Use C++17
-set_target_properties(App PROPERTIES CXX_STANDARD 17)
-
-# Turn all warnings on and treat them as errors so that are not
-# tempted to ignore them (See utils.cmake for details).
-# target_treat_all_warnings_as_errors(App)
-
 find_package(Vulkan REQUIRED)
-# find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 
-target_link_libraries(App glfw glm::glm Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator)
+foreach(EXAMPLE_FILE ${EXAMPLE_SOURCES})
+    # Get the filename without extension to use as the target name
+    get_filename_component(EXAMPLE_NAME ${EXAMPLE_FILE} NAME_WE)
+    
+    # Create the executable including common sources
+    add_executable(${EXAMPLE_NAME}
+        ${EXAMPLE_FILE}
+        ${COMMON_SOURCES}
+    )
+    
+    # Set C++17 standard
+    set_target_properties(${EXAMPLE_NAME} PROPERTIES CXX_STANDARD 17)
+    
+    # Include directories
+    target_include_directories(${EXAMPLE_NAME} PRIVATE
+        "${CMAKE_SOURCE_DIR}/src/"
+        "${CMAKE_SOURCE_DIR}/deps/glm"
+        "${CMAKE_SOURCE_DIR}/deps/stb_image"
+    )
+    
+    # Link libraries
+    target_link_libraries(${EXAMPLE_NAME}
+        glfw
+        glm::glm
+        Vulkan::Vulkan
+        GPUOpen::VulkanMemoryAllocator
+    )
+    
+    # Optionally, treat all warnings as errors
+    # target_treat_all_warnings_as_errors(${EXAMPLE_NAME})
+endforeach()
