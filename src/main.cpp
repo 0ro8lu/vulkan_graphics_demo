@@ -1,5 +1,6 @@
 #include "Camera3D.h"
 #include <_types/_uint32_t.h>
+#include <filesystem>
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -35,7 +36,12 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
+const uint32_t OBJECT_COUNT = 10;
+
 const int MAX_FRAMES_IN_FLIGHT = 2;
+
+// this needs to be aligned with the one in the shader
+const unsigned int NR_POINT_LIGHTS = 4;
 
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
@@ -95,6 +101,7 @@ struct SwapChainSupportDetails {
 
 struct Vertex {
     glm::vec3 pos;
+    glm::vec3 normals;
     glm::vec2 texCoord;
 
     static VkVertexInputBindingDescription getBindingDescription() {
@@ -106,8 +113,8 @@ struct Vertex {
         return bindingDescription;
     }
 
-    static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
-        std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+    static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions() {
+        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
 
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
@@ -116,61 +123,83 @@ struct Vertex {
 
         attributeDescriptions[1].binding = 0;
         attributeDescriptions[1].location = 1;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Vertex, texCoord);
+        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributeDescriptions[1].offset = offsetof(Vertex, normals);
+
+        attributeDescriptions[2].binding = 0;
+        attributeDescriptions[2].location = 2;
+        attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
 
         return attributeDescriptions;
     }
 };
 
-struct UniformBufferObject {
-    alignas(16) glm::mat4 model;
+struct StaticUniformBufferObject {
     alignas(16) glm::mat4 view;
     alignas(16) glm::mat4 proj;
+    alignas(16) glm::vec4 cameraPos;   
+};
+
+struct DynUniformBufferObject {
+    alignas(16) glm::mat4 model;
+};
+
+struct DirectionalLight {
+    glm::vec4 direction;
+};
+
+struct PointLight {
+    glm::vec4 position;
+};
+
+struct SpotLight {
+    glm::vec4 direction;
+    glm::vec4 position;
 };
 
 const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f, -0.5f},  {0.0f, 0.0f}},
-    {{ 0.5f, -0.5f, -0.5f},  {1.0f, 0.0f}},
-    {{ 0.5f,  0.5f, -0.5f},  {1.0f, 1.0f}},
-    {{ 0.5f,  0.5f, -0.5f},  {1.0f, 1.0f}},
-    {{-0.5f,  0.5f, -0.5f},  {0.0f, 1.0f}},
-    {{-0.5f, -0.5f, -0.5f},  {0.0f, 0.0f}},
+    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {0.0f, 0.0f}},
+    {{ 0.5f, -0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {1.0f, 0.0f}},
+    {{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {1.0f, 1.0f}},
+    {{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {1.0f, 1.0f}},
+    {{-0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {0.0f, 1.0f}},
+    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f, -1.0f}, {0.0f, 0.0f}},
 
-    {{-0.5f, -0.5f,  0.5f},  {0.0f, 0.0f}},
-    {{ 0.5f, -0.5f,  0.5f},  {1.0f, 0.0f}},
-    {{ 0.5f,  0.5f,  0.5f},  {1.0f, 1.0f}},
-    {{ 0.5f,  0.5f,  0.5f},  {1.0f, 1.0f}},
-    {{-0.5f,  0.5f,  0.5f},  {0.0f, 1.0f}},
-    {{-0.5f, -0.5f,  0.5f},  {0.0f, 0.0f}},
+    {{-0.5f, -0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+    {{ 0.5f, -0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
+    {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f, -0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
 
-    {{-0.5f,  0.5f,  0.5f},  {1.0f, 0.0f}},
-    {{-0.5f,  0.5f, -0.5f},  {1.0f, 1.0f}},
-    {{-0.5f, -0.5f, -0.5f},  {0.0f, 1.0f}},
-    {{-0.5f, -0.5f, -0.5f},  {0.0f, 1.0f}},
-    {{-0.5f, -0.5f,  0.5f},  {0.0f, 0.0f}},
-    {{-0.5f,  0.5f,  0.5f},  {1.0f, 0.0f}},
+    {{-0.5f,  0.5f,  0.5f}, {-1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{-0.5f,  0.5f, -0.5f}, {-1.0f, 0.0f, 0.0f}, {1.0f, 1.0f}},
+    {{-0.5f, -0.5f, -0.5f}, {-1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
+    {{-0.5f, -0.5f, -0.5f}, {-1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
+    {{-0.5f, -0.5f,  0.5f}, {-1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{-0.5f,  0.5f,  0.5f}, {-1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
 
-    {{0.5f,  0.5f,  0.5f},  {1.0f, 0.0f}},
-    {{0.5f,  0.5f, -0.5f},  {1.0f, 1.0f}},
-    {{0.5f, -0.5f, -0.5f},  {0.0f, 1.0f}},
-    {{0.5f, -0.5f, -0.5f},  {0.0f, 1.0f}},
-    {{0.5f, -0.5f,  0.5f},  {0.0f, 0.0f}},
-    {{0.5f,  0.5f,  0.5f},  {1.0f, 0.0f}},
+    {{0.5f,  0.5f,  0.5f},  {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f,  0.5f, -0.5f},  {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f}},
+    {{0.5f, -0.5f, -0.5f},  {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
+    {{0.5f, -0.5f, -0.5f},  {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
+    {{0.5f, -0.5f,  0.5f},  {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f,  0.5f,  0.5f},  {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
 
-    {{-0.5f, -0.5f, -0.5f},  {0.0f, 1.0f}},
-    {{ 0.5f, -0.5f, -0.5f},  {1.0f, 1.0f}},
-    {{ 0.5f, -0.5f,  0.5f},  {1.0f, 0.0f}},
-    {{ 0.5f, -0.5f,  0.5f},  {1.0f, 0.0f}},
-    {{-0.5f, -0.5f,  0.5f},  {0.0f, 0.0f}},
-    {{-0.5f, -0.5f, -0.5f},  {0.0f, 1.0f}},
+    {{-0.5f, -0.5f, -0.5f}, {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f}},
+    {{ 0.5f, -0.5f, -0.5f}, {0.0f, -1.0f, 0.0f}, {1.0f, 1.0f}},
+    {{ 0.5f, -0.5f,  0.5f}, {0.0f, -1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{ 0.5f, -0.5f,  0.5f}, {0.0f, -1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{-0.5f, -0.5f,  0.5f}, {0.0f, -1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{-0.5f, -0.5f, -0.5f}, {0.0f, -1.0f, 0.0f}, {0.0f, 1.0f}},
 
-    {{-0.5f,  0.5f, -0.5f},  {0.0f, 1.0f}},
-    {{ 0.5f,  0.5f, -0.5f},  {1.0f, 1.0f}},
-    {{ 0.5f,  0.5f,  0.5f},  {1.0f, 0.0f}},
-    {{ 0.5f,  0.5f,  0.5f},  {1.0f, 0.0f}},
-    {{-0.5f,  0.5f,  0.5f},  {0.0f, 0.0f}},
-    {{-0.5f,  0.5f, -0.5f},  {0.0f, 1.0f}},
+    {{-0.5f,  0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f}},
+    {{ 0.5f,  0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}},
+    {{ 0.5f,  0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{ 0.5f,  0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{-0.5f,  0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{-0.5f,  0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f}},
 };
 
 class HelloTriangleApplication {
@@ -207,8 +236,11 @@ private:
 
     VkRenderPass renderPass;
     VkDescriptorSetLayout descriptorSetLayout;
-    VkPipelineLayout pipelineLayout;
-    VkPipeline graphicsPipeline;
+
+    VkPipelineLayout mainPipelineLayout;
+    VkPipeline mainGraphicsPipeline;
+    VkPipelineLayout lightCubePipelineLayout;
+    VkPipeline lightCubePipeline;
 
     VkCommandPool commandPool;
 
@@ -216,18 +248,41 @@ private:
     VmaAllocation depthAllocation;
     VkImageView depthImageView;
 
-    VkImage textureImage;
-    VmaAllocation textureAllocation;
-    VkImageView textureImageView;
-    VkSampler textureSampler;
+    VkImage diffuseTextureImage;
+    VmaAllocation diffuseTextureAllocation;
+    VkImageView diffuseTextureImageView;
+    VkSampler diffuseTextureSampler;
+
+    VkImage specularTextureImage;
+    VmaAllocation specularTextureAllocation;
+    VkImageView specularTextureImageView;
+    VkSampler specularTextureSampler;
+
     VkBuffer vertexBuffer;
     VmaAllocation vertexBufferAllocation;
     VkBuffer indexBuffer;
     VmaAllocation indexBufferAllocation;
 
-    std::vector<VkBuffer> uniformBuffers;
-    std::vector<VmaAllocation> uniformBuffersAllocation;
-    std::vector<void*> uniformBuffersMapped;
+    std::vector<VkBuffer> staticUniformBuffers;
+    std::vector<VmaAllocation> staticUniformBuffersAllocation;
+    std::vector<void*> staticUniformBuffersMapped;
+
+    // lights
+    std::vector<VkBuffer> directionalLightBuffers;
+    std::vector<VmaAllocation> directionalLightBuffersAllocation;
+    std::vector<void*> directionlaLightBuffersMapped;
+
+    std::vector<VkBuffer> pointLightBuffers;
+    std::vector<VmaAllocation> pointLightBuffersAllocation;
+    std::vector<void*> pointLightBuffersMapped;
+
+    std::vector<VkBuffer> spotLightBuffers;
+    std::vector<VmaAllocation> spotLightBuffersAllocation;
+    std::vector<void*> spotLightBuffersMapped;
+    
+    std::vector<VkBuffer> dynUniformBuffers;
+    std::vector<VmaAllocation> dynUniformBuffersAllocation;
+    std::vector<void*> dynUniformBuffersMapped;
 
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
@@ -240,6 +295,8 @@ private:
     uint32_t currentFrame = 0;
 
     bool framebufferResized = false;
+
+    size_t dynamicAlignmentUBO;
 
     void initWindow() {
         glfwInit();
@@ -268,13 +325,12 @@ private:
         createImageViews();
         createRenderPass();
         createDescriptorSetLayout();
-        createGraphicsPipeline();
+        //createGraphicsPipeline();
+        createGraphicsPipelines();
         createCommandPool();
         createDepthResources();
         createFramebuffers();
-        createTextureImage();
-        createTextureImageView();
-        createTextureSampler();
+        prepareTextures();
         createVertexBuffer();
         createUniformBuffers();
         createDescriptorPool();
@@ -285,7 +341,7 @@ private:
 
     void mainLoop() {
 
-        constexpr auto frame_duration = std::chrono::microseconds(16666);
+        constexpr auto frame_duration = std::chrono::microseconds(8333);
         auto last_frame_time = std::chrono::steady_clock::now();
         
         while (!glfwWindowShouldClose(window)) {
@@ -334,23 +390,38 @@ private:
     void cleanup() {
         cleanupSwapChain();
 
-        vkDestroyPipeline(device, graphicsPipeline, nullptr);
-        vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+        vkDestroyPipeline(device, mainGraphicsPipeline, nullptr);
+        vkDestroyPipelineLayout(device, mainPipelineLayout, nullptr);
+
+        vkDestroyPipeline(device, lightCubePipeline, nullptr);
+        vkDestroyPipelineLayout(device, lightCubePipelineLayout, nullptr);
+
         vkDestroyRenderPass(device, renderPass, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            vmaDestroyBuffer(allocator, uniformBuffers[i], uniformBuffersAllocation[i]);
-            // vkDestroyBuffer(device, uniformBuffers[i], nullptr);
-            // vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
+            // for object transformations
+            vmaDestroyBuffer(allocator, dynUniformBuffers[i], dynUniformBuffersAllocation[i]);
+            vmaDestroyBuffer(allocator, staticUniformBuffers[i], staticUniformBuffersAllocation[i]);
+
+            //for lights
+            vmaDestroyBuffer(allocator, directionalLightBuffers[i], directionalLightBuffersAllocation[i]);
+            vmaDestroyBuffer(allocator, pointLightBuffers[i], pointLightBuffersAllocation[i]);
+            vmaDestroyBuffer(allocator, spotLightBuffers[i], spotLightBuffersAllocation[i]);
         }
 
         vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
-        vkDestroySampler(device, textureSampler, nullptr);
-        vkDestroyImageView(device, textureImageView, nullptr);
+        // destroy diffuse texture
+        vkDestroySampler(device, diffuseTextureSampler, nullptr);
+        vkDestroyImageView(device, diffuseTextureImageView, nullptr);
+
+        // destroy specular texture
+        vkDestroySampler(device, specularTextureSampler, nullptr);
+        vkDestroyImageView(device, specularTextureImageView, nullptr);
 
         // destroy image created
-        vmaDestroyImage(allocator, textureImage, textureAllocation);
+        vmaDestroyImage(allocator, specularTextureImage, specularTextureAllocation);
+        vmaDestroyImage(allocator, diffuseTextureImage, diffuseTextureAllocation);
         vmaDestroyImage(allocator, depthImage, depthAllocation);
 
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
@@ -740,22 +811,67 @@ private:
     }
 
     void createDescriptorSetLayout() {
-        VkDescriptorSetLayoutBinding uboLayoutBinding{};
-        uboLayoutBinding.binding = 0;
-        uboLayoutBinding.descriptorCount = 1;
-        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-        uboLayoutBinding.pImmutableSamplers = nullptr;
-        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        VkDescriptorSetLayoutBinding staticUBOLayoutBinding{};
+        staticUBOLayoutBinding.binding = 0;
+        staticUBOLayoutBinding.descriptorCount = 1;
+        staticUBOLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        staticUBOLayoutBinding.pImmutableSamplers = nullptr;
+        staticUBOLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-        VkDescriptorSetLayoutBinding samplerLayoutBinding{};
-        samplerLayoutBinding.binding = 1;
-        samplerLayoutBinding.descriptorCount = 1;
-        samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        samplerLayoutBinding.pImmutableSamplers = nullptr;
-        samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        VkDescriptorSetLayoutBinding dynUBOLayoutBinding{};
+        dynUBOLayoutBinding.binding = 1;
+        dynUBOLayoutBinding.descriptorCount = 1;
+        dynUBOLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        dynUBOLayoutBinding.pImmutableSamplers = nullptr;
+        dynUBOLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-        std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboLayoutBinding, samplerLayoutBinding};
+        VkDescriptorSetLayoutBinding diffuseSamplerLayoutBinding{};
+        diffuseSamplerLayoutBinding.binding = 2;
+        diffuseSamplerLayoutBinding.descriptorCount = 1;
+        diffuseSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        diffuseSamplerLayoutBinding.pImmutableSamplers = nullptr;
+        diffuseSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorSetLayoutBinding specularSamplerLayoutBinding{};
+        specularSamplerLayoutBinding.binding = 3;
+        specularSamplerLayoutBinding.descriptorCount = 1;
+        specularSamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        specularSamplerLayoutBinding.pImmutableSamplers = nullptr;
+        specularSamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorSetLayoutBinding directionalLightLayoutBinding{};
+        directionalLightLayoutBinding.binding = 4;
+        directionalLightLayoutBinding.descriptorCount = 1;
+        directionalLightLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        directionalLightLayoutBinding.pImmutableSamplers = nullptr;
+        directionalLightLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorSetLayoutBinding pointLightLayoutBinding{};
+        pointLightLayoutBinding.binding = 5;
+        pointLightLayoutBinding.descriptorCount = 1;
+        pointLightLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        pointLightLayoutBinding.pImmutableSamplers = nullptr;
+        pointLightLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorSetLayoutBinding spotLightLayoutBinding{};
+        spotLightLayoutBinding.binding = 6;
+        spotLightLayoutBinding.descriptorCount = 1;
+        spotLightLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        spotLightLayoutBinding.pImmutableSamplers = nullptr;
+        spotLightLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        std::array<VkDescriptorSetLayoutBinding, 7> bindings = {
+            staticUBOLayoutBinding, 
+            dynUBOLayoutBinding, 
+            diffuseSamplerLayoutBinding, 
+            specularSamplerLayoutBinding, 
+            directionalLightLayoutBinding, 
+            pointLightLayoutBinding, 
+            spotLightLayoutBinding
+        };
+
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
+
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
@@ -765,9 +881,14 @@ private:
         }
     }
 
-    void createGraphicsPipeline() {
-        auto vertShaderCode = readFile("../shaders/vert.spv");
-        auto fragShaderCode = readFile("../shaders/frag.spv");
+    void createGraphicsPipelines() {
+        createPipeline("../shaders/vert.spv", "../shaders/frag.spv", mainPipelineLayout, mainGraphicsPipeline);
+        createPipeline("../shaders/light_cube_vert.spv", "../shaders/light_cube_frag.spv", lightCubePipelineLayout, lightCubePipeline);
+    }
+
+    void createPipeline(std::string vertexShader, std::string fragmentShader, VkPipelineLayout& pipelineLayout, VkPipeline& pipeline) {
+        auto vertShaderCode = readFile(vertexShader);
+        auto fragShaderCode = readFile(fragmentShader);
 
         VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
         VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -854,6 +975,7 @@ private:
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR
         };
+
         VkPipelineDynamicStateCreateInfo dynamicState{};
         dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
         dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
@@ -885,7 +1007,7 @@ private:
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline) != VK_SUCCESS) {
             throw std::runtime_error("failed to create graphics pipeline!");
         }
 
@@ -937,9 +1059,23 @@ private:
         depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
     }
 
-    void createTextureImage() {
+    void prepareTextures() {
+
+        //prepare textures for diffuse texture
+        createTextureImage("../textures/diffuse.png", diffuseTextureImage, diffuseTextureAllocation);
+        createTextureImageView(diffuseTextureImage, diffuseTextureImageView);
+        createTextureSampler(diffuseTextureSampler);
+
+        //prepare textures for specular texture
+        createTextureImage("../textures/specular.png", specularTextureImage, specularTextureAllocation);
+        createTextureImageView(specularTextureImage, specularTextureImageView);
+        createTextureSampler(specularTextureSampler);
+    }
+
+    void createTextureImage(std::string filePath, VkImage& textureImage, VmaAllocation& textureAllocation) {
         int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load("../textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        stbi_uc* pixels = stbi_load(filePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        // stbi_uc* pixels = stbi_load("../textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         VkDeviceSize imageSize = texWidth * texHeight * 4;
 
         if (!pixels) {
@@ -964,11 +1100,12 @@ private:
         vmaDestroyBuffer(allocator, stagingBuffer, stagingBufferAllocation);
     }
 
-    void createTextureImageView() {
+    void createTextureImageView(const VkImage& textureImage, VkImageView& textureImageView) {
         textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+        // diffuseTextureImageView = createImageView(diffuseTextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
-    void createTextureSampler() {
+    void createTextureSampler(VkSampler& texureSampler) {
         VkPhysicalDeviceProperties properties{};
         vkGetPhysicalDeviceProperties(physicalDevice, &properties);
 
@@ -987,7 +1124,7 @@ private:
         samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
-        if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS) {
+        if (vkCreateSampler(device, &samplerInfo, nullptr, &texureSampler) != VK_SUCCESS) {
             throw std::runtime_error("failed to create texture sampler!");
         }
     }
@@ -1037,41 +1174,6 @@ private:
             throw std::runtime_error("failed to create image!");
         }
     }
-
-    // void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) {
-    //     VkImageCreateInfo imageInfo{};
-    //     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    //     imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    //     imageInfo.extent.width = width;
-    //     imageInfo.extent.height = height;
-    //     imageInfo.extent.depth = 1;
-    //     imageInfo.mipLevels = 1;
-    //     imageInfo.arrayLayers = 1;
-    //     imageInfo.format = format;
-    //     imageInfo.tiling = tiling;
-    //     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    //     imageInfo.usage = usage;
-    //     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    //     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    //     if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
-    //         throw std::runtime_error("failed to create image!");
-    //     }
-
-    //     VkMemoryRequirements memRequirements;
-    //     vkGetImageMemoryRequirements(device, image, &memRequirements);
-
-    //     VkMemoryAllocateInfo allocInfo{};
-    //     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    //     allocInfo.allocationSize = memRequirements.size;
-    //     allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
-
-    //     if (vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
-    //         throw std::runtime_error("failed to allocate image memory!");
-    //     }
-
-    //     vkBindImageMemory(device, image, imageMemory, 0);
-    // }
 
     void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
@@ -1157,8 +1259,6 @@ private:
         copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 
         vmaDestroyBuffer(allocator, stagingBuffer, stagingBufferAllocation);
-        // vkDestroyBuffer(device, stagingBuffer, nullptr);
-        // vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
     // void createIndexBuffer() {
@@ -1179,26 +1279,152 @@ private:
     // }
 
     void createUniformBuffers() {
-        VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+        // Calculate required alignment based on minimum device offset alignment
+        VkPhysicalDeviceProperties gpuProperties;
+        vkGetPhysicalDeviceProperties(physicalDevice, &gpuProperties);
+	    size_t minUboAlignment = gpuProperties.limits.minUniformBufferOffsetAlignment;
 
-        uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-        // uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-        uniformBuffersAllocation.resize(MAX_FRAMES_IN_FLIGHT);
-        uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+        size_t alignMod = static_cast<size_t>(gpuProperties.limits.minUniformBufferOffsetAlignment);
+	    dynamicAlignmentUBO = (sizeof(DynUniformBufferObject) / alignMod ) * alignMod;
+	    if ( sizeof(DynUniformBufferObject) % alignMod > 0 ) {
+	        dynamicAlignmentUBO += alignMod;
+	    }
+      
+        VkDeviceSize dynBufferSize = (OBJECT_COUNT + NR_POINT_LIGHTS) * dynamicAlignmentUBO;
+
+        VkDeviceSize staticBufferSize = sizeof(StaticUniformBufferObject);
+
+        VkDeviceSize directionalLightBufferSize = sizeof(DirectionalLight);
+        VkDeviceSize pointLightBufferSize = sizeof(PointLight) * NR_POINT_LIGHTS;
+        VkDeviceSize spotLightBufferSize = sizeof(SpotLight);
+
+        staticUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        staticUniformBuffersAllocation.resize(MAX_FRAMES_IN_FLIGHT);
+        staticUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+        
+        dynUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        dynUniformBuffersAllocation.resize(MAX_FRAMES_IN_FLIGHT);
+        dynUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+        // for the lights
+        directionalLightBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        directionalLightBuffersAllocation.resize(MAX_FRAMES_IN_FLIGHT);
+        directionlaLightBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+        pointLightBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        pointLightBuffersAllocation.resize(MAX_FRAMES_IN_FLIGHT);
+        pointLightBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+        spotLightBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        spotLightBuffersAllocation.resize(MAX_FRAMES_IN_FLIGHT);
+        spotLightBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            uniformBuffersMapped[i] = createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferType::STAGING_BUFFER, uniformBuffers[i], uniformBuffersAllocation[i]);
-            // createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]);
-            // vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]);
+            staticUniformBuffersMapped[i] = createBuffer(staticBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferType::STAGING_BUFFER, staticUniformBuffers[i], staticUniformBuffersAllocation[i]);
+            dynUniformBuffersMapped[i] = createBuffer(dynBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferType::STAGING_BUFFER, dynUniformBuffers[i], dynUniformBuffersAllocation[i]);
+
+            //for the lights
+            directionlaLightBuffersMapped[i] = createBuffer(directionalLightBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferType::STAGING_BUFFER, directionalLightBuffers[i], directionalLightBuffersAllocation[i]);
+            pointLightBuffersMapped[i] = createBuffer(pointLightBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferType::STAGING_BUFFER, pointLightBuffers[i], pointLightBuffersAllocation[i]);
+            spotLightBuffersMapped[i] = createBuffer(spotLightBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferType::STAGING_BUFFER, spotLightBuffers[i], spotLightBuffersAllocation[i]);
+        }
+
+        // todo fill with the cube's transformations
+        glm::vec3 cubePositions[OBJECT_COUNT] = {
+            glm::vec3( 0.0f,  0.0f,  0.0f),
+            glm::vec3( 2.0f,  5.0f, -15.0f),
+            glm::vec3(-1.5f, -2.2f, -2.5f),
+            glm::vec3(-3.8f, -2.0f, -12.3f),
+            glm::vec3( 2.4f, -0.4f, -3.5f),
+            glm::vec3(-1.7f,  3.0f, -7.5f),
+            glm::vec3( 1.3f, -2.0f, -2.5f),
+            glm::vec3( 1.5f,  2.0f, -2.5f),
+            glm::vec3( 1.5f,  0.2f, -1.5f),
+            glm::vec3(-1.3f,  1.0f, -1.5f)
+        };
+
+        // positions of the point lights
+        glm::vec3 pointLightPositions[] = {
+            glm::vec3( 0.7f,  0.2f,  2.0f),
+            glm::vec3( 2.3f, -3.3f, -4.0f),
+            glm::vec3(-4.0f,  2.0f, -12.0f),
+            glm::vec3( 0.0f,  0.0f, -3.0f)
+        };
+
+        std::array<DynUniformBufferObject, OBJECT_COUNT + NR_POINT_LIGHTS> dynUBOs{};
+
+        for(int i = 0; i < OBJECT_COUNT; i++) {
+            dynUBOs[i].model = glm::mat4(1.0);
+
+            dynUBOs[i].model = glm::translate(dynUBOs[i].model, cubePositions[i]);
+
+            float angle = 20.0f * i;
+            dynUBOs[i].model = glm::rotate(dynUBOs[i].model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+        }
+
+        for(int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            for(int j = 0; j < OBJECT_COUNT; j++) {
+                uint8_t* mappedUniform = reinterpret_cast<uint8_t*>(dynUniformBuffersMapped[i]);
+                memcpy(&mappedUniform[j * dynamicAlignmentUBO], &dynUBOs[j], sizeof(DynUniformBufferObject));
+            }
+        }
+
+        for(int i = OBJECT_COUNT; i < (OBJECT_COUNT + NR_POINT_LIGHTS); i++) {
+            dynUBOs[i].model = glm::mat4(1.0);
+            dynUBOs[i].model = glm::translate(dynUBOs[i].model, pointLightPositions[i - OBJECT_COUNT]);
+            dynUBOs[i].model = glm::scale(dynUBOs[i].model, glm::vec3(0.2f));
+        }
+
+        for(int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            for(int j = OBJECT_COUNT; j < (OBJECT_COUNT + NR_POINT_LIGHTS); j++) {
+                uint8_t* mappedUniform = reinterpret_cast<uint8_t*>(dynUniformBuffersMapped[i]);
+                memcpy(&mappedUniform[j * dynamicAlignmentUBO], &dynUBOs[j], sizeof(DynUniformBufferObject));
+            }
+        }
+
+        // ------------------ LIGHTS ------------------ 
+
+        std::array<PointLight, NR_POINT_LIGHTS> pointLights{};
+
+        for(int i = 0; i < NR_POINT_LIGHTS; i++) {
+            pointLights[i].position = glm::vec4(pointLightPositions[i], 1.0);
+        }
+
+        // point lights
+        for(int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            uint8_t* mappedUniform = reinterpret_cast<uint8_t*>(pointLightBuffersMapped[i]);
+            memcpy(mappedUniform, &pointLights, pointLightBufferSize);
+        }
+
+        DirectionalLight directionalLight;
+        // directionalLight.direction = glm::vec4(-0.2f, -1.0f, -0.3f, 0.0);
+        directionalLight.direction = glm::vec4(0.2f, 1.0f, 0.3f, 0.0);
+
+        // directional lights
+        for(int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            uint8_t* mappedUniform = reinterpret_cast<uint8_t*>(directionlaLightBuffersMapped[i]);
+            memcpy(mappedUniform, &directionalLight, sizeof(directionalLight));
         }
     }
 
     void createDescriptorPool() {
-        std::array<VkDescriptorPoolSize, 2> poolSizes{};
-        poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-        poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-        poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        std::array<VkDescriptorPoolSize, 3> poolSizes{};
+        // std::array<VkDescriptorPoolSize, 7> poolSizes{};
+
+        poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 4;
+        poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        poolSizes[2].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2;
+        // poolSizes[3].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        // poolSizes[3].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        // poolSizes[4].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        // poolSizes[4].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 3;
+        // poolSizes[5].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        // poolSizes[5].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2;
+        // poolSizes[6].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        // poolSizes[6].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1225,33 +1451,98 @@ private:
         }
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            VkDescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = uniformBuffers[i];
-            bufferInfo.offset = 0;
-            bufferInfo.range = sizeof(UniformBufferObject);
+            VkDescriptorBufferInfo staticBufferInfo{};
+            staticBufferInfo.buffer = staticUniformBuffers[i];
+            staticBufferInfo.offset = 0;
+            staticBufferInfo.range = sizeof(StaticUniformBufferObject);
 
-            VkDescriptorImageInfo imageInfo{};
-            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageInfo.imageView = textureImageView;
-            imageInfo.sampler = textureSampler;
+            VkDescriptorBufferInfo dynamicBufferInfo{};
+            dynamicBufferInfo.buffer = dynUniformBuffers[i];
+            dynamicBufferInfo.offset = 0;
+            dynamicBufferInfo.range = sizeof(DynUniformBufferObject);
 
-            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+            VkDescriptorImageInfo diffuseImageInfo{};
+            diffuseImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            diffuseImageInfo.imageView = diffuseTextureImageView;
+            diffuseImageInfo.sampler = diffuseTextureSampler;
+
+            VkDescriptorImageInfo specularImageInfo{};
+            specularImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            specularImageInfo.imageView = specularTextureImageView;
+            specularImageInfo.sampler = specularTextureSampler;
+
+            VkDescriptorBufferInfo directionalLightBufferInfo{};
+            directionalLightBufferInfo.buffer = directionalLightBuffers[i];
+            directionalLightBufferInfo.offset = 0;
+            directionalLightBufferInfo.range = sizeof(DirectionalLight);
+
+            VkDescriptorBufferInfo pointLightBufferInfo{};
+            pointLightBufferInfo.buffer = pointLightBuffers[i];
+            pointLightBufferInfo.offset = 0;
+            pointLightBufferInfo.range = sizeof(PointLight);
+
+            VkDescriptorBufferInfo spotLightBufferInfo{};
+            spotLightBufferInfo.buffer = spotLightBuffers[i];
+            spotLightBufferInfo.offset = 0;
+            spotLightBufferInfo.range = sizeof(SpotLight);
+
+            std::array<VkWriteDescriptorSet, 7> descriptorWrites{};
 
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[0].dstSet = descriptorSets[i];
             descriptorWrites[0].dstBinding = 0;
             descriptorWrites[0].dstArrayElement = 0;
-            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             descriptorWrites[0].descriptorCount = 1;
-            descriptorWrites[0].pBufferInfo = &bufferInfo;
+            descriptorWrites[0].pBufferInfo = &staticBufferInfo;
 
             descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[1].dstSet = descriptorSets[i];
             descriptorWrites[1].dstBinding = 1;
             descriptorWrites[1].dstArrayElement = 0;
-            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
             descriptorWrites[1].descriptorCount = 1;
-            descriptorWrites[1].pImageInfo = &imageInfo;
+            descriptorWrites[1].pBufferInfo = &dynamicBufferInfo;
+
+            descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[2].dstSet = descriptorSets[i];
+            descriptorWrites[2].dstBinding = 2;
+            descriptorWrites[2].dstArrayElement = 0;
+            descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[2].descriptorCount = 1;
+            descriptorWrites[2].pImageInfo = &diffuseImageInfo;
+
+            descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[3].dstSet = descriptorSets[i];
+            descriptorWrites[3].dstBinding = 3;
+            descriptorWrites[3].dstArrayElement = 0;
+            descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[3].descriptorCount = 1;
+            descriptorWrites[3].pImageInfo = &specularImageInfo;
+
+            descriptorWrites[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[4].dstSet = descriptorSets[i];
+            descriptorWrites[4].dstBinding = 4;
+            descriptorWrites[4].dstArrayElement = 0;
+            descriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrites[4].descriptorCount = 1;
+            descriptorWrites[4].pBufferInfo = &directionalLightBufferInfo;
+
+            descriptorWrites[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[5].dstSet = descriptorSets[i];
+            descriptorWrites[5].dstBinding = 5;
+            descriptorWrites[5].dstArrayElement = 0;
+            descriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrites[5].descriptorCount = 1;
+            descriptorWrites[5].pBufferInfo = &pointLightBufferInfo;
+
+            descriptorWrites[6].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[6].dstSet = descriptorSets[i];
+            descriptorWrites[6].dstBinding = 6;
+            descriptorWrites[6].dstArrayElement = 0;
+            descriptorWrites[6].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrites[6].descriptorCount = 1;
+            descriptorWrites[6].pBufferInfo = &spotLightBufferInfo;
 
             vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
@@ -1379,7 +1670,8 @@ private:
 
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+            // -------------------- bind main pipeline -------------------- 
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mainGraphicsPipeline);
 
             VkViewport viewport{};
             viewport.x = 0.0f;
@@ -1399,10 +1691,25 @@ private:
             VkDeviceSize offsets[] = {0};
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
-            uint32_t offset = 0;
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 1, &offset);
+            for(int i = 0; i < OBJECT_COUNT; i++) {
+                uint32_t dynamicOffsetUBO = static_cast<uint32_t>(i * dynamicAlignmentUBO); 
 
-            vkCmdDraw(commandBuffer, 36, 1, 0, 0);
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipelineLayout, 0, 1, &descriptorSets[currentFrame], 1, &dynamicOffsetUBO);
+                vkCmdDraw(commandBuffer, 36, 1, 0, 0);
+            }
+
+            // -------------------- bind light_cube pipeline -------------------- 
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lightCubePipeline);
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+
+            for(int i = OBJECT_COUNT; i < (OBJECT_COUNT + NR_POINT_LIGHTS); i++) {
+                uint32_t dynamicOffsetUBO = static_cast<uint32_t>(i * dynamicAlignmentUBO); 
+
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lightCubePipelineLayout, 0, 1, &descriptorSets[currentFrame], 1, &dynamicOffsetUBO);
+                vkCmdDraw(commandBuffer, 36, 1, 0, 0);
+            }
 
         vkCmdEndRenderPass(commandBuffer);
 
@@ -1433,25 +1740,14 @@ private:
     }
 
     void updateUniformBuffer(uint32_t currentImage) {
-        static auto startTime = std::chrono::high_resolution_clock::now();
-
-        UniformBufferObject ubo{};
-
-        glm::mat4 model = glm::mat4(1.0f);
-
-        // const float radius = 10.0f;
-        // float camX = sin(glfwGetTime()) * radius;
-        // float camZ = cos(glfwGetTime()) * radius;
-
-        // camera->setPos(glm::vec3(camX, 0.0, camZ));
-        // camera->update();
+        StaticUniformBufferObject sUBO{};
 
         // position, target, up
-        ubo.view = camera->getCameraMatrix();
-        ubo.proj = glm::perspective(glm::radians(45.0f), (float)WIDTH/ (float)HEIGHT, 0.1f, 100.0f);
-        ubo.model = model;
+        sUBO.view = camera->getCameraMatrix();
+        sUBO.proj = glm::perspective(glm::radians(45.0f), (float)WIDTH/ (float)HEIGHT, 0.1f, 100.0f);
+        sUBO.cameraPos = glm::vec4(camera->getCameraPos().x, camera->getCameraPos().y, camera->getCameraPos().z, 0.0);
 
-        memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+        memcpy(staticUniformBuffersMapped[currentImage], &sUBO, sizeof(sUBO));
     }
 
     void drawFrame() {
