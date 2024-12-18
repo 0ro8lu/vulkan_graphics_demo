@@ -877,9 +877,9 @@ private:
     }
 
     void createGraphicsPipelines() {
-        std::string shaderDir = "../../shaders/";
-        createPipeline(shaderDir + "phong-shading/built/texture_vert.spv", shaderDir + "phong-shading/built/texture_frag.spv", mainPipelineLayout, mainGraphicsPipeline);
-        createPipeline(shaderDir + "phong-shading/built/light_cube_vert.spv", shaderDir + "phong-shading/built/light_cube_frag.spv", lightCubePipelineLayout, lightCubePipeline);
+        std::string shaderPath = SHADER_PATH;
+        createPipeline(shaderPath + "phong-shading/built/texture_vert.spv", shaderPath + "phong-shading/built/texture_frag.spv", mainPipelineLayout, mainGraphicsPipeline);
+        createPipeline(shaderPath + "phong-shading/built/light_cube_vert.spv", shaderPath + "phong-shading/built/light_cube_frag.spv", lightCubePipelineLayout, lightCubePipeline);
     }
 
     void createPipeline(std::string vertexShader, std::string fragmentShader, VkPipelineLayout& pipelineLayout, VkPipeline& pipeline) {
@@ -1058,12 +1058,13 @@ private:
     void prepareTextures() {
 
         //prepare textures for diffuse texture
-        createTextureImage("../../textures/diffuse.png", diffuseTextureImage, diffuseTextureAllocation);
+        std::string texturePath = TEXTURE_PATH;
+        createTextureImage(texturePath + "diffuse.png", diffuseTextureImage, diffuseTextureAllocation);
         createTextureImageView(diffuseTextureImage, diffuseTextureImageView);
         createTextureSampler(diffuseTextureSampler);
 
         //prepare textures for specular texture
-        createTextureImage("../../textures/specular.png", specularTextureImage, specularTextureAllocation);
+        createTextureImage(texturePath + "specular.png", specularTextureImage, specularTextureAllocation);
         createTextureImageView(specularTextureImage, specularTextureImageView);
         createTextureSampler(specularTextureSampler);
     }
@@ -1071,7 +1072,6 @@ private:
     void createTextureImage(std::string filePath, VkImage& textureImage, VmaAllocation& textureAllocation) {
         int texWidth, texHeight, texChannels;
         stbi_uc* pixels = stbi_load(filePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-        // stbi_uc* pixels = stbi_load("../textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         VkDeviceSize imageSize = texWidth * texHeight * 4;
 
         if (!pixels) {
@@ -1098,7 +1098,6 @@ private:
 
     void createTextureImageView(const VkImage& textureImage, VkImageView& textureImageView) {
         textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
-        // diffuseTextureImageView = createImageView(diffuseTextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
     void createTextureSampler(VkSampler& texureSampler) {

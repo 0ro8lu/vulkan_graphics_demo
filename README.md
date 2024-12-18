@@ -3,6 +3,12 @@
 This is my personal repository for everything Vulkan related. In the next months i'm going to cook up a demo with all the graphics
 knowledge i'll have accumulated thanks to the books and resources. Hope it is going to be something cool.
 
+## 11th December: Phong shading
+Look ma! That cube is lit!
+Thanks to the awesome material at learnopengl.com i now have this beautiful scene to share
+
+![Alt text](/screenshots/shiny_cubes.png?raw=true "shiny cubes")
+
 ## 18th December: Model loading
 Oh boy what an endevoir this has been! Finally exiting the "Vulkan tutorial's comfort zone" and starting to head into sort of "unexplored" territory (at least for me).
 I finally got the chance to get my hands dirty with multiple descriptor sets and really had to sit there thinking what could be the best possible strategy to upload
@@ -17,3 +23,4 @@ Next days are going to be busy trying to build something cool, so no more progre
 Next item on the menu will be: Resource cache, skyboxes, hopefully support for animation and bindless textures if they don't turn out to be a massive pain for a small gain.
 Till next time :3 
 
+![Alt text](/screenshots/voyager.png?raw=true "voyager.gltf model")
