@@ -18,6 +18,15 @@ file(GLOB_RECURSE EXAMPLE_SOURCES src/examples/*.cpp src/examples/*.h)
 add_subdirectory(${CMAKE_SOURCE_DIR}/deps/glfw)
 add_subdirectory(${CMAKE_SOURCE_DIR}/deps/VulkanMemoryAllocator-3.1.0 SYSTEM)
 
+# Compilation flags for assimp. The demo only needs the GLTF loader and nothing else
+set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_GLTF_IMPORTER ON CACHE BOOL "" FORCE)
+set(ASSIMP_NO_EXPORT ON CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+add_subdirectory(${CMAKE_SOURCE_DIR}/deps/assimp SYSTEM)
+
 find_package(Vulkan REQUIRED)
 find_package(glm CONFIG REQUIRED)
 
@@ -39,7 +48,23 @@ foreach(EXAMPLE_FILE ${EXAMPLE_SOURCES})
         "${CMAKE_SOURCE_DIR}/src/"
         "${CMAKE_SOURCE_DIR}/deps/glm"
         "${CMAKE_SOURCE_DIR}/deps/stb_image"
+        "${CMAKE_SOURCE_DIR}/deps/assimp-5.4.3"
     )
+
+    # Xcode puts the executable in a directory which is 1 layer deep with
+    # respect to when i use make (i'm forced to use Xcode for GPU debugging,
+    # thakns Apple). That throws off all the resource loading, and instead of
+    # painstakingly modfying them and reverrting them, i decided to just export
+    # a variable and call it a day.
+    if(CMAKE_GENERATOR STREQUAL "Unix Makefiles")
+        target_compile_definitions(${EXAMPLE_NAME} PRIVATE TEXTURE_PATH="../textures/")
+        target_compile_definitions(${EXAMPLE_NAME} PRIVATE SHADER_PATH="../shaders/")
+        target_compile_definitions(${EXAMPLE_NAME} PRIVATE MODEL_PATH="../models/")
+    elseif(CMAKE_GENERATOR STREQUAL "Xcode")
+        target_compile_definitions(${EXAMPLE_NAME} PRIVATE TEXTURE_PATH="../../textures/")
+        target_compile_definitions(${EXAMPLE_NAME} PRIVATE SHADER_PATH="../../shaders/")
+        target_compile_definitions(${EXAMPLE_NAME} PRIVATE MODEL_PATH="../../models/")
+    endif()
     
     # Link libraries
     target_link_libraries(${EXAMPLE_NAME}
@@ -47,6 +72,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_SOURCES})
         glm::glm
         Vulkan::Vulkan
         GPUOpen::VulkanMemoryAllocator
+        assimp
     )
     
     # Optionally, treat all warnings as errors
