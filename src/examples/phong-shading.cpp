@@ -99,9 +99,9 @@ struct SwapChainSupportDetails {
 };
 
 struct Vertex {
-    glm::vec3 pos;
+    glm::vec3 position;
     glm::vec3 normals;
-    glm::vec2 texCoord;
+    glm::vec2 texCoords;
 
     static VkVertexInputBindingDescription getBindingDescription() {
         VkVertexInputBindingDescription bindingDescription{};
@@ -118,7 +118,7 @@ struct Vertex {
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
         attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[0].offset = offsetof(Vertex, pos);
+        attributeDescriptions[0].offset = offsetof(Vertex, position);
 
         attributeDescriptions[1].binding = 0;
         attributeDescriptions[1].location = 1;
@@ -128,13 +128,13 @@ struct Vertex {
         attributeDescriptions[2].binding = 0;
         attributeDescriptions[2].location = 2;
         attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
+        attributeDescriptions[2].offset = offsetof(Vertex, texCoords);
 
         return attributeDescriptions;
     }
 };
 
-struct StaticUniformBufferObject {
+struct UniformBufferObject {
     alignas(16) glm::mat4 view;
     alignas(16) glm::mat4 proj;
     alignas(16) glm::vec4 cameraPos;   
@@ -219,7 +219,7 @@ private:
     VkSurfaceKHR surface;
 
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-    VkDevice device;
+    VkDevice logicalDevice;
 
     VmaAllocator allocator;
 
@@ -234,7 +234,7 @@ private:
     std::vector<VkFramebuffer> swapChainFramebuffers;
 
     VkRenderPass renderPass;
-    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorSetLayout globalDescriptorSetLayout;
 
     VkPipelineLayout mainPipelineLayout;
     VkPipeline mainGraphicsPipeline;
@@ -262,14 +262,14 @@ private:
     VkBuffer indexBuffer;
     VmaAllocation indexBufferAllocation;
 
-    std::vector<VkBuffer> staticUniformBuffers;
-    std::vector<VmaAllocation> staticUniformBuffersAllocation;
-    std::vector<void*> staticUniformBuffersMapped;
+    std::vector<VkBuffer> uniformBuffers;
+    std::vector<VmaAllocation> uniformBuffersAllocation;
+    std::vector<void*> uniformBuffersMapped;
 
     // lights
     std::vector<VkBuffer> directionalLightBuffers;
     std::vector<VmaAllocation> directionalLightBuffersAllocation;
-    std::vector<void*> directionlaLightBuffersMapped;
+    std::vector<void*> directionalLightBuffersMapped;
 
     std::vector<VkBuffer> pointLightBuffers;
     std::vector<VmaAllocation> pointLightBuffersAllocation;
@@ -283,8 +283,8 @@ private:
     std::vector<VmaAllocation> dynUniformBuffersAllocation;
     std::vector<void*> dynUniformBuffersMapped;
 
-    VkDescriptorPool descriptorPool;
-    std::vector<VkDescriptorSet> descriptorSets;
+    VkDescriptorPool globalDescriptorPool;
+    std::vector<VkDescriptorSet> globalDescriptorSets;
 
     std::vector<VkCommandBuffer> commandBuffers;
 
@@ -368,38 +368,38 @@ private:
             } 
         }
 
-        vkDeviceWaitIdle(device);
+        vkDeviceWaitIdle(logicalDevice);
     }
 
     void cleanupSwapChain() {
         for (auto framebuffer : swapChainFramebuffers) {
-            vkDestroyFramebuffer(device, framebuffer, nullptr);
+            vkDestroyFramebuffer(logicalDevice, framebuffer, nullptr);
         }
 
         for (auto imageView : swapChainImageViews) {
-            vkDestroyImageView(device, imageView, nullptr);
+            vkDestroyImageView(logicalDevice, imageView, nullptr);
         }
 
-        vkDestroyImageView(device, depthImageView, nullptr);
+        vkDestroyImageView(logicalDevice, depthImageView, nullptr);
 
-        vkDestroySwapchainKHR(device, swapChain, nullptr);
+        vkDestroySwapchainKHR(logicalDevice, swapChain, nullptr);
     }
 
     void cleanup() {
         cleanupSwapChain();
 
-        vkDestroyPipeline(device, mainGraphicsPipeline, nullptr);
-        vkDestroyPipelineLayout(device, mainPipelineLayout, nullptr);
+        vkDestroyPipeline(logicalDevice, mainGraphicsPipeline, nullptr);
+        vkDestroyPipelineLayout(logicalDevice, mainPipelineLayout, nullptr);
 
-        vkDestroyPipeline(device, lightCubePipeline, nullptr);
-        vkDestroyPipelineLayout(device, lightCubePipelineLayout, nullptr);
+        vkDestroyPipeline(logicalDevice, lightCubePipeline, nullptr);
+        vkDestroyPipelineLayout(logicalDevice, lightCubePipelineLayout, nullptr);
 
-        vkDestroyRenderPass(device, renderPass, nullptr);
+        vkDestroyRenderPass(logicalDevice, renderPass, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             // for object transformations
             vmaDestroyBuffer(allocator, dynUniformBuffers[i], dynUniformBuffersAllocation[i]);
-            vmaDestroyBuffer(allocator, staticUniformBuffers[i], staticUniformBuffersAllocation[i]);
+            vmaDestroyBuffer(allocator, uniformBuffers[i], uniformBuffersAllocation[i]);
 
             //for lights
             vmaDestroyBuffer(allocator, directionalLightBuffers[i], directionalLightBuffersAllocation[i]);
@@ -407,22 +407,22 @@ private:
             vmaDestroyBuffer(allocator, spotLightBuffers[i], spotLightBuffersAllocation[i]);
         }
 
-        vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+        vkDestroyDescriptorPool(logicalDevice, globalDescriptorPool, nullptr);
 
         // destroy diffuse texture
-        vkDestroySampler(device, diffuseTextureSampler, nullptr);
-        vkDestroyImageView(device, diffuseTextureImageView, nullptr);
+        vkDestroySampler(logicalDevice, diffuseTextureSampler, nullptr);
+        vkDestroyImageView(logicalDevice, diffuseTextureImageView, nullptr);
 
         // destroy specular texture
-        vkDestroySampler(device, specularTextureSampler, nullptr);
-        vkDestroyImageView(device, specularTextureImageView, nullptr);
+        vkDestroySampler(logicalDevice, specularTextureSampler, nullptr);
+        vkDestroyImageView(logicalDevice, specularTextureImageView, nullptr);
 
         // destroy image created
         vmaDestroyImage(allocator, specularTextureImage, specularTextureAllocation);
         vmaDestroyImage(allocator, diffuseTextureImage, diffuseTextureAllocation);
         vmaDestroyImage(allocator, depthImage, depthAllocation);
 
-        vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+        vkDestroyDescriptorSetLayout(logicalDevice, globalDescriptorSetLayout, nullptr);
 
         // destroy all buffers created with VMA
         vmaDestroyBuffer(allocator, indexBuffer, indexBufferAllocation);
@@ -431,14 +431,14 @@ private:
         vmaDestroyAllocator(allocator);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
-            vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
-            vkDestroyFence(device, inFlightFences[i], nullptr);
+            vkDestroySemaphore(logicalDevice, renderFinishedSemaphores[i], nullptr);
+            vkDestroySemaphore(logicalDevice, imageAvailableSemaphores[i], nullptr);
+            vkDestroyFence(logicalDevice, inFlightFences[i], nullptr);
         }
 
-        vkDestroyCommandPool(device, commandPool, nullptr);
+        vkDestroyCommandPool(logicalDevice, commandPool, nullptr);
 
-        vkDestroyDevice(device, nullptr);
+        vkDestroyDevice(logicalDevice, nullptr);
 
         if (enableValidationLayers) {
             DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
@@ -527,7 +527,7 @@ private:
             glfwWaitEvents();
         }
 
-        vkDeviceWaitIdle(device);
+        vkDeviceWaitIdle(logicalDevice);
 
         cleanupSwapChain();
 
@@ -587,7 +587,7 @@ private:
     void createVMAAllocator() {
         VmaAllocatorCreateInfo createInfo = {};
         createInfo.physicalDevice = physicalDevice;
-        createInfo.device = device;
+        createInfo.device = logicalDevice;
         createInfo.instance = instance;
 
         if (vmaCreateAllocator(&createInfo, &allocator) != VK_SUCCESS) {
@@ -677,12 +677,12 @@ private:
             createInfo.enabledLayerCount = 0;
         }
 
-        if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) {
+        if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &logicalDevice) != VK_SUCCESS) {
             throw std::runtime_error("failed to create logical device!");
         }
 
-        vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
-        vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
+        vkGetDeviceQueue(logicalDevice, indices.graphicsFamily.value(), 0, &graphicsQueue);
+        vkGetDeviceQueue(logicalDevice, indices.presentFamily.value(), 0, &presentQueue);
     }
 
     void createSwapChain() {
@@ -724,13 +724,13 @@ private:
         createInfo.presentMode = presentMode;
         createInfo.clipped = VK_TRUE;
 
-        if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain) != VK_SUCCESS) {
+        if (vkCreateSwapchainKHR(logicalDevice, &createInfo, nullptr, &swapChain) != VK_SUCCESS) {
             throw std::runtime_error("failed to create swap chain!");
         }
 
-        vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
+        vkGetSwapchainImagesKHR(logicalDevice, swapChain, &imageCount, nullptr);
         swapChainImages.resize(imageCount);
-        vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
+        vkGetSwapchainImagesKHR(logicalDevice, swapChain, &imageCount, swapChainImages.data());
 
         swapChainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
@@ -800,7 +800,7 @@ private:
         renderPassInfo.dependencyCount = 1;
         renderPassInfo.pDependencies = &dependency;
 
-        if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
+        if (vkCreateRenderPass(logicalDevice, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
             throw std::runtime_error("failed to create render pass!");
         }
     }
@@ -871,13 +871,13 @@ private:
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
 
-        if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+        if (vkCreateDescriptorSetLayout(logicalDevice, &layoutInfo, nullptr, &globalDescriptorSetLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor set layout!");
         }
     }
 
     void createGraphicsPipelines() {
-        std::string shaderDir = "../shaders/";
+        std::string shaderDir = "../../shaders/";
         createPipeline(shaderDir + "phong-shading/built/texture_vert.spv", shaderDir + "phong-shading/built/texture_frag.spv", mainPipelineLayout, mainGraphicsPipeline);
         createPipeline(shaderDir + "phong-shading/built/light_cube_vert.spv", shaderDir + "phong-shading/built/light_cube_frag.spv", lightCubePipelineLayout, lightCubePipeline);
     }
@@ -928,6 +928,7 @@ private:
         rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rasterizer.depthClampEnable = VK_FALSE;
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
+        // rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = 1.0f;
         rasterizer.cullMode = VK_CULL_MODE_NONE;
@@ -979,9 +980,9 @@ private:
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+        pipelineLayoutInfo.pSetLayouts = &globalDescriptorSetLayout;
 
-        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
+        if (vkCreatePipelineLayout(logicalDevice, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create pipeline layout!");
         }
 
@@ -1002,12 +1003,12 @@ private:
         pipelineInfo.pDepthStencilState = &depthStencil;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline) != VK_SUCCESS) {
+        if (vkCreateGraphicsPipelines(logicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline) != VK_SUCCESS) {
             throw std::runtime_error("failed to create graphics pipeline!");
         }
 
-        vkDestroyShaderModule(device, fragShaderModule, nullptr);
-        vkDestroyShaderModule(device, vertShaderModule, nullptr);
+        vkDestroyShaderModule(logicalDevice, fragShaderModule, nullptr);
+        vkDestroyShaderModule(logicalDevice, vertShaderModule, nullptr);
     }
 
     void createFramebuffers() {
@@ -1028,7 +1029,7 @@ private:
             framebufferInfo.height = swapChainExtent.height;
             framebufferInfo.layers = 1;
 
-            if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
+            if (vkCreateFramebuffer(logicalDevice, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create framebuffer!");
             }
         }
@@ -1042,7 +1043,7 @@ private:
         poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
 
-        if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
+        if (vkCreateCommandPool(logicalDevice, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create graphics command pool!");
         }
     }
@@ -1057,12 +1058,12 @@ private:
     void prepareTextures() {
 
         //prepare textures for diffuse texture
-        createTextureImage("../textures/diffuse.png", diffuseTextureImage, diffuseTextureAllocation);
+        createTextureImage("../../textures/diffuse.png", diffuseTextureImage, diffuseTextureAllocation);
         createTextureImageView(diffuseTextureImage, diffuseTextureImageView);
         createTextureSampler(diffuseTextureSampler);
 
         //prepare textures for specular texture
-        createTextureImage("../textures/specular.png", specularTextureImage, specularTextureAllocation);
+        createTextureImage("../../textures/specular.png", specularTextureImage, specularTextureAllocation);
         createTextureImageView(specularTextureImage, specularTextureImageView);
         createTextureSampler(specularTextureSampler);
     }
@@ -1119,7 +1120,7 @@ private:
         samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
-        if (vkCreateSampler(device, &samplerInfo, nullptr, &texureSampler) != VK_SUCCESS) {
+        if (vkCreateSampler(logicalDevice, &samplerInfo, nullptr, &texureSampler) != VK_SUCCESS) {
             throw std::runtime_error("failed to create texture sampler!");
         }
     }
@@ -1137,7 +1138,7 @@ private:
         viewInfo.subresourceRange.layerCount = 1;
 
         VkImageView imageView;
-        if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
+        if (vkCreateImageView(logicalDevice, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
             throw std::runtime_error("failed to create texture image view!");
         }
 
@@ -1287,15 +1288,15 @@ private:
       
         VkDeviceSize dynBufferSize = (OBJECT_COUNT + NR_POINT_LIGHTS) * dynamicAlignmentUBO;
 
-        VkDeviceSize staticBufferSize = sizeof(StaticUniformBufferObject);
+        VkDeviceSize staticBufferSize = sizeof(UniformBufferObject);
 
         VkDeviceSize directionalLightBufferSize = sizeof(DirectionalLight);
         VkDeviceSize pointLightBufferSize = sizeof(PointLight) * NR_POINT_LIGHTS;
         VkDeviceSize spotLightBufferSize = sizeof(SpotLight);
 
-        staticUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-        staticUniformBuffersAllocation.resize(MAX_FRAMES_IN_FLIGHT);
-        staticUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+        uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        uniformBuffersAllocation.resize(MAX_FRAMES_IN_FLIGHT);
+        uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
         
         dynUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
         dynUniformBuffersAllocation.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1304,7 +1305,7 @@ private:
         // for the lights
         directionalLightBuffers.resize(MAX_FRAMES_IN_FLIGHT);
         directionalLightBuffersAllocation.resize(MAX_FRAMES_IN_FLIGHT);
-        directionlaLightBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+        directionalLightBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
         pointLightBuffers.resize(MAX_FRAMES_IN_FLIGHT);
         pointLightBuffersAllocation.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1315,11 +1316,11 @@ private:
         spotLightBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            staticUniformBuffersMapped[i] = createBuffer(staticBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferType::STAGING_BUFFER, staticUniformBuffers[i], staticUniformBuffersAllocation[i]);
+            uniformBuffersMapped[i] = createBuffer(staticBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferType::STAGING_BUFFER, uniformBuffers[i], uniformBuffersAllocation[i]);
             dynUniformBuffersMapped[i] = createBuffer(dynBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferType::STAGING_BUFFER, dynUniformBuffers[i], dynUniformBuffersAllocation[i]);
 
             //for the lights
-            directionlaLightBuffersMapped[i] = createBuffer(directionalLightBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferType::STAGING_BUFFER, directionalLightBuffers[i], directionalLightBuffersAllocation[i]);
+            directionalLightBuffersMapped[i] = createBuffer(directionalLightBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferType::STAGING_BUFFER, directionalLightBuffers[i], directionalLightBuffersAllocation[i]);
             pointLightBuffersMapped[i] = createBuffer(pointLightBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferType::STAGING_BUFFER, pointLightBuffers[i], pointLightBuffersAllocation[i]);
             spotLightBuffersMapped[i] = createBuffer(spotLightBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferType::STAGING_BUFFER, spotLightBuffers[i], spotLightBuffersAllocation[i]);
         }
@@ -1397,7 +1398,7 @@ private:
 
         // directional lights
         for(int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            uint8_t* mappedUniform = reinterpret_cast<uint8_t*>(directionlaLightBuffersMapped[i]);
+            uint8_t* mappedUniform = reinterpret_cast<uint8_t*>(directionalLightBuffersMapped[i]);
             memcpy(mappedUniform, &directionalLight, sizeof(directionalLight));
         }
     }
@@ -1427,29 +1428,29 @@ private:
         poolInfo.pPoolSizes = poolSizes.data();
         poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
-        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+        if (vkCreateDescriptorPool(logicalDevice, &poolInfo, nullptr, &globalDescriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor pool!");
         }
     }
 
     void createDescriptorSets() {
-        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
+        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, globalDescriptorSetLayout);
         VkDescriptorSetAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = descriptorPool;
+        allocInfo.descriptorPool = globalDescriptorPool;
         allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
         allocInfo.pSetLayouts = layouts.data();
 
-        descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-        if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
+        globalDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+        if (vkAllocateDescriptorSets(logicalDevice, &allocInfo, globalDescriptorSets.data()) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate descriptor sets!");
         }
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             VkDescriptorBufferInfo staticBufferInfo{};
-            staticBufferInfo.buffer = staticUniformBuffers[i];
+            staticBufferInfo.buffer = uniformBuffers[i];
             staticBufferInfo.offset = 0;
-            staticBufferInfo.range = sizeof(StaticUniformBufferObject);
+            staticBufferInfo.range = sizeof(UniformBufferObject);
 
             VkDescriptorBufferInfo dynamicBufferInfo{};
             dynamicBufferInfo.buffer = dynUniformBuffers[i];
@@ -1484,7 +1485,7 @@ private:
             std::array<VkWriteDescriptorSet, 7> descriptorWrites{};
 
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[0].dstSet = descriptorSets[i];
+            descriptorWrites[0].dstSet = globalDescriptorSets[i];
             descriptorWrites[0].dstBinding = 0;
             descriptorWrites[0].dstArrayElement = 0;
             descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1492,7 +1493,7 @@ private:
             descriptorWrites[0].pBufferInfo = &staticBufferInfo;
 
             descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[1].dstSet = descriptorSets[i];
+            descriptorWrites[1].dstSet = globalDescriptorSets[i];
             descriptorWrites[1].dstBinding = 1;
             descriptorWrites[1].dstArrayElement = 0;
             descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
@@ -1500,7 +1501,7 @@ private:
             descriptorWrites[1].pBufferInfo = &dynamicBufferInfo;
 
             descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[2].dstSet = descriptorSets[i];
+            descriptorWrites[2].dstSet = globalDescriptorSets[i];
             descriptorWrites[2].dstBinding = 2;
             descriptorWrites[2].dstArrayElement = 0;
             descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1508,7 +1509,7 @@ private:
             descriptorWrites[2].pImageInfo = &diffuseImageInfo;
 
             descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[3].dstSet = descriptorSets[i];
+            descriptorWrites[3].dstSet = globalDescriptorSets[i];
             descriptorWrites[3].dstBinding = 3;
             descriptorWrites[3].dstArrayElement = 0;
             descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1516,7 +1517,7 @@ private:
             descriptorWrites[3].pImageInfo = &specularImageInfo;
 
             descriptorWrites[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[4].dstSet = descriptorSets[i];
+            descriptorWrites[4].dstSet = globalDescriptorSets[i];
             descriptorWrites[4].dstBinding = 4;
             descriptorWrites[4].dstArrayElement = 0;
             descriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1524,7 +1525,7 @@ private:
             descriptorWrites[4].pBufferInfo = &directionalLightBufferInfo;
 
             descriptorWrites[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[5].dstSet = descriptorSets[i];
+            descriptorWrites[5].dstSet = globalDescriptorSets[i];
             descriptorWrites[5].dstBinding = 5;
             descriptorWrites[5].dstArrayElement = 0;
             descriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1532,14 +1533,14 @@ private:
             descriptorWrites[5].pBufferInfo = &pointLightBufferInfo;
 
             descriptorWrites[6].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[6].dstSet = descriptorSets[i];
+            descriptorWrites[6].dstSet = globalDescriptorSets[i];
             descriptorWrites[6].dstBinding = 6;
             descriptorWrites[6].dstArrayElement = 0;
             descriptorWrites[6].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             descriptorWrites[6].descriptorCount = 1;
             descriptorWrites[6].pBufferInfo = &spotLightBufferInfo;
 
-            vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+            vkUpdateDescriptorSets(logicalDevice, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
     }
 
@@ -1579,7 +1580,7 @@ private:
         allocInfo.commandBufferCount = 1;
 
         VkCommandBuffer commandBuffer;
-        vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+        vkAllocateCommandBuffers(logicalDevice, &allocInfo, &commandBuffer);
 
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1601,7 +1602,7 @@ private:
         vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
         vkQueueWaitIdle(graphicsQueue);
 
-        vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+        vkFreeCommandBuffers(logicalDevice, commandPool, 1, &commandBuffer);
     }
 
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
@@ -1636,7 +1637,7 @@ private:
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = (uint32_t) commandBuffers.size();
 
-        if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()) != VK_SUCCESS) {
+        if (vkAllocateCommandBuffers(logicalDevice, &allocInfo, commandBuffers.data()) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate command buffers!");
         }
     }
@@ -1689,7 +1690,7 @@ private:
             for(int i = 0; i < OBJECT_COUNT; i++) {
                 uint32_t dynamicOffsetUBO = static_cast<uint32_t>(i * dynamicAlignmentUBO); 
 
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipelineLayout, 0, 1, &descriptorSets[currentFrame], 1, &dynamicOffsetUBO);
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mainPipelineLayout, 0, 1, &globalDescriptorSets[currentFrame], 1, &dynamicOffsetUBO);
                 vkCmdDraw(commandBuffer, 36, 1, 0, 0);
             }
 
@@ -1702,7 +1703,7 @@ private:
             for(int i = OBJECT_COUNT; i < (OBJECT_COUNT + NR_POINT_LIGHTS); i++) {
                 uint32_t dynamicOffsetUBO = static_cast<uint32_t>(i * dynamicAlignmentUBO); 
 
-                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lightCubePipelineLayout, 0, 1, &descriptorSets[currentFrame], 1, &dynamicOffsetUBO);
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lightCubePipelineLayout, 0, 1, &globalDescriptorSets[currentFrame], 1, &dynamicOffsetUBO);
                 vkCmdDraw(commandBuffer, 36, 1, 0, 0);
             }
 
@@ -1726,30 +1727,30 @@ private:
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
-                vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
+            if (vkCreateSemaphore(logicalDevice, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
+                vkCreateSemaphore(logicalDevice, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
+                vkCreateFence(logicalDevice, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create synchronization objects for a frame!");
             }
         }
     }
 
     void updateUniformBuffer(uint32_t currentImage) {
-        StaticUniformBufferObject sUBO{};
+        UniformBufferObject sUBO{};
 
         // position, target, up
         sUBO.view = camera->getCameraMatrix();
         sUBO.proj = glm::perspective(glm::radians(45.0f), (float)WIDTH/ (float)HEIGHT, 0.1f, 100.0f);
         sUBO.cameraPos = glm::vec4(camera->getCameraPos().x, camera->getCameraPos().y, camera->getCameraPos().z, 0.0);
 
-        memcpy(staticUniformBuffersMapped[currentImage], &sUBO, sizeof(sUBO));
+        memcpy(uniformBuffersMapped[currentImage], &sUBO, sizeof(sUBO));
     }
 
     void drawFrame() {
-        vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+        vkWaitForFences(logicalDevice, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
         uint32_t imageIndex;
-        VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+        VkResult result = vkAcquireNextImageKHR(logicalDevice, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
             recreateSwapChain();
@@ -1760,7 +1761,7 @@ private:
 
         updateUniformBuffer(currentFrame);
 
-        vkResetFences(device, 1, &inFlightFences[currentFrame]);
+        vkResetFences(logicalDevice, 1, &inFlightFences[currentFrame]);
 
         vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
         recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
@@ -1816,7 +1817,7 @@ private:
         createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
 
         VkShaderModule shaderModule;
-        if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+        if (vkCreateShaderModule(logicalDevice, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
             throw std::runtime_error("failed to create shader module!");
         }
 
