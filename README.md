@@ -3,7 +3,7 @@
 This is my personal repository for everything Vulkan related. In the next months i'm going to cook up a demo with all the graphics
 knowledge i'll have accumulated thanks to the books and resources. Hope it is going to be something cool.
 
-##18th December: Model loading
+## 18th December: Model loading
 Oh boy what an endevoir this has been! Finally exiting the "Vulkan tutorial's comfort zone" and starting to head into sort of "unexplored" territory (at least for me).
 I finally got the chance to get my hands dirty with multiple descriptor sets and really had to sit there thinking what could be the best possible strategy to upload
 my precious data to the shaders. Currently i have been unable to get bindless texture working (i've tried, thanks MoltenVK!) due to "Macbeingapaininthearsetodevelopfor"-itis.
