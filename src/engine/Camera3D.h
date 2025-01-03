@@ -1,9 +1,9 @@
 #ifndef _CAMERA3D_H_
 #define _CAMERA3D_H_
 
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/ext/matrix_clip_space.hpp>
+#include <glm.hpp>
+#include <gtc/matrix_transform.hpp>
+#include <ext/matrix_clip_space.hpp>
 
 class Camera3D {
 public:

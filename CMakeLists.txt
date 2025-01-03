@@ -16,6 +16,7 @@ file(GLOB_RECURSE COMMON_SOURCES src/engine/*.cpp src/engine/*.h)
 file(GLOB_RECURSE EXAMPLE_SOURCES src/examples/*.cpp src/examples/*.h)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/deps/glfw)
+# add_subdirectory(${CMAKE_SOURCE_DIR}/deps/glm)
 add_subdirectory(${CMAKE_SOURCE_DIR}/deps/VulkanMemoryAllocator-3.1.0 SYSTEM)
 
 # Compilation flags for assimp. The demo only needs the GLTF loader and nothing else
@@ -28,7 +29,7 @@ set(ASSIMP_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_SOURCE_DIR}/deps/assimp SYSTEM)
 
 find_package(Vulkan REQUIRED)
-find_package(glm CONFIG REQUIRED)
+# find_package(glm CONFIG REQUIRED)
 
 foreach(EXAMPLE_FILE ${EXAMPLE_SOURCES})
     # Get the filename without extension to use as the target name
@@ -69,7 +70,6 @@ foreach(EXAMPLE_FILE ${EXAMPLE_SOURCES})
     # Link libraries
     target_link_libraries(${EXAMPLE_NAME}
         glfw
-        glm::glm
         Vulkan::Vulkan
         GPUOpen::VulkanMemoryAllocator
         assimp

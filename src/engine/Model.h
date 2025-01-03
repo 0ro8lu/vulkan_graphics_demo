@@ -4,8 +4,8 @@
 #include "Mesh.h"
 #include <vulkan/vulkan_core.h>
 
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include <glm.hpp>
+#include <gtc/matrix_transform.hpp>
 
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
