@@ -18,13 +18,13 @@ vulkanDevice(vulkanDevice), filePath(filePath){
 	
 	loadModel(filePath);
     
-    std::cout << indices.size();
-
 	createVertexBuffer(sizeof(vertices[0]) * vertices.size());
 	createIndexBuffer(sizeof(indices[0]) * indices.size());
 
 	modelMatrix = glm::translate(modelMatrix, pos);
-	modelMatrix = glm::rotate(modelMatrix, glm::radians(rotationAngle), rotationAxis);
+	if(rotationAngle != 0) {
+		modelMatrix = glm::rotate(modelMatrix, glm::radians(rotationAngle), rotationAxis);
+	}
     modelMatrix = glm::scale(modelMatrix, scale);
 
 	// create the descriptor layout and descriptor sets
@@ -112,23 +112,8 @@ void Model::loadModel(const std::string& filePath) {
 	Assimp::Importer importer;
 	unsigned int processFlags =
     aiProcess_FlipUVs |
-	// aiProcess_CalcTangentSpace         | // calculate tangents and bitangents if possible
-	// aiProcess_JoinIdenticalVertices    | // join identical vertices/ optimize indexing
-	//aiProcess_ValidateDataStructure  | // perform a full validation of the loader's output
 	aiProcess_Triangulate              | // Ensure all verticies are triangulated (each 3 vertices are triangle)
-	// aiProcess_ConvertToLeftHanded      | // convert everything to D3D left handed space (by default right-handed, for OpenGL)
-	// aiProcess_SortByPType              | // ?
-	// aiProcess_ImproveCacheLocality     | // improve the cache locality of the output vertices
-	// aiProcess_RemoveRedundantMaterials | // remove redundant materials
-	// aiProcess_FindDegenerates          | // remove degenerated polygons from the import
-	// aiProcess_FindInvalidData          | // detect invalid model data, such as invalid normal vectors
-	 aiProcess_GenUVCoords              | // convert spherical, cylindrical, box and planar mapping to proper UVs
-	// aiProcess_TransformUVCoords        | // preprocess UV transformations (scaling, translation ...)
-	// aiProcess_FindInstances            | // search for instanced meshes and remove them by references to one master
-	// aiProcess_LimitBoneWeights         | // limit bone weights to 4 per vertex
-	// aiProcess_OptimizeMeshes           | // join small meshes, if possible;
-	// aiProcess_SplitByBoneCount         | // split meshes with too many bones. Necessary for our (limited) hardware skinning shader
-	0;
+	 aiProcess_GenUVCoords; // convert spherical, cylindrical, box and planar mapping to proper UVs
 
     const aiScene *scene = importer.ReadFile(filePath, processFlags);
     
@@ -138,6 +123,8 @@ void Model::loadModel(const std::string& filePath) {
         return;
     }
 
+	printMaterialTypes(scene);
+
 	//preallocate vertices and indices vectors
 	unsigned int totalNumVertices = 0;
 	unsigned int totalNumIndices = 0;
@@ -146,40 +133,89 @@ void Model::loadModel(const std::string& filePath) {
         totalNumIndices += scene->mMeshes[i]->mNumFaces * 3; // <== i assume every face has three vertices because of the TRIANGULATE option
 	}
 
-	// meshes.reserve(scene->mNumMeshes);
-	// indices.reserve(totalNumIndices);
-	// vertices.reserve(totalNumVertices);
+	meshes.reserve(scene->mNumMeshes);
+	indices.reserve(totalNumIndices);
+	vertices.reserve(totalNumVertices);
 
 	size_t startIndex = 0;
-    size_t startVertex = 0;
-	for(unsigned int i = 0; i < scene->mNumMeshes; i++) {
-		aiMesh* mesh = scene->mMeshes[i];
-		processMesh(mesh, scene, startIndex, startVertex);
+	size_t startVertex = 0;
 
-		startIndex += scene->mMeshes[i]->mNumFaces * 3;
-        startVertex += mesh->mNumVertices;
-	}
+	processNode(scene->mRootNode, scene, modelMatrix, startIndex, startVertex);
 }
 
-void Model::processMesh(aiMesh* mesh, const aiScene* scene, size_t startIndex, size_t startVertex) {
+void Model::processNode(aiNode* node, const aiScene* scene, glm::mat4 parentTransform, size_t& startIndex, size_t& startVertex) {
+	glm::mat4 nodeTransform = parentTransform * AssimpToGlmMatrix(node->mTransformation);
+
+	 for(unsigned int i = 0; i < node->mNumMeshes; i++) {
+		aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
+		processMesh(mesh, scene, nodeTransform, startIndex, startVertex);
+
+		startIndex += scene->mMeshes[node->mMeshes[i]]->mNumFaces * 3;
+        startVertex += mesh->mNumVertices;
+	}
+
+	for (unsigned int i = 0; i < node->mNumChildren; i++) {
+        processNode(node->mChildren[i], scene, nodeTransform, startIndex, startVertex);
+    }
+}
+
+glm::mat4 Model::AssimpToGlmMatrix(const aiMatrix4x4 &from) {
+    glm::mat4 to;
+    to[0][0] = from.a1; to[1][0] = from.a2; to[2][0] = from.a3; to[3][0] = from.a4;
+    to[0][1] = from.b1; to[1][1] = from.b2; to[2][1] = from.b3; to[3][1] = from.b4;
+    to[0][2] = from.c1; to[1][2] = from.c2; to[2][2] = from.c3; to[3][2] = from.c4;
+    to[0][3] = from.d1; to[1][3] = from.d2; to[2][3] = from.d3; to[3][3] = from.d4;
+    return to;
+}
+
+void Model::printMaterialTypes(const aiScene* scene) {
+    for (unsigned int i = 0; i < scene->mNumMaterials; ++i) {
+        aiMaterial* material = scene->mMaterials[i];
+
+        // List of all possible texture types in Assimp
+        std::vector<std::pair<aiTextureType, std::string>> textureTypes = {
+            {aiTextureType_DIFFUSE, "Diffuse"},
+            {aiTextureType_SPECULAR, "Specular"},
+            {aiTextureType_AMBIENT, "Ambient"},
+            {aiTextureType_EMISSIVE, "Emissive"},
+            {aiTextureType_HEIGHT, "Height"},
+            {aiTextureType_NORMALS, "Normals"},
+            {aiTextureType_SHININESS, "Shininess"},
+            {aiTextureType_OPACITY, "Opacity"},
+            {aiTextureType_DISPLACEMENT, "Displacement"},
+            {aiTextureType_LIGHTMAP, "Lightmap"},
+            {aiTextureType_REFLECTION, "Reflection"},
+            {aiTextureType_UNKNOWN, "Unknown"}
+        };
+
+        // Check each texture type and print the count if it's greater than 0
+        for (const auto& [type, name] : textureTypes) {
+            unsigned int count = material->GetTextureCount(type);
+            if (count > 0) {
+                // std::cout << "  " << name << " (" << type << "): " << count << "\n";
+            }
+        }
+    }
+}
+
+void Model::processMesh(aiMesh* mesh, const aiScene* scene, glm::mat4 transform, size_t& startIndex, size_t& startVertex) {
 	for(unsigned int i = 0; i < mesh->mNumVertices; i++) {
 		Vertex vertex;
 
 		// Position
-        vertex.position.x = mesh->mVertices[i].x;
-        vertex.position.y = -mesh->mVertices[i].y;
-        vertex.position.z = mesh->mVertices[i].z;
+		glm::vec4 position = glm::vec4(mesh->mVertices[i].x, -mesh->mVertices[i].y, mesh->mVertices[i].z, 1.0f);
+        position = transform * position;
+        vertex.position = glm::vec3(position);
 
 		// Normal
         if(mesh->HasNormals()) {
-            vertex.normals.x = mesh->mNormals[i].x;
-            vertex.normals.y = -mesh->mNormals[i].y;
-            vertex.normals.z = mesh->mNormals[i].z;
+			glm::vec4 normal = glm::vec4(mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z, 0.0f);
+            normal = transform * normal;
+            vertex.normals = glm::normalize(glm::vec3(normal));
         }
 
 		// Texture coordinates
 		if(mesh->HasTextureCoords(0)) {
-        // if(mesh->mTextureCoords[0]) {
             vertex.texCoords.x = mesh->mTextureCoords[0][i].x;
             vertex.texCoords.y = mesh->mTextureCoords[0][i].y;
         } else {
@@ -197,11 +233,15 @@ void Model::processMesh(aiMesh* mesh, const aiScene* scene, size_t startIndex, s
 
         loadTexture(material, diffuseTexture, scene, aiTextureType_DIFFUSE);
         loadTexture(material, specularTexture, scene, aiTextureType_SPECULAR);
-    } else {
-        std::string path = TEXTURE_PATH;
-        specularTexture = Texture(vulkanDevice, path + "specular.png");
-        diffuseTexture = Texture(vulkanDevice, path + "diffuse.png");
     }
+    
+	std::string path = TEXTURE_PATH;
+	if(diffuseTexture.view == VK_NULL_HANDLE) {
+        diffuseTexture = Texture(vulkanDevice, path + "empty_diffuse.png");
+    }
+	if(specularTexture.view == VK_NULL_HANDLE) {
+        specularTexture = Texture(vulkanDevice, path + "empty_specular.png");
+	}
     
     Mesh myMesh = Mesh(vulkanDevice, mesh->mNumFaces * 3, startIndex, std::move(diffuseTexture), std::move(specularTexture));
     meshes.push_back(std::move(myMesh));
@@ -220,18 +260,17 @@ void Model::loadTexture(aiMaterial* material, Texture& texture, const aiScene* s
     	material->GetTexture(type, 0, &str);
 
 		if(str.C_Str()[0] == '*') {
-        	// It's an embedded texture
-        	int texIndex = atoi(&str.C_Str()[1]); // Extract index after '*'
+        	// embedded texture
+        	int texIndex = atoi(&str.C_Str()[1]);
 
         	aiTexture* aiTexture = scene->mTextures[texIndex];
 
-        	// Now, texture->pcData contains the texture data
-        	// If mHeight == 0, the texture is compressed (e.g., PNG, JPG)
+        	// mHeight == 0 means the texture is compressed
         	if(aiTexture->mHeight == 0) {
         	    // Compressed texture data
             	texture = Texture(vulkanDevice, reinterpret_cast<unsigned char*>(aiTexture->pcData), aiTexture->mWidth);
         	} else {
-				// Uncompressed texture data (rare, but handle if needed)
+				// Uncompressed texture data
             	// size_t size = aiTexture->mWidth * aiTexture->mHeight * 4; // Assuming RGBA
             	// texture = Texture(vulkanDevice, reinterpret_cast<unsigned char*>(aiTexture->pcData), size, aiTexture->mWidth, aiTexture->mHeight);
         	}
@@ -239,10 +278,6 @@ void Model::loadTexture(aiMaterial* material, Texture& texture, const aiScene* s
 			// Load texture from file path
     		texture = Texture(vulkanDevice, str.C_Str());
 		}
-	} else {
-		// Load default texture
-    	std::string path = TEXTURE_PATH;
-    	texture = Texture(vulkanDevice, path + "diffuse.png");
 	}
 }
 
@@ -265,33 +300,35 @@ void Model::setupDescriptors() {
     }
 
 	// -------------------- DESCRIPTOR LAYOUT --------------------
-	VkDescriptorSetLayoutBinding diffuseLayoutBinding{};
-    diffuseLayoutBinding.binding = 0;
-    diffuseLayoutBinding.descriptorCount = 1;
-    diffuseLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    diffuseLayoutBinding.pImmutableSamplers = nullptr;
-    diffuseLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	if(Model::textureLayout == VK_NULL_HANDLE) {
+		VkDescriptorSetLayoutBinding diffuseLayoutBinding{};
+    	diffuseLayoutBinding.binding = 0;
+    	diffuseLayoutBinding.descriptorCount = 1;
+    	diffuseLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    	diffuseLayoutBinding.pImmutableSamplers = nullptr;
+    	diffuseLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    VkDescriptorSetLayoutBinding specularLayoutBinding{};
-    specularLayoutBinding.binding = 1;
-    specularLayoutBinding.descriptorCount = 1;
-    specularLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    specularLayoutBinding.pImmutableSamplers = nullptr;
-    specularLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    	VkDescriptorSetLayoutBinding specularLayoutBinding{};
+    	specularLayoutBinding.binding = 1;
+    	specularLayoutBinding.descriptorCount = 1;
+    	specularLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    	specularLayoutBinding.pImmutableSamplers = nullptr;
+    	specularLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-	std::array<VkDescriptorSetLayoutBinding, 2> bindings = {
-		diffuseLayoutBinding,
-		specularLayoutBinding,
-    };
+		std::array<VkDescriptorSetLayoutBinding, 2> bindings = {
+			diffuseLayoutBinding,
+			specularLayoutBinding,
+    	};
 
-	VkDescriptorSetLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-    layoutInfo.pBindings = bindings.data();
+		VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    	layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    	layoutInfo.pBindings = bindings.data();
 
-    if (vkCreateDescriptorSetLayout(vulkanDevice->logicalDevice, &layoutInfo, nullptr, &Model::textureLayout) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create descriptor set layout!");
-    }
+    	if (vkCreateDescriptorSetLayout(vulkanDevice->logicalDevice, &layoutInfo, nullptr, &Model::textureLayout) != VK_SUCCESS) {
+    	    throw std::runtime_error("failed to create descriptor set layout!");
+    	}
+	}
 
 	// -------------------- DESCRIPTOR ALLOCATION --------------------
 	for (Mesh& mesh : meshes) {
@@ -316,13 +353,7 @@ Model::createVertexBuffer(VkDeviceSize bufferSize)
   vmaDestroyBuffer(vulkanDevice->allocator, stagingBuffer, stagingBufferAllocation);
 }
 
-void Model::createIndexBuffer(VkDeviceSize bufferSize) {
-    
-//    std::cout << indices.size() << std::endl;
-//    for(int i = 0; i < indices.size(); i++) {
-//        std::cout << indices[i] << std::endl;
-//    }
-    
+void Model::createIndexBuffer(VkDeviceSize bufferSize) {   
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingBufferMemory;
 	VmaAllocation stagingBufferAllocation;

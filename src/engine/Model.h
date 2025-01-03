@@ -56,8 +56,11 @@ private:
 	void setupDescriptors();
 
 	void loadModel(const std::string& filePath);
-	void processMesh(aiMesh* mesh, const aiScene* scene, size_t startIndex, size_t startVertex);
+	void processNode(aiNode* node, const aiScene* scene, glm::mat4 parentTransform, size_t& startIndex, size_t& startVertex);
+	glm::mat4 AssimpToGlmMatrix(const aiMatrix4x4 &from);
+	void processMesh(aiMesh* mesh, const aiScene* scene, glm::mat4 transform, size_t& startIndex, size_t& startVertex);
     void loadTexture(aiMaterial* material, Texture& texture, const aiScene* scene, aiTextureType type);
+	void printMaterialTypes(const aiScene* scene);
 
 	unsigned int vertexCount;
 
