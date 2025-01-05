@@ -6,6 +6,10 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#define CUTE_SOUND_IMPLEMENTATION
+#define CUTE_SOUND_SCALAR_MODE
+#include <cute_sound.h>
+
 #define VMA_IMPLEMENTATION
 #define VMA_DEBUG_DETECT_CORRUPTION 1
 #define VMA_DEBUG_MARGIN 16
@@ -214,6 +218,8 @@ private:
 
     size_t dynamicAlignmentUBO;
 
+    cs_audio_source_t* voice;
+
     void initWindow() {
         glfwInit();
 
@@ -244,6 +250,7 @@ private:
         createCommandPool();
         createVulkanDevice();
         prepareModels();
+        prepareAudio();
         createGraphicsPipelines();
         createDepthResources();
         createFramebuffers();
@@ -276,6 +283,8 @@ private:
 
             updateCamera(delta_time.count());
             
+            cs_update(0);
+
             drawFrame();
 
             // frame_count++;
@@ -372,6 +381,8 @@ private:
         glfwDestroyWindow(window);
 
         glfwTerminate();
+
+        cs_free_audio_source(voice);
     }
 
     void initCamera() {
@@ -1024,6 +1035,19 @@ private:
             Model cube = Model(modelPath + "cube.glb", vulkanDevice, pointLightPositions[i], glm::vec3(0.0), 0, glm::vec3(0.1f));
             lightModels.push_back(std::move(cube));
         }        
+    }
+
+    void prepareAudio() {
+        cs_init(NULL, 44100, 1024, NULL);
+
+        std::string soundPath = SOUND_PATH;
+        soundPath = soundPath + "Heartbreak Of The Century.wav";
+        voice = cs_load_wav(soundPath.c_str(), NULL);
+
+        cs_sound_params_t params = cs_sound_params_default();
+        cs_playing_sound_t voice_snd = CUTE_PLAYING_SOUND_INVALID;
+
+        cs_play_sound(voice, params);
     }
 
     VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags) {

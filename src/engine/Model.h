@@ -11,6 +11,9 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
+#include <vector>
+#include <array>
+
 class Model {
 public:
 	// Model(VulkanDevice* vulkanDevice, const std::string& filePath);

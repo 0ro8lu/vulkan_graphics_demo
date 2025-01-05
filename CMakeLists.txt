@@ -16,7 +16,7 @@ file(GLOB_RECURSE COMMON_SOURCES src/engine/*.cpp src/engine/*.h)
 file(GLOB_RECURSE EXAMPLE_SOURCES src/examples/*.cpp src/examples/*.h)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/deps/glfw)
-# add_subdirectory(${CMAKE_SOURCE_DIR}/deps/glm)
+add_subdirectory(${CMAKE_SOURCE_DIR}/deps/glm)
 add_subdirectory(${CMAKE_SOURCE_DIR}/deps/VulkanMemoryAllocator-3.1.0 SYSTEM)
 
 # Compilation flags for assimp. The demo only needs the GLTF loader and nothing else
@@ -26,10 +26,10 @@ set(ASSIMP_NO_EXPORT ON CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_SOURCE_DIR}/deps/assimp SYSTEM)
 
 find_package(Vulkan REQUIRED)
-# find_package(glm CONFIG REQUIRED)
 
 foreach(EXAMPLE_FILE ${EXAMPLE_SOURCES})
     # Get the filename without extension to use as the target name
@@ -49,6 +49,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_SOURCES})
         "${CMAKE_SOURCE_DIR}/src/"
         "${CMAKE_SOURCE_DIR}/deps/glm"
         "${CMAKE_SOURCE_DIR}/deps/stb_image"
+        "${CMAKE_SOURCE_DIR}/deps/cute_sound"
         "${CMAKE_SOURCE_DIR}/deps/assimp-5.4.3"
     )
 
@@ -57,14 +58,34 @@ foreach(EXAMPLE_FILE ${EXAMPLE_SOURCES})
     # thakns Apple). That throws off all the resource loading, and instead of
     # painstakingly modfying them and reverrting them, i decided to just export
     # a variable and call it a day.
-    if(CMAKE_GENERATOR STREQUAL "Unix Makefiles")
-        target_compile_definitions(${EXAMPLE_NAME} PRIVATE TEXTURE_PATH="../textures/")
-        target_compile_definitions(${EXAMPLE_NAME} PRIVATE SHADER_PATH="../shaders/")
-        target_compile_definitions(${EXAMPLE_NAME} PRIVATE MODEL_PATH="../models/")
-    elseif(CMAKE_GENERATOR STREQUAL "Xcode")
+    if(CMAKE_GENERATOR STREQUAL "Xcode")
         target_compile_definitions(${EXAMPLE_NAME} PRIVATE TEXTURE_PATH="../../textures/")
         target_compile_definitions(${EXAMPLE_NAME} PRIVATE SHADER_PATH="../../shaders/")
         target_compile_definitions(${EXAMPLE_NAME} PRIVATE MODEL_PATH="../../models/")
+        target_compile_definitions(${EXAMPLE_NAME} PRIVATE SOUND_PATH="../../sounds/")
+    elseif(CMAKE_GENERATOR STREQUAL "Unix Makefiles")
+        target_compile_definitions(${EXAMPLE_NAME} PRIVATE TEXTURE_PATH="../textures/")
+        target_compile_definitions(${EXAMPLE_NAME} PRIVATE SHADER_PATH="../shaders/")
+        target_compile_definitions(${EXAMPLE_NAME} PRIVATE MODEL_PATH="../models/")
+        target_compile_definitions(${EXAMPLE_NAME} PRIVATE SOUND_PATH="../sounds/")
+    elseif(CMAKE_GENERATOR STREQUAL "Ninja")
+        target_compile_definitions(${EXAMPLE_NAME} PRIVATE TEXTURE_PATH="../textures/")
+        target_compile_definitions(${EXAMPLE_NAME} PRIVATE SHADER_PATH="../shaders/")
+        target_compile_definitions(${EXAMPLE_NAME} PRIVATE MODEL_PATH="../models/")
+        target_compile_definitions(${EXAMPLE_NAME} PRIVATE SOUND_PATH="../sounds/")
+    endif()
+
+    if(UNIX AND NOT LINUX)
+        target_link_libraries(${EXAMPLE_NAME}
+            "-framework CoreAudio"
+            "-framework AudioToolbox"
+            "-framework AudioUnit"
+            "-framework CoreFoundation"
+        )
+    elseif(WIN32)
+         target_link_libraries(${EXAMPLE_NAME}
+            dsound
+        )
     endif()
     
     # Link libraries
@@ -74,7 +95,5 @@ foreach(EXAMPLE_FILE ${EXAMPLE_SOURCES})
         GPUOpen::VulkanMemoryAllocator
         assimp
     )
-    
-    # Optionally, treat all warnings as errors
-    # target_treat_all_warnings_as_errors(${EXAMPLE_NAME})
+  
 endforeach()
