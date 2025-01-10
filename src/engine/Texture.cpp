@@ -1,25 +1,48 @@
 #include "Texture.h"
 #include "engine/VulkanDevice.h"
 
-#include <vulkan/vulkan_core.h>
-
-Texture::Texture() : vulkanDevice(nullptr){
+Texture::Texture()
+  : vulkanDevice(nullptr)
+{
   image = VK_NULL_HANDLE;
   view = VK_NULL_HANDLE;
   sampler = VK_NULL_HANDLE;
 }
 
-Texture::Texture(VulkanDevice* vulkanDevice, std::string filePath)
-  : vulkanDevice(vulkanDevice)
+Texture::Texture(VulkanDevice* vulkanDevice, unsigned char* data, size_t size)
 {
+  this->vulkanDevice = vulkanDevice;
 
   int texWidth, texHeight, texChannels;
 
-  stbi_uc* pixels = stbi_load(filePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+  stbi_uc* pixels = stbi_load_from_memory(
+    data, size, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
   if (!pixels) {
-      throw std::runtime_error("Failed to load texture image from file: " + filePath);
+    throw std::runtime_error("Failed to load texture image from memory!");
   }
-  
+
+  createTextureImageFromPixels(pixels, texWidth, texHeight);
+
+  stbi_image_free(pixels);
+
+  // Create the image view and sampler as before.
+  createTextureImageView();
+  createTextureSampler();
+}
+
+Texture::Texture(VulkanDevice* vulkanDevice, std::string filePath)
+{
+  this->vulkanDevice = vulkanDevice;
+
+  int texWidth, texHeight, texChannels;
+
+  stbi_uc* pixels = stbi_load(
+    filePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+  if (!pixels) {
+    throw std::runtime_error("Failed to load texture image from file: " +
+                             filePath);
+  }
+
   createTextureImageFromPixels(pixels, texWidth, texHeight);
 
   stbi_image_free(pixels);
@@ -27,29 +50,11 @@ Texture::Texture(VulkanDevice* vulkanDevice, std::string filePath)
   createTextureImageView();
 
   // call this only if the global sampler is null.
-  // futureproofing: make a sampler manager, hash the VkSamplerCreateInfo struct so we know
-  // if the sampler has already been made (and i get a reference to it) or if its not present and it
-  // needs to be created and passed as a reference.
+  // futureproofing: make a sampler manager, hash the VkSamplerCreateInfo struct
+  // so we know if the sampler has already been made (and i get a reference to
+  // it) or if its not present and it needs to be created and passed as a
+  // reference.
   createTextureSampler();
-}
-
-Texture::Texture(VulkanDevice* vulkanDevice, unsigned char* data, size_t size)
-    : vulkanDevice(vulkanDevice)
-{
-    int texWidth, texHeight, texChannels;
-
-    stbi_uc* pixels = stbi_load_from_memory(data, size, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-    if (!pixels) {
-        throw std::runtime_error("Failed to load texture image from memory!");
-    }
-
-    createTextureImageFromPixels(pixels, texWidth, texHeight);
-
-    stbi_image_free(pixels);
-
-    // Create the image view and sampler as before.
-    createTextureImageView();
-    createTextureSampler();
 }
 
 Texture::~Texture()
@@ -57,35 +62,50 @@ Texture::~Texture()
   cleanup();
 }
 
-void Texture::createTextureImageFromPixels(stbi_uc* pixels, int texWidth, int texHeight) {
-    VkDeviceSize imageSize = texWidth * texHeight * 4;
+void
+Texture::createTextureImageFromPixels(stbi_uc* pixels,
+                                      int texWidth,
+                                      int texHeight)
+{
+  VkDeviceSize imageSize = texWidth * texHeight * 4;
 
-    // -------------------- STAGING BUFFER --------------------
-    VkBuffer stagingBuffer;
-    VmaAllocation stagingBufferAllocation;
+  // -------------------- STAGING BUFFER --------------------
+  VkBuffer stagingBuffer;
+  VmaAllocation stagingBufferAllocation;
 
-    void* data = vulkanDevice->createBuffer(imageSize,
-                                            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                            VulkanDevice::BufferType::STAGING_BUFFER,
-                                            stagingBuffer,
-                                            stagingBufferAllocation);
+  void* data =
+    vulkanDevice->createBuffer(imageSize,
+                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                               VulkanDevice::BufferType::STAGING_BUFFER,
+                               stagingBuffer,
+                               stagingBufferAllocation);
 
-    memcpy(data, pixels, static_cast<size_t>(imageSize));
+  memcpy(data, pixels, static_cast<size_t>(imageSize));
 
-    // Create the Vulkan image
-    createVulkanImage(texWidth, texHeight);
+  // Create the Vulkan image
+  createVulkanImage(texWidth, texHeight);
 
-    // Copy data from staging buffer to image
-    transitionImageLayout(image, VK_FORMAT_R8G8B8A8_SRGB,
-                          VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    copyBufferToImage(stagingBuffer, image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-    transitionImageLayout(image, VK_FORMAT_R8G8B8A8_SRGB,
-                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+  // Copy data from staging buffer to image
+  transitionImageLayout(image,
+                        VK_FORMAT_R8G8B8A8_SRGB,
+                        VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  copyBufferToImage(stagingBuffer,
+                    image,
+                    static_cast<uint32_t>(texWidth),
+                    static_cast<uint32_t>(texHeight));
+  transitionImageLayout(image,
+                        VK_FORMAT_R8G8B8A8_SRGB,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-    vmaDestroyBuffer(vulkanDevice->allocator, stagingBuffer, stagingBufferAllocation);
+  vmaDestroyBuffer(
+    vulkanDevice->allocator, stagingBuffer, stagingBufferAllocation);
 }
 
-void Texture::createTextureImageView() {
+void
+Texture::createTextureImageView()
+{
   VkImageViewCreateInfo viewInfo{};
   viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   viewInfo.image = image;
@@ -105,7 +125,9 @@ void Texture::createTextureImageView() {
   }
 }
 
-void Texture::createVulkanImage(int width, int height) {
+void
+Texture::createVulkanImage(int width, int height)
+{
 
   // -------------------- CREATE IMAGE --------------------
   VkImageCreateInfo imageInfo{};
@@ -115,15 +137,14 @@ void Texture::createVulkanImage(int width, int height) {
   imageInfo.extent.height = height;
   imageInfo.extent.depth = 1;
   imageInfo.mipLevels = 1;
-  imageInfo.arrayLayers = 1;
   imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
   imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
   imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
   imageInfo.usage =
-
-  VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
   imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
   imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  imageInfo.arrayLayers = 1;
 
   VmaAllocationCreateInfo imageAllocCreateInfo = {};
   imageAllocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
@@ -254,8 +275,11 @@ Texture::createTextureSampler()
   }
 }
 
-void Texture::cleanup() {
-  if(view != VK_NULL_HANDLE && sampler != VK_NULL_HANDLE && image != VK_NULL_HANDLE) {
+void
+Texture::cleanup()
+{
+  if (view != VK_NULL_HANDLE && sampler != VK_NULL_HANDLE &&
+      image != VK_NULL_HANDLE) {
     vkDestroyImageView(vulkanDevice->logicalDevice, view, nullptr);
     vmaDestroyImage(vulkanDevice->allocator, image, allocation);
     vkDestroySampler(vulkanDevice->logicalDevice, sampler, nullptr);

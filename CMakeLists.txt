@@ -49,6 +49,8 @@ foreach(EXAMPLE_FILE ${EXAMPLE_SOURCES})
         "${CMAKE_SOURCE_DIR}/src/"
         "${CMAKE_SOURCE_DIR}/deps/glm"
         "${CMAKE_SOURCE_DIR}/deps/stb_image"
+        "${CMAKE_SOURCE_DIR}/deps/ktx/include"
+        "${CMAKE_SOURCE_DIR}/deps/ktx/other_include"
         "${CMAKE_SOURCE_DIR}/deps/cute_sound"
         "${CMAKE_SOURCE_DIR}/deps/assimp-5.4.3"
     )

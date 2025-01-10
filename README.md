@@ -9,7 +9,7 @@ Thanks to the awesome material at learnopengl.com i now have this beautiful scen
 
 ![Alt text](/screenshots/shiny_cubes.png?raw=true "shiny cubes")
 
-## 18th December: Model loading
+## 18th of December: Model loading
 Oh boy what an endevoir this has been! Finally exiting the "Vulkan tutorial's comfort zone" and starting to head into sort of "unexplored" territory (at least for me).
 I finally got the chance to get my hands dirty with multiple descriptor sets and really had to sit there thinking what could be the best possible strategy to upload
 my precious data to the shaders. Currently i have been unable to get bindless texture working (i've tried, thanks MoltenVK!) due to "Macbeingapaininthearsetodevelopfor"-itis.
@@ -24,3 +24,14 @@ Next item on the menu will be: Resource cache, skyboxes, hopefully support for a
 Till next time :3 
 
 ![Alt text](/screenshots/voyager.png?raw=true "voyager.gltf model")
+
+## 10th of January: Skybox and audio 
+I have to admit: recovering from holidays has proven much MUCH tougher than it seemed. New year has been 10 freaking days ago and it feels like 5 minutes ago, sad :'(.
+Well, lettuce at least cheer up with some sweet Vulkan progresses! This week's menu: cubemaps! And audio capabilites ^^.
+As well as some minor memory leak caught here and there. I also spent some time trying to compile the repo on Windows to ensure maximum compatibility and "shippability".
+As a final note theh repo now supports git LFS to deal with the bigger model files. Future plans are now to improve the model loading code which is quite quick and dirty at the
+moment and improve it as well as to add material support. Next on the list is also a fancy model cache, so i won't have to spam the GPU with redundant data!
+Oh before i forget, i also formatted the with clang-format using Mozilla's style. Hope this makes it more readable ^^.
+Hopeful at what the future has to offer ^^ to whoever's reading, i wish you a happy new year <3.
+
+![Alt text](/screenshots/cubemap.png?raw=true "cubemap")

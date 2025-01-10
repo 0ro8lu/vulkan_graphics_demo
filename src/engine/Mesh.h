@@ -25,17 +25,21 @@ public:
   Mesh(Mesh&&) noexcept = default;
   Mesh& operator=(Mesh&&) noexcept = default;
 
-  // probably embed this into a Material object and add normal mapping and other fancy textures.
+  // probably embed this into a Material object and add normal mapping and other
+  // fancy textures.
   Texture diffuseTexture;
   Texture specularTexture;
-  
-  void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, bool shouldRenderTexture);
-  void createDescriptorSet(VkDescriptorPool descriptorPool, VkDescriptorSetLayout descriptorLayout);
+
+  void draw(VkCommandBuffer commandBuffer,
+            VkPipelineLayout pipelineLayout,
+            bool shouldRenderTexture);
+  void createDescriptorSet(VkDescriptorPool descriptorPool,
+                           VkDescriptorSetLayout descriptorLayout);
 
 private:
   size_t indexCount;
   size_t startIndex;
-  
+
   VulkanDevice* vulkanDevice;
   VkDescriptorSet descriptorSet;
 };
