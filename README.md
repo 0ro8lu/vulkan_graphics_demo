@@ -26,8 +26,8 @@ Till next time :3
 ![Alt text](/screenshots/voyager.png?raw=true "voyager.gltf model")
 
 ## 10th of January: Skybox and audio 
-I have to admit: recovering from holidays has proven much MUCH tougher than it seemed. New year has been 10 freaking days ago and it feels like 5 minutes ago, sad :'(.
-Well, lettuce at least cheer up with some sweet Vulkan progresses! This week's menu: cubemaps! And audio capabilites ^^.
+I have to admit: recovering from these festive weeks has proven much MUCH tougher than originally anticipated. New year's eve has been already 10 extremely short days ago, and it felt like its only been 5 minutes. sad :'(.
+Anywho, lettuce at least cheer up with some sweet Vulkan progresses! On this week's menu: cubemaps! And audio capabilites ^^.
 As well as some minor memory leak caught here and there. I also spent some time trying to compile the repo on Windows to ensure maximum compatibility and "shippability".
 As a final note theh repo now supports git LFS to deal with the bigger model files. Future plans are now to improve the model loading code which is quite quick and dirty at the
 moment and improve it as well as to add material support. Next on the list is also a fancy model cache, so i won't have to spam the GPU with redundant data!
@@ -35,3 +35,4 @@ Oh before i forget, i also formatted the with clang-format using Mozilla's style
 Hopeful at what the future has to offer ^^ to whoever's reading, i wish you a happy new year <3.
 
 ![Alt text](/screenshots/cubemap.png?raw=true "cubemap")
+
