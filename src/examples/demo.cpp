@@ -7,6 +7,11 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#ifdef WIN32
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#endif
+
 #define CUTE_SOUND_IMPLEMENTATION
 #define CUTE_SOUND_SCALAR_MODE
 #include <cute_sound.h>
@@ -912,15 +917,13 @@ private:
                    mainGraphicsPipeline,
                    mainLayouts,
                    2);
-    // VkDescriptorSetLayout lightLayouts[] = { globalDescriptorSetLayout };
-    // createPipeline(shaderPath + "demo/built/light_cube_vert.spv",
-    //                shaderPath + "demo/built/light_cube_frag.spv",
-    //                lightCubePipelineLayout,
-    //                lightCubePipeline,
-    //                lightLayouts,
-    //                1);
-    // VkDescriptorSetLayout skyboxLayouts[] = {
-    //                                           Skybox::skyboxLayout };
+    VkDescriptorSetLayout lightLayouts[] = { globalDescriptorSetLayout };
+    createPipeline(shaderPath + "demo/built/light_cube_vert.spv",
+                   shaderPath + "demo/built/light_cube_frag.spv",
+                   lightCubePipelineLayout,
+                   lightCubePipeline,
+                   lightLayouts,
+                   1);
     VkDescriptorSetLayout skyboxLayouts[] = { globalDescriptorSetLayout,
                                               Skybox::skyboxLayout };
     createPipeline(shaderPath + "demo/built/skybox_vert.spv",
@@ -1182,6 +1185,14 @@ private:
                        glm::vec3(1.0f));
     models.push_back(std::move(desk));
 
+    Model cube = Model(modelPath + "cube.glb",
+                        vulkanDevice,
+                        glm::vec3(0.0, 1.0f, -3.0f),
+                        glm::vec3(0),
+                        0,
+                        glm::vec3(1.0f));
+    models.push_back(std::move(cube));
+
     Model rare = Model(modelPath + "for_demo/rare_logo/rare.glb",
                        vulkanDevice,
                        glm::vec3(-1.85, -0.7, -19.5f),
@@ -1212,7 +1223,13 @@ private:
 
   void prepareAudio()
   {
+
+#ifdef WIN32
+    HWND handle = glfwGetWin32Window(window);
+    cs_init(handle, 44100, 1024, NULL);
+#else
     cs_init(NULL, 44100, 1024, NULL);
+#endif
 
     std::string soundPath = SOUND_PATH;
     soundPath = soundPath + "Heartbreak Of The Century.wav";

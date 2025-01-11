@@ -1,4 +1,5 @@
 #include "Model.h"
+#include "engine/Mesh.h"
 #include "engine/Texture.h"
 #include "engine/Vertex.h"
 
@@ -21,16 +22,6 @@ Model::Model(const std::string& filePath,
   createVertexBuffer(sizeof(vertices[0]) * vertices.size());
   createIndexBuffer(sizeof(indices[0]) * indices.size());
 
-  // clean the vectors by destroying their contents and releasing the memory of
-  // the vector itself
-  vertices.clear();
-  std::vector<Vertex> tmpVertices = std::vector<Vertex>();
-  vertices.swap(tmpVertices);
-
-  indices.clear();
-  std::vector<uint32_t> tmpIndices = std::vector<uint32_t>();
-  indices.swap(tmpIndices);
-
   modelMatrix = glm::translate(modelMatrix, pos);
   if (rotationAngle != 0) {
     modelMatrix =
@@ -40,6 +31,16 @@ Model::Model(const std::string& filePath,
 
   // create the descriptor layout and descriptor sets
   setupDescriptors();
+
+  // clean the vectors by destroying their contents and releasing the memory of
+  // the vector itself
+  vertices.clear();
+  std::vector<Vertex> tmpVertices = std::vector<Vertex>();
+  vertices.swap(tmpVertices);
+
+  indices.clear();
+  std::vector<uint32_t> tmpIndices = std::vector<uint32_t>();
+  indices.swap(tmpIndices);
 }
 
 Model::~Model()

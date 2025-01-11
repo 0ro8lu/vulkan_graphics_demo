@@ -2,7 +2,9 @@
 #define _TEXTURE_H_
 
 #include <stb_image.h>
+
 #include <string>
+#include <stdexcept>
 
 #include "VulkanDevice.h"
 

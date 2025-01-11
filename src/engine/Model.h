@@ -12,6 +12,7 @@
 #include <assimp/scene.h>
 
 #include <vector>
+#include <stdexcept>
 
 class Model
 {

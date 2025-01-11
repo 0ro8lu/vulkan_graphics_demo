@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <stb_image.h>
+#include <stdexcept>
 #include <vector>
 
 VkDescriptorSetLayout Skybox::skyboxLayout = VK_NULL_HANDLE;
