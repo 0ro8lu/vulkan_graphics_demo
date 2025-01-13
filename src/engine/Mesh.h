@@ -4,8 +4,6 @@
 #include "engine/Texture.h"
 #include "engine/VulkanDevice.h"
 
-#include <array>
-
 struct Vertex;
 
 class Mesh

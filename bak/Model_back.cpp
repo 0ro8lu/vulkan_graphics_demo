@@ -4,8 +4,6 @@
 #include "engine/Vertex.h"
 
 #include <iostream>
-#include <memory>
-#include <stdexcept>
 
 VkDescriptorSetLayout Model::textureLayout = VK_NULL_HANDLE;
 
@@ -19,17 +17,17 @@ Model::Model(const std::string& filePath,
   , filePath(filePath)
 {
 
+  loadModel(filePath);
+
+  createVertexBuffer(sizeof(vertices[0]) * vertices.size());
+  createIndexBuffer(sizeof(indices[0]) * indices.size());
+
   modelMatrix = glm::translate(modelMatrix, pos);
   if (rotationAngle != 0) {
     modelMatrix =
       glm::rotate(modelMatrix, glm::radians(rotationAngle), rotationAxis);
   }
   modelMatrix = glm::scale(modelMatrix, scale);
-
-  loadModel(filePath);
-
-  createVertexBuffer(sizeof(vertices[0]) * vertices.size());
-  createIndexBuffer(sizeof(indices[0]) * indices.size());
 
   // create the descriptor layout and descriptor sets
   setupDescriptors();
@@ -53,8 +51,7 @@ Model::~Model()
 Model::Model(Model&& other) noexcept
 {
   modelMatrix = other.modelMatrix;
-  meshInstances = std::move(other.meshInstances);
-  uniqueMeshes = std::move(other.uniqueMeshes);
+  meshes = std::move(other.meshes);
 
   vertices = std::move(other.vertices);
   vertexBuffer = other.vertexBuffer;
@@ -88,8 +85,7 @@ Model::operator=(Model&& other) noexcept
     cleanup();
 
     modelMatrix = other.modelMatrix;
-    meshInstances = std::move(other.meshInstances);
-    uniqueMeshes = std::move(other.uniqueMeshes);
+    meshes = std::move(other.meshes);
 
     vertices = std::move(other.vertices);
     vertexBuffer = other.vertexBuffer;
@@ -107,21 +103,11 @@ Model::operator=(Model&& other) noexcept
   return *this;
 }
 
-void Model::applyTransform(const glm::mat4& transform) {
-  for (auto& instance : meshInstances) {
-    instance.transformation = instance.transformation * transform;
-  }
-}
-
-void Model::rotate(float angle, glm::vec3 rotationAxis) {
-  glm::mat4 newMat = glm::rotate(glm::mat4(1.0), glm::radians(angle), rotationAxis);
-  applyTransform(newMat);
-}
-
 void
 Model::draw(VkCommandBuffer commandBuffer,
             VkPipelineLayout pipelineLayout, bool shouldRenderTexture)
 {
+
   struct PushConstant
   {
     glm::mat4 model;
@@ -133,11 +119,13 @@ Model::draw(VkCommandBuffer commandBuffer,
 
   vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
-  for (const auto& instance : meshInstances) {
-    PushConstant pc;
-    pc.model = instance.transformation;
-    vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, 64, &pc);
-    instance.mesh->draw(commandBuffer, pipelineLayout, shouldRenderTexture);
+  PushConstant pc;
+  pc.model = modelMatrix;
+  vkCmdPushConstants(
+    commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, 64, &pc);
+
+  for (Mesh& mesh : meshes) {
+    mesh.draw(commandBuffer, pipelineLayout, shouldRenderTexture);
   }
 }
 
@@ -160,6 +148,8 @@ Model::loadModel(const std::string& filePath)
     return;
   }
 
+  // printMaterialTypes(scene);
+
   // preallocate vertices and indices vectors
   unsigned int totalNumVertices = 0;
   unsigned int totalNumIndices = 0;
@@ -170,48 +160,37 @@ Model::loadModel(const std::string& filePath)
                           // of the TRIANGULATE option
   }
 
-  meshInstances.reserve(scene->mNumMeshes);
+  meshes.reserve(scene->mNumMeshes);
   indices.reserve(totalNumIndices);
   vertices.reserve(totalNumVertices);
 
   size_t startIndex = 0;
   size_t startVertex = 0;
 
-  processNode(scene->mRootNode, scene, startIndex, startVertex);
+  processNode(scene->mRootNode, scene, modelMatrix, startIndex, startVertex);
 }
 
 void
 Model::processNode(aiNode* node,
                    const aiScene* scene,
+                   glm::mat4 parentTransform,
                    size_t& startIndex,
                    size_t& startVertex)
 {
-  glm::mat4 nodeTransform = modelMatrix * AssimpToGlmMatrix(node->mTransformation);
+  glm::mat4 nodeTransform =
+    parentTransform * AssimpToGlmMatrix(node->mTransformation);
 
   for (unsigned int i = 0; i < node->mNumMeshes; i++) {
-    aiMesh* assimpMesh = scene->mMeshes[node->mMeshes[i]];
-    Mesh* mesh;
+    aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
+    processMesh(mesh, scene, nodeTransform, startIndex, startVertex);
 
-    auto it = uniqueMeshes.find(assimpMesh);
-    if(it == uniqueMeshes.end()) {    
-      auto newMesh = processMesh(assimpMesh, scene, startIndex, startVertex);
-      mesh = newMesh.get();
-      uniqueMeshes[assimpMesh] = std::move(newMesh);
-
-      startIndex += scene->mMeshes[node->mMeshes[i]]->mNumFaces * 3;
-      startVertex += assimpMesh->mNumVertices;
-    } else {
-      std::cout << "non-unique mesh found! this is good news" << std::endl;
-      mesh = it->second.get();
-    }
-
-    meshInstances.push_back({nodeTransform, mesh});
-
+    startIndex += scene->mMeshes[node->mMeshes[i]]->mNumFaces * 3;
+    startVertex += mesh->mNumVertices;
   }
 
   for (unsigned int i = 0; i < node->mNumChildren; i++) {
     processNode(
-      node->mChildren[i], scene, startIndex, startVertex);
+      node->mChildren[i], scene, nodeTransform, startIndex, startVertex);
   }
 }
 
@@ -238,9 +217,42 @@ Model::AssimpToGlmMatrix(const aiMatrix4x4& from)
   return to;
 }
 
-std::unique_ptr<Mesh>
+void
+Model::printMaterialTypes(const aiScene* scene)
+{
+  for (unsigned int i = 0; i < scene->mNumMaterials; ++i) {
+    aiMaterial* material = scene->mMaterials[i];
+
+    // List of all possible texture types in Assimp
+    std::vector<std::pair<aiTextureType, std::string>> textureTypes = {
+      { aiTextureType_DIFFUSE, "Diffuse" },
+      { aiTextureType_SPECULAR, "Specular" },
+      { aiTextureType_AMBIENT, "Ambient" },
+      { aiTextureType_EMISSIVE, "Emissive" },
+      { aiTextureType_HEIGHT, "Height" },
+      { aiTextureType_NORMALS, "Normals" },
+      { aiTextureType_SHININESS, "Shininess" },
+      { aiTextureType_OPACITY, "Opacity" },
+      { aiTextureType_DISPLACEMENT, "Displacement" },
+      { aiTextureType_LIGHTMAP, "Lightmap" },
+      { aiTextureType_REFLECTION, "Reflection" },
+      { aiTextureType_UNKNOWN, "Unknown" }
+    };
+
+    // Check each texture type and print the count if it's greater than 0
+    for (const auto& [type, name] : textureTypes) {
+      unsigned int count = material->GetTextureCount(type);
+      if (count > 0) {
+        // std::cout << "  " << name << " (" << type << "): " << count << "\n";
+      }
+    }
+  }
+}
+
+void
 Model::processMesh(aiMesh* mesh,
                    const aiScene* scene,
+                   glm::mat4 transform,
                    size_t& startIndex,
                    size_t& startVertex)
 {
@@ -250,12 +262,14 @@ Model::processMesh(aiMesh* mesh,
     // Position
     glm::vec4 position = glm::vec4(
       mesh->mVertices[i].x, -mesh->mVertices[i].y, mesh->mVertices[i].z, 1.0f);
+    position = transform * position;
     vertex.position = glm::vec3(position);
 
     // Normal
     if (mesh->HasNormals()) {
       glm::vec4 normal = glm::vec4(
         mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z, 0.0f);
+      normal = transform * normal;
       vertex.normals = glm::normalize(glm::vec3(normal));
     }
 
@@ -269,8 +283,6 @@ Model::processMesh(aiMesh* mesh,
 
     vertices.push_back(vertex);
   }
-
-  std::cout << "creating texture" << std::endl;
 
   // If we do have textures
   Texture diffuseTexture;
@@ -290,11 +302,12 @@ Model::processMesh(aiMesh* mesh,
     specularTexture = Texture(vulkanDevice, path + "empty_specular.png");
   }
 
-  auto newMesh = std::make_unique<Mesh>(vulkanDevice,
+  Mesh myMesh = Mesh(vulkanDevice,
                      mesh->mNumFaces * 3,
                      startIndex,
                      std::move(diffuseTexture),
                      std::move(specularTexture));
+  meshes.push_back(std::move(myMesh));
 
   for (unsigned int i = 0; i < mesh->mNumFaces; i++) {
     const aiFace& face = mesh->mFaces[i];
@@ -302,8 +315,6 @@ Model::processMesh(aiMesh* mesh,
     indices.push_back(face.mIndices[1] + startVertex);
     indices.push_back(face.mIndices[2] + startVertex);
   }
-
-  return newMesh;
 }
 
 void
@@ -349,13 +360,13 @@ Model::setupDescriptors()
   VkDescriptorPoolSize poolSize;
 
   poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  poolSize.descriptorCount = 2 * meshInstances.size();
+  poolSize.descriptorCount = 2 * meshes.size();
 
   VkDescriptorPoolCreateInfo poolInfo{};
   poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   poolInfo.poolSizeCount = 1;
   poolInfo.pPoolSizes = &poolSize;
-  poolInfo.maxSets = meshInstances.size();
+  poolInfo.maxSets = meshes.size();
 
   if (vkCreateDescriptorPool(
         vulkanDevice->logicalDevice, &poolInfo, nullptr, &descriptorPool) !=
@@ -400,8 +411,8 @@ Model::setupDescriptors()
   }
 
   // -------------------- DESCRIPTOR ALLOCATION --------------------
-  for (const auto& uniqueMesh : uniqueMeshes) {
-    uniqueMesh.second->createDescriptorSet(descriptorPool, Model::textureLayout);
+  for (Mesh& mesh : meshes) {
+    mesh.createDescriptorSet(descriptorPool, Model::textureLayout);
   }
 }
 

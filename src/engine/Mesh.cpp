@@ -3,6 +3,8 @@
 #include "engine/VulkanDevice.h"
 #include <vulkan/vulkan_core.h>
 
+#include <array>
+
 Mesh::Mesh(VulkanDevice* vulkanDevice,
            size_t indexCount,
            size_t startIndex,

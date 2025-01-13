@@ -3,21 +3,16 @@
 
 #include "Mesh.h"
 
+#include <glm.hpp>
+#include <gtc/matrix_transform.hpp>
+
 #include <assimp/Importer.hpp>
 #include <assimp/material.h>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 
-#include <glm.hpp>
-#include <gtc/matrix_transform.hpp>
-
 #include <vector>
-#include <unordered_map>
-
-struct MeshInstance {
-  glm::mat4 transformation;
-  Mesh* mesh;
-};
+#include <stdexcept>
 
 class Model
 {
@@ -39,14 +34,13 @@ public:
   Model(VulkanDevice* vulkanDevice); // todo remove this later
   ~Model();
 
-  const glm::mat4& getModelMatrix() const { return modelMatrix; }
+  glm::mat4 modelMatrix = glm::mat4(1.0);
 
-  void rotate(float angle, glm::vec3 rotationAxis);
-  void translate(glm::vec3 position);
-  void scale(glm::vec3 scale);
-
-  std::unordered_map<aiMesh*, std::unique_ptr<Mesh>> uniqueMeshes;
-  std::vector<MeshInstance> meshInstances;
+  // TODO: add a copy constructor for being able to copy the same model multiple
+  // times by recycling both
+  //  vertex and index buffers (so no extra allocations) and recycling the same
+  //  textures.
+  std::vector<Mesh> meshes;
 
   void draw(VkCommandBuffer commandBuffer,
             VkPipelineLayout pipelineLayout,
@@ -65,20 +59,19 @@ private:
 
   std::string filePath;
 
-  glm::mat4 modelMatrix = glm::mat4(1.0);
-  inline void applyTransform(const glm::mat4& transform);
-
   VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
   void setupDescriptors();
 
   void loadModel(const std::string& filePath);
   void processNode(aiNode* node,
                    const aiScene* scene,
+                   glm::mat4 parentTransform,
                    size_t& startIndex,
                    size_t& startVertex);
   glm::mat4 AssimpToGlmMatrix(const aiMatrix4x4& from);
-  std::unique_ptr<Mesh> processMesh(aiMesh* mesh,
+  void processMesh(aiMesh* mesh,
                    const aiScene* scene,
+                   glm::mat4 transform,
                    size_t& startIndex,
                    size_t& startVertex);
   void loadTexture(aiMaterial* material,

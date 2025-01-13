@@ -917,13 +917,13 @@ private:
                    mainGraphicsPipeline,
                    mainLayouts,
                    2);
-    VkDescriptorSetLayout lightLayouts[] = { globalDescriptorSetLayout };
-    createPipeline(shaderPath + "demo/built/light_cube_vert.spv",
-                   shaderPath + "demo/built/light_cube_frag.spv",
-                   lightCubePipelineLayout,
-                   lightCubePipeline,
-                   lightLayouts,
-                   1);
+//    VkDescriptorSetLayout lightLayouts[] = { globalDescriptorSetLayout };
+//    createPipeline(shaderPath + "demo/built/light_cube_vert.spv",
+//                   shaderPath + "demo/built/light_cube_frag.spv",
+//                   lightCubePipelineLayout,
+//                   lightCubePipeline,
+//                   lightLayouts,
+//                   1);
     VkDescriptorSetLayout skyboxLayouts[] = { globalDescriptorSetLayout,
                                               Skybox::skyboxLayout };
     createPipeline(shaderPath + "demo/built/skybox_vert.spv",
@@ -1170,46 +1170,44 @@ private:
 
     std::string modelPath = MODEL_PATH;
 
-    Model plane = Model(modelPath + "for_demo/plane.glb",
-                        vulkanDevice,
-                        glm::vec3(0.0, 1.0f, -3.0f),
-                        glm::vec3(0),
-                        0,
-                        glm::vec3(100.0f));
-    models.push_back(std::move(plane));
+   // Model plane = Model(modelPath + "for_demo/plane.glb",
+   //                     vulkanDevice,
+   //                     glm::vec3(0.0, 1.0f, -3.0f),
+   //                     glm::vec3(0),
+   //                     0,
+   //                     glm::vec3(100.0f));
+   // models.push_back(std::move(plane));
+    // Model desk = Model(modelPath + "for_demo/prova_optimized.glb",
+    //                  vulkanDevice,
+    //                  glm::vec3(0.0, 1.0f, -3.0f),
+    //                  glm::vec3(0.0, 1.0, 0.0),
+    //                  180.0f,
+    //                  glm::vec3(1.0f));
     Model desk = Model(modelPath + "for_demo/prova.glb",
                        vulkanDevice,
                        glm::vec3(0.0, 1.0f, -3.0f),
                        glm::vec3(0.0, 1.0, 0.0),
                        180.0f,
                        glm::vec3(1.0f));
-    models.push_back(std::move(desk));
+     models.push_back(std::move(desk));
+    
+     // Model rare = Model(modelPath + "for_demo/rare_logo/rare.glb",
+     //                    vulkanDevice,
+     //                    glm::vec3(-1.85, -0.7, -19.5f),
+     //                    glm::vec3(1.0, 0.0, 0.0),
+     //                    -90.0f,
+     //                    glm::vec3(0.1f));
+     // models.push_back(std::move(rare));
 
-    Model cube = Model(modelPath + "cube.glb",
-                        vulkanDevice,
-                        glm::vec3(0.0, 1.0f, -3.0f),
-                        glm::vec3(0),
-                        0,
-                        glm::vec3(1.0f));
-    models.push_back(std::move(cube));
-
-    Model rare = Model(modelPath + "for_demo/rare_logo/rare.glb",
-                       vulkanDevice,
-                       glm::vec3(-1.85, -0.7, -19.5f),
-                       glm::vec3(1.0, 0.0, 0.0),
-                       -90.0f,
-                       glm::vec3(0.1f));
-    models.push_back(std::move(rare));
-
-    for (int i = 0; i < NR_POINT_LIGHTS; i++) {
-      Model cube = Model(modelPath + "cube.glb",
-                         vulkanDevice,
-                         pointLightPositions[i],
-                         glm::vec3(0.0),
-                         0,
-                         glm::vec3(0.1f));
-      lightModels.push_back(std::move(cube));
-    }
+    // for (int i = 0; i < NR_POINT_LIGHTS; i++) {
+    //   Model cube = Model(modelPath + "cube.glb",
+    //                      vulkanDevice,
+    //                      pointLightPositions[i],
+    //                      glm::vec3(0.0),
+    //                      0,
+    //                      glm::vec3(0.1f));
+    //   lightModels.push_back(std::move(cube));
+    // }
 
     std::string texturePath = TEXTURE_PATH;
     std::array<std::string, 6> files = {
@@ -1686,10 +1684,10 @@ private:
 
     // -------------------- RENDER SKYBOX --------------------
 
-    vkCmdBindPipeline(
-      commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxPipeline);
+     vkCmdBindPipeline(
+       commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxPipeline);
 
-    skybox->draw(commandBuffer, skyboxPipelineLayout, camera->getCameraMatrix());
+     skybox->draw(commandBuffer, skyboxPipelineLayout, camera->getCameraMatrix());
 
     vkCmdEndRenderPass(commandBuffer);
 
@@ -1744,10 +1742,11 @@ private:
 
     // make the Rare logo spin. i know, this should get its own index but i'm
     // running low on time
-    glm::mat4 rareModelMatrix = models[models.size() - 1].modelMatrix;
-    rareModelMatrix = glm::rotate(
-      rareModelMatrix, glm::radians(1.0f), glm::vec3(0.0, 0.0, 1.0));
-    models[models.size() - 1].modelMatrix = rareModelMatrix;
+    models[models.size() - 1].rotate(1.0f, glm::vec3(0.0, 0.0, 1.0));
+    // glm::mat4 rareModelMatrix = models[models.size() - 1].modelMatrix;
+    // rareModelMatrix = glm::rotate(
+    //   rareModelMatrix, glm::radians(1.0f), glm::vec3(0.0, 0.0, 1.0));
+    // models[models.size() - 1].modelMatrix = rareModelMatrix;
 
     memcpy(uniformBuffersMapped[currentImage], &sUBO, sizeof(sUBO));
   }
