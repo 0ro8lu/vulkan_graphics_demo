@@ -39,7 +39,7 @@ Hopeful at what the future has to offer ^^ to whoever's reading, i wish you a ha
 
 <img src="./screenshots/cubemap.png" width="800" alt="cubemap">
 
-## 22th of January: Color attachments et. al.
+## 22nd of January: Color attachments et. al.
 Its been a long 12 days ^^ I'm finally delving into what i "feel" is intermediate Vulkan stuff, as we're modifying tutorial constructs more and more to get to more interesting results.
 This time I had the chance to review and dive deeper into Render Passes.
 The old render pass was fresh out of the introductory tutorial oven and comprised of a single subpass. The next one takes a baby step in the advanced direction and adds a second subpass. 
