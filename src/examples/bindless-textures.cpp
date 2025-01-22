@@ -224,9 +224,15 @@ const std::vector<Vertex> vertices = {
   { { -0.5f, 0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 1.0f } },
 };
 
-class HelloTriangleApplication
+class DemoApplication
 {
 public:
+  DemoApplication()
+  {
+    camera.reset(
+      new Camera3D(glm::vec3(0.0, 0.0, 3.0), glm::vec3(0.0, 0.0, -1.0)));
+  }
+
   void run()
   {
     initWindow();
@@ -342,14 +348,13 @@ private:
                                         int width,
                                         int height)
   {
-    auto app = reinterpret_cast<HelloTriangleApplication*>(
-      glfwGetWindowUserPointer(window));
+    auto app =
+      reinterpret_cast<DemoApplication*>(glfwGetWindowUserPointer(window));
     app->framebufferResized = true;
   }
 
   void initVulkan()
   {
-    initCamera();
     createInstance();
     setupDebugMessenger();
     createSurface();
@@ -500,12 +505,6 @@ private:
     glfwDestroyWindow(window);
 
     glfwTerminate();
-  }
-
-  void initCamera()
-  {
-    camera.reset(
-      new Camera3D(glm::vec3(0.0, 0.0, 3.0), glm::vec3(0.0, 0.0, -1.0)));
   }
 
   VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
@@ -2607,7 +2606,7 @@ private:
 int
 main()
 {
-  HelloTriangleApplication app;
+  DemoApplication app;
 
   try {
     app.run();

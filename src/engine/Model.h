@@ -11,10 +11,12 @@
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
 
-#include <vector>
+#include <memory>
 #include <unordered_map>
+#include <vector>
 
-struct MeshInstance {
+struct MeshInstance
+{
   glm::mat4 transformation;
   Mesh* mesh;
 };
@@ -78,9 +80,9 @@ private:
                    size_t& startVertex);
   glm::mat4 AssimpToGlmMatrix(const aiMatrix4x4& from);
   std::unique_ptr<Mesh> processMesh(aiMesh* mesh,
-                   const aiScene* scene,
-                   size_t& startIndex,
-                   size_t& startVertex);
+                                    const aiScene* scene,
+                                    size_t& startIndex,
+                                    size_t& startVertex);
   void loadTexture(aiMaterial* material,
                    Texture& texture,
                    const aiScene* scene,

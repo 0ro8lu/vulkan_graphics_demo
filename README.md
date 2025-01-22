@@ -7,7 +7,7 @@ knowledge i'll have accumulated thanks to the books and resources. Hope it is go
 Look ma! That cube is lit!
 Thanks to the awesome material at learnopengl.com i now have this beautiful scene to share
 
-![Alt text](/screenshots/shiny_cubes.png?raw=true "shiny cubes")
+<img src="./screenshots/shiny_cubes.png" width="400" alt="shiny cubes">
 
 ## 18th of December: Model loading
 Oh boy what an endevoir this has been! Finally exiting the "Vulkan tutorial's comfort zone" and starting to head into sort of "unexplored" territory (at least for me).
@@ -23,7 +23,7 @@ Next days are going to be busy trying to build something cool, so no more progre
 Next item on the menu will be: Resource cache, skyboxes, hopefully support for animation and bindless textures if they don't turn out to be a massive pain for a small gain.
 Till next time :3 
 
-![Alt text](/screenshots/voyager.png?raw=true "voyager.gltf model")
+<img src="./screenshots/voyager.png" width="400" alt="voyager.gltf model">
 
 ## 10th of January: Skybox and audio 
 I have to admit, recovering from these festive weeks has proven much MUCH tougher than originally anticipated.
@@ -37,5 +37,19 @@ Next on the list is also a fancy model cache, so i won't have to spam the GPU wi
 Oh before i forget, i also formatted the with clang-format using Mozilla's style. Hope this makes it more readable ^^.
 Hopeful at what the future has to offer ^^ to whoever's reading, i wish you a happy new year <3.
 
-![Alt text](/screenshots/cubemap.png?raw=true "cubemap")
+<img src="./screenshots/cubemap.png" width="800" alt="cubemap">
 
+## 22th of January: Color attachments et. al.
+Its been a long 12 days ^^ I'm finally delving into what i "feel" is intermediate Vulkan stuff, as we're modifying tutorial constructs more and more to get to more interesting results.
+This time I had the chance to review and dive deeper into Render Passes.
+The old render pass was fresh out of the introductory tutorial oven and comprised of a single subpass. The next one takes a baby step in the advanced direction and adds a second subpass. 
+The first one uses the pipeline to draw into an intermediate buffer while the latter takes the intermediate buffer and applies some goofy post-processing effects. Later this might be used for cool effects like bloom, tone-mapping and HDR.
+
+Following are some cool screenshots of the end result.
+
+<div style="display: flex; gap: 10px;">
+    <img src="./screenshots/invert.png" width="250" alt="invert">
+    <img src="./screenshots/grayscale.png" width="250" alt="grayscale">
+    <img src="./screenshots/hallucination.png" width="250" alt="hallucination">
+    <img src="./screenshots/blur.png" width="250" alt="blur">
+</div>

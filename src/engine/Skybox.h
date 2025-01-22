@@ -2,8 +2,8 @@
 #define _SKYBOX_H_
 
 #include <array>
-#include <string>
 #include <memory>
+#include <string>
 
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
@@ -22,7 +22,8 @@ public:
   static VkDescriptorSetLayout skyboxLayout;
 
   void draw(VkCommandBuffer commandBuffer,
-            VkPipelineLayout pipelineLayout, glm::mat4 cameraView);
+            VkPipelineLayout pipelineLayout,
+            glm::mat4 cameraView);
 
   void update(glm::mat4 viewMatrix);
 

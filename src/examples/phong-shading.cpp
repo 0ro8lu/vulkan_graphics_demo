@@ -225,7 +225,7 @@ const std::vector<Vertex> vertices = {
   { { -0.5f, 0.5f, -0.5f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 1.0f } },
 };
 
-class HelloTriangleApplication
+class DemoApplication
 {
 public:
   void run()
@@ -338,8 +338,8 @@ private:
                                         int width,
                                         int height)
   {
-    auto app = reinterpret_cast<HelloTriangleApplication*>(
-      glfwGetWindowUserPointer(window));
+    auto app =
+      reinterpret_cast<DemoApplication*>(glfwGetWindowUserPointer(window));
     app->framebufferResized = true;
   }
 
@@ -2397,7 +2397,7 @@ private:
 int
 main()
 {
-  HelloTriangleApplication app;
+  DemoApplication app;
 
   try {
     app.run();

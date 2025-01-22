@@ -1,11 +1,9 @@
 #include "engine/Camera3D.h"
+#include "engine/FrameBufferAttachment.h"
 #include "engine/Model.h"
 #include "engine/Skybox.h"
 #include "engine/Vertex.h"
-
-#include <vulkan/vulkan_core.h>
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include "engine/VulkanBase.h"
 
 #ifdef WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32
@@ -42,70 +40,31 @@
 #include <iostream>
 #include <limits>
 #include <memory>
-#include <optional>
-#include <set>
 #include <stdexcept>
 #include <thread>
-#include <vector>
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
-const int MAX_FRAMES_IN_FLIGHT = 2;
+const int MAX_FRAMES_IN_FLIGHT = 1;
 
 // this needs to be aligned with the one in the shader
-const unsigned int NR_POINT_LIGHTS = 4;
+const unsigned int NR_POINT_LIGHTS = 5;
 
 // positions of the point lights
-glm::vec3 pointLightPositions[] = { glm::vec3(0.0f, 0.0f, 0.0f),
+glm::vec3 pointLightPositions[] = { glm::vec3(0, 0, 0),
+                                    glm::vec3(0.0f, -2.0f, 0.0f),
                                     glm::vec3(2.3f, -1.3f, -4.0f),
-                                    glm::vec3(-4.0f, 2.0f, -12.0f),
+                                    glm::vec3(-4.0f, -2.0f, -12.0f),
                                     glm::vec3(0.0f, 0.0f, -3.0f) };
 
 const unsigned int NR_OBJECTS = 10;
-
-const std::vector<const char*> validationLayers = {
-  "VK_LAYER_KHRONOS_validation"
-};
-
-#ifdef __APPLE__
-const std::vector<const char*> deviceExtensions = {
-  VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-  "VK_KHR_portability_subset"
-};
-#else
-const std::vector<const char*> deviceExtensions = {
-  VK_KHR_SWAPCHAIN_EXTENSION_NAME
-};
-#endif
-
-#ifdef NDEBUG
-const bool enableValidationLayers = false;
-#else
-const bool enableValidationLayers = true;
-#endif
 
 enum BufferType
 {
   STAGING_BUFFER,
   GPU_BUFFER,
 };
-
-VkResult
-CreateDebugUtilsMessengerEXT(
-  VkInstance instance,
-  const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-  const VkAllocationCallbacks* pAllocator,
-  VkDebugUtilsMessengerEXT* pDebugMessenger)
-{
-  auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
-    instance, "vkCreateDebugUtilsMessengerEXT");
-  if (func != nullptr) {
-    return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-  } else {
-    return VK_ERROR_EXTENSION_NOT_PRESENT;
-  }
-}
 
 void
 DestroyDebugUtilsMessengerEXT(VkInstance instance,
@@ -118,24 +77,6 @@ DestroyDebugUtilsMessengerEXT(VkInstance instance,
     func(instance, debugMessenger, pAllocator);
   }
 }
-
-struct QueueFamilyIndices
-{
-  std::optional<uint32_t> graphicsFamily;
-  std::optional<uint32_t> presentFamily;
-
-  bool isComplete()
-  {
-    return graphicsFamily.has_value() && presentFamily.has_value();
-  }
-};
-
-struct SwapChainSupportDetails
-{
-  VkSurfaceCapabilitiesKHR capabilities;
-  std::vector<VkSurfaceFormatKHR> formats;
-  std::vector<VkPresentModeKHR> presentModes;
-};
 
 struct UniformBufferObject
 {
@@ -160,9 +101,15 @@ struct SpotLight
   glm::vec4 position;
 };
 
-class HelloTriangleApplication
+class DemoApplication : public VulkanBase
 {
 public:
+  DemoApplication()
+  {
+    camera.reset(
+      new Camera3D(glm::vec3(0.0, 0.0, 3.0), glm::vec3(0.0, 0.0, -1.0)));
+  }
+
   void run()
   {
     initWindow();
@@ -178,17 +125,7 @@ private:
   std::unique_ptr<Skybox> skybox;
   std::vector<Model> lightModels;
 
-  VkInstance instance;
-  VkDebugUtilsMessengerEXT debugMessenger;
-  VkSurfaceKHR surface;
-
-  VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-  VkDevice logicalDevice;
-
   VmaAllocator allocator;
-
-  VkQueue graphicsQueue;
-  VkQueue presentQueue;
 
   VkSwapchainKHR swapChain;
   std::vector<VkImage> swapChainImages;
@@ -212,11 +149,7 @@ private:
 
   VkCommandPool commandPool;
 
-  VkImage depthImage;
-  VmaAllocation depthAllocation;
-  VkImageView depthImageView;
-
-  VulkanDevice* vulkanDevice;
+  FrameBufferAttachment* depthAttachment;
 
   std::vector<VkBuffer> uniformBuffers;
   std::vector<VmaAllocation> uniformBuffersAllocation;
@@ -265,41 +198,47 @@ private:
                                         int width,
                                         int height)
   {
-    auto app = reinterpret_cast<HelloTriangleApplication*>(
-      glfwGetWindowUserPointer(window));
+    auto app =
+      reinterpret_cast<DemoApplication*>(glfwGetWindowUserPointer(window));
     app->framebufferResized = true;
+  }
+
+  virtual void getEnabledFeatures()
+  {
+    if (deviceFeatures.samplerAnisotropy) {
+      deviceFeatures.samplerAnisotropy = VK_TRUE;
+    }
   }
 
   void initVulkan()
   {
-    initCamera();
     createInstance();
     setupDebugMessenger();
     createSurface();
-    pickPhysicalDevice();
+    selectPhysicalDevice();
     createLogicalDevice();
     createVMAAllocator();
+    createCommandPool();
+    createVulkanDevice();
+
     createSwapChain();
     createImageViews();
     createRenderPass();
-    createDescriptorSetLayout();
-    createCommandPool();
-    createVulkanDevice();
     prepareModels();
     prepareAudio();
-    createGraphicsPipelines();
     createDepthResources();
     createFramebuffers();
     createUniformBuffers();
     createDescriptorPool();
+    createDescriptorSetLayout();
     createDescriptorSets();
+    createGraphicsPipelines();
     createCommandBuffers();
     createSyncObjects();
   }
 
   void mainLoop()
   {
-
     constexpr auto frame_duration = std::chrono::microseconds(8333);
     auto last_frame_time = std::chrono::steady_clock::now();
 
@@ -362,7 +301,7 @@ private:
       vkDestroyImageView(logicalDevice, imageView, nullptr);
     }
 
-    vkDestroyImageView(logicalDevice, depthImageView, nullptr);
+    delete depthAttachment;
 
     vkDestroySwapchainKHR(logicalDevice, swapChain, nullptr);
   }
@@ -401,7 +340,7 @@ private:
     lightModels.clear();
     skybox.reset();
 
-    vmaDestroyImage(allocator, depthImage, depthAllocation);
+    // vmaDestroyImage(allocator, depthImage, depthAllocation);
 
     vkDestroyDescriptorPool(logicalDevice, globalDescriptorPool, nullptr);
 
@@ -434,40 +373,6 @@ private:
     glfwTerminate();
 
     cs_free_audio_source(voice);
-  }
-
-  void initCamera()
-  {
-    camera.reset(
-      new Camera3D(glm::vec3(0.0, 0.0, 3.0), glm::vec3(0.0, 0.0, -1.0)));
-  }
-
-  VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
-                               VkImageTiling tiling,
-                               VkFormatFeatureFlags features)
-  {
-    for (VkFormat format : candidates) {
-      VkFormatProperties props;
-      vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
-
-      if (tiling == VK_IMAGE_TILING_LINEAR &&
-          (props.linearTilingFeatures & features) == features) {
-        return format;
-      } else if (tiling == VK_IMAGE_TILING_OPTIMAL &&
-                 (props.optimalTilingFeatures & features) == features) {
-        return format;
-      }
-    }
-    throw std::runtime_error("failed to find supported format!");
-  }
-
-  VkFormat findDepthFormat()
-  {
-    return findSupportedFormat({ VK_FORMAT_D32_SFLOAT,
-                                 VK_FORMAT_D32_SFLOAT_S8_UINT,
-                                 VK_FORMAT_D24_UNORM_S8_UINT },
-                               VK_IMAGE_TILING_OPTIMAL,
-                               VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
   }
 
   bool hasStencilComponent(VkFormat format)
@@ -534,56 +439,6 @@ private:
     createFramebuffers();
   }
 
-  void createInstance()
-  {
-    if (enableValidationLayers && !checkValidationLayerSupport()) {
-      throw std::runtime_error(
-        "validation layers requested, but not available!");
-    }
-
-    VkApplicationInfo appInfo{};
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "Hello Triangle";
-    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
-
-    VkInstanceCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    createInfo.pApplicationInfo = &appInfo;
-
-    auto extensions = getRequiredExtensions();
-
-#ifdef __APPLE__
-    extensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
-    extensions.emplace_back("VK_KHR_get_physical_device_properties2");
-
-    createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-#endif
-
-    createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
-    createInfo.ppEnabledExtensionNames = extensions.data();
-
-    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
-    if (enableValidationLayers) {
-      createInfo.enabledLayerCount =
-        static_cast<uint32_t>(validationLayers.size());
-      createInfo.ppEnabledLayerNames = validationLayers.data();
-
-      populateDebugMessengerCreateInfo(debugCreateInfo);
-      createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
-    } else {
-      createInfo.enabledLayerCount = 0;
-
-      createInfo.pNext = nullptr;
-    }
-
-    if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
-      throw std::runtime_error("failed to create instance!");
-    }
-  }
-
   void createVMAAllocator()
   {
     VmaAllocatorCreateInfo createInfo = {};
@@ -596,118 +451,13 @@ private:
     }
   }
 
-  void populateDebugMessengerCreateInfo(
-    VkDebugUtilsMessengerCreateInfoEXT& createInfo)
-  {
-    createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo.messageSeverity =
-      VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-      VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-      VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                             VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                             VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-    createInfo.pfnUserCallback = debugCallback;
-  }
-
-  void setupDebugMessenger()
-  {
-    if (!enableValidationLayers)
-      return;
-
-    VkDebugUtilsMessengerCreateInfoEXT createInfo;
-    populateDebugMessengerCreateInfo(createInfo);
-
-    if (CreateDebugUtilsMessengerEXT(
-          instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS) {
-      throw std::runtime_error("failed to set up debug messenger!");
-    }
-  }
-
   void createSurface()
   {
-
     // TODO: make sure the queue supports present mode.
-
     if (glfwCreateWindowSurface(instance, window, nullptr, &surface) !=
         VK_SUCCESS) {
       throw std::runtime_error("failed to create window surface!");
     }
-  }
-
-  void pickPhysicalDevice()
-  {
-    uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-
-    if (deviceCount == 0) {
-      throw std::runtime_error("failed to find GPUs with Vulkan support!");
-    }
-
-    std::vector<VkPhysicalDevice> devices(deviceCount);
-    vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
-
-    for (const auto& device : devices) {
-      if (isDeviceSuitable(device)) {
-        physicalDevice = device;
-        break;
-      }
-    }
-
-    if (physicalDevice == VK_NULL_HANDLE) {
-      throw std::runtime_error("failed to find a suitable GPU!");
-    }
-  }
-
-  void createLogicalDevice()
-  {
-    QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
-
-    std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-    std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(),
-                                               indices.presentFamily.value() };
-
-    float queuePriority = 1.0f;
-    for (uint32_t queueFamily : uniqueQueueFamilies) {
-      VkDeviceQueueCreateInfo queueCreateInfo{};
-      queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-      queueCreateInfo.queueFamilyIndex = queueFamily;
-      queueCreateInfo.queueCount = 1;
-      queueCreateInfo.pQueuePriorities = &queuePriority;
-      queueCreateInfos.push_back(queueCreateInfo);
-    }
-
-    VkPhysicalDeviceFeatures deviceFeatures{};
-    deviceFeatures.samplerAnisotropy = VK_TRUE;
-
-    VkDeviceCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    createInfo.pEnabledFeatures = &deviceFeatures;
-    createInfo.queueCreateInfoCount =
-      static_cast<uint32_t>(queueCreateInfos.size());
-    createInfo.pQueueCreateInfos = queueCreateInfos.data();
-    createInfo.enabledExtensionCount =
-      static_cast<uint32_t>(deviceExtensions.size());
-    createInfo.ppEnabledExtensionNames = deviceExtensions.data();
-
-    if (enableValidationLayers) {
-      createInfo.enabledLayerCount =
-        static_cast<uint32_t>(validationLayers.size());
-      createInfo.ppEnabledLayerNames = validationLayers.data();
-    } else {
-      createInfo.enabledLayerCount = 0;
-    }
-
-    if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &logicalDevice) !=
-        VK_SUCCESS) {
-      throw std::runtime_error("failed to create logical device!");
-    }
-
-    vkGetDeviceQueue(
-      logicalDevice, indices.graphicsFamily.value(), 0, &graphicsQueue);
-    vkGetDeviceQueue(
-      logicalDevice, indices.presentFamily.value(), 0, &presentQueue);
   }
 
   void createSwapChain()
@@ -774,14 +524,13 @@ private:
     swapChainImageViews.resize(swapChainImages.size());
 
     for (size_t i = 0; i < swapChainImages.size(); i++) {
-      swapChainImageViews[i] = createImageView(
+      swapChainImageViews[i] = vulkanDevice->createImageView(
         swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
     }
   }
 
   void createRenderPass()
   {
-
     // attachment for color
     VkAttachmentDescription colorAttachment{};
     colorAttachment.format = swapChainImageFormat;
@@ -917,13 +666,13 @@ private:
                    mainGraphicsPipeline,
                    mainLayouts,
                    2);
-//    VkDescriptorSetLayout lightLayouts[] = { globalDescriptorSetLayout };
-//    createPipeline(shaderPath + "demo/built/light_cube_vert.spv",
-//                   shaderPath + "demo/built/light_cube_frag.spv",
-//                   lightCubePipelineLayout,
-//                   lightCubePipeline,
-//                   lightLayouts,
-//                   1);
+    VkDescriptorSetLayout lightLayouts[] = { globalDescriptorSetLayout };
+    createPipeline(shaderPath + "demo/built/light_cube_vert.spv",
+                   shaderPath + "demo/built/light_cube_frag.spv",
+                   lightCubePipelineLayout,
+                   lightCubePipeline,
+                   lightLayouts,
+                   1);
     VkDescriptorSetLayout skyboxLayouts[] = { globalDescriptorSetLayout,
                                               Skybox::skyboxLayout };
     createPipeline(shaderPath + "demo/built/skybox_vert.spv",
@@ -1103,7 +852,8 @@ private:
 
     for (size_t i = 0; i < swapChainImageViews.size(); i++) {
       std::array<VkImageView, 2> attachments = { swapChainImageViews[i],
-                                                 depthImageView };
+                                                 depthAttachment->view };
+      // depthImageView };
 
       VkFramebufferCreateInfo framebufferInfo{};
       framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -1143,23 +893,16 @@ private:
   {
     VkFormat depthFormat = findDepthFormat();
 
-    createImage(swapChainExtent.width,
-                swapChainExtent.height,
-                depthFormat,
-                VK_IMAGE_TILING_OPTIMAL,
-                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-                depthImage,
-                depthAllocation);
-    depthImageView =
-      createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+    depthAttachment =
+      new FrameBufferAttachment(depthFormat,
+                                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                                swapChainExtent.width,
+                                swapChainExtent.height,
+                                vulkanDevice);
   }
 
   void prepareModels()
   {
-    VkPhysicalDeviceMemoryProperties memProps;
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProps);
-
     glm::vec3 cubePositions[] = {
       glm::vec3(0.0f, 0.0f, 0.0f),    glm::vec3(2.0f, 5.0f, -15.0f),
       glm::vec3(-1.5f, -2.2f, -2.5f), glm::vec3(-3.8f, -2.0f, -12.3f),
@@ -1170,50 +913,50 @@ private:
 
     std::string modelPath = MODEL_PATH;
 
-   // Model plane = Model(modelPath + "for_demo/plane.glb",
-   //                     vulkanDevice,
-   //                     glm::vec3(0.0, 1.0f, -3.0f),
-   //                     glm::vec3(0),
-   //                     0,
-   //                     glm::vec3(100.0f));
-   // models.push_back(std::move(plane));
-    // Model desk = Model(modelPath + "for_demo/prova_optimized.glb",
-    //                  vulkanDevice,
-    //                  glm::vec3(0.0, 1.0f, -3.0f),
-    //                  glm::vec3(0.0, 1.0, 0.0),
-    //                  180.0f,
-    //                  glm::vec3(1.0f));
-    Model desk = Model(modelPath + "for_demo/prova.glb",
+    Model plane = Model(modelPath + "for_demo/plane.glb",
+                        vulkanDevice,
+                        glm::vec3(0.0, 1.0f, -3.0f),
+                        glm::vec3(0),
+                        0,
+                        glm::vec3(100.0f));
+    models.push_back(std::move(plane));
+    Model desk = Model(modelPath + "for_demo/prova_optimized.glb",
                        vulkanDevice,
                        glm::vec3(0.0, 1.0f, -3.0f),
                        glm::vec3(0.0, 1.0, 0.0),
                        180.0f,
                        glm::vec3(1.0f));
-     models.push_back(std::move(desk));
-    
-     // Model rare = Model(modelPath + "for_demo/rare_logo/rare.glb",
-     //                    vulkanDevice,
-     //                    glm::vec3(-1.85, -0.7, -19.5f),
-     //                    glm::vec3(1.0, 0.0, 0.0),
-     //                    -90.0f,
-     //                    glm::vec3(0.1f));
-     // models.push_back(std::move(rare));
+    // Model desk = Model(modelPath + "for_demo/prova.glb",
+    //                    vulkanDevice,
+    //                    glm::vec3(0.0, 1.0f, -3.0f),
+    //                    glm::vec3(0.0, 1.0, 0.0),
+    //                    180.0f,
+    //                    glm::vec3(1.0f));
+    models.push_back(std::move(desk));
 
-    // for (int i = 0; i < NR_POINT_LIGHTS; i++) {
-    //   Model cube = Model(modelPath + "cube.glb",
-    //                      vulkanDevice,
-    //                      pointLightPositions[i],
-    //                      glm::vec3(0.0),
-    //                      0,
-    //                      glm::vec3(0.1f));
-    //   lightModels.push_back(std::move(cube));
-    // }
+    Model rare = Model(modelPath + "for_demo/rare_logo/rare.glb",
+                       vulkanDevice,
+                       glm::vec3(-1.85, -0.7, -19.5f),
+                       glm::vec3(1.0, 0.0, 0.0),
+                       -90.0f,
+                       glm::vec3(0.1f));
+    models.push_back(std::move(rare));
+
+    for (int i = 0; i < NR_POINT_LIGHTS; i++) {
+      Model cube = Model(modelPath + "cube.glb",
+                         vulkanDevice,
+                         pointLightPositions[i],
+                         glm::vec3(0.0),
+                         0,
+                         glm::vec3(0.1f));
+      lightModels.push_back(std::move(cube));
+    }
 
     std::string texturePath = TEXTURE_PATH;
     std::array<std::string, 6> files = {
-      texturePath + "skybox/right.jpg",  texturePath + "skybox/left.jpg",
-      texturePath + "skybox/top.jpg", texturePath + "skybox/bottom.jpg",
-      texturePath + "skybox/front.jpg",   texturePath + "skybox/back.jpg"
+      texturePath + "skybox/right.jpg", texturePath + "skybox/left.jpg",
+      texturePath + "skybox/top.jpg",   texturePath + "skybox/bottom.jpg",
+      texturePath + "skybox/front.jpg", texturePath + "skybox/back.jpg"
     };
 
     skybox = std::make_unique<Skybox>(vulkanDevice, files);
@@ -1237,69 +980,6 @@ private:
     cs_playing_sound_t voice_snd = CUTE_PLAYING_SOUND_INVALID;
 
     cs_play_sound(voice, params);
-  }
-
-  VkImageView createImageView(VkImage image,
-                              VkFormat format,
-                              VkImageAspectFlags aspectFlags)
-  {
-    VkImageViewCreateInfo viewInfo{};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = image;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = format;
-    viewInfo.subresourceRange.aspectMask = aspectFlags;
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = 1;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
-
-    VkImageView imageView;
-    if (vkCreateImageView(logicalDevice, &viewInfo, nullptr, &imageView) !=
-        VK_SUCCESS) {
-      throw std::runtime_error("failed to create texture image view!");
-    }
-
-    return imageView;
-  }
-
-  void createImage(uint32_t width,
-                   uint32_t height,
-                   VkFormat format,
-                   VkImageTiling tiling,
-                   VkImageUsageFlags usage,
-                   VmaAllocationCreateFlagBits flags,
-                   VkImage& image,
-                   VmaAllocation& allocation)
-  {
-    VkImageCreateInfo imageInfo{};
-    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.extent.width = width;
-    imageInfo.extent.height = height;
-    imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = 1;
-    imageInfo.arrayLayers = 1;
-    imageInfo.format = format;
-    imageInfo.tiling = tiling;
-    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageInfo.usage = usage;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    VmaAllocationCreateInfo allocCreateInfo = {};
-    allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-    allocCreateInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
-    allocCreateInfo.priority = 1.0f;
-
-    if (vmaCreateImage(allocator,
-                       &imageInfo,
-                       &allocCreateInfo,
-                       &image,
-                       &allocation,
-                       nullptr) != VK_SUCCESS) {
-      throw std::runtime_error("failed to create image!");
-    }
   }
 
   void createUniformBuffers()
@@ -1333,9 +1013,6 @@ private:
                                              BufferType::STAGING_BUFFER,
                                              uniformBuffers[i],
                                              uniformBuffersAllocation[i]);
-      // dynUniformBuffersMapped[i] = createBuffer(dynBufferSize,
-      // VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferType::STAGING_BUFFER,
-      // dynUniformBuffers[i], dynUniformBuffersAllocation[i]);
 
       // for the lights
       directionalLightBuffersMapped[i] =
@@ -1381,8 +1058,7 @@ private:
     }
 
     DirectionalLight directionalLight;
-    // directionalLight.direction = glm::vec4(-0.2f, -1.0f, -0.3f, 0.0);
-    directionalLight.direction = glm::vec4(0.2f, 1.0f, 0.3f, 0.0);
+    directionalLight.direction = glm::vec4(0.2f, -1.0f, 0.3f, 0.0);
 
     // directional lights
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -1395,14 +1071,10 @@ private:
   void createDescriptorPool()
   {
     std::array<VkDescriptorPoolSize, 1> poolSizes{};
-    // std::array<VkDescriptorPoolSize, 2> poolSizes{};
 
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount =
       static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 4;
-    // poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    // poolSizes[1].descriptorCount =
-    // static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1673,21 +1345,22 @@ private:
     }
 
     // -------------------- bind light_cube pipeline --------------------
-    // vkCmdBindPipeline(
-    //   commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lightCubePipeline);
-    // vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-    // vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+    vkCmdBindPipeline(
+      commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lightCubePipeline);
+    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-    // for (auto& lightModel : lightModels) {
-    //   lightModel.draw(commandBuffer, lightCubePipelineLayout, false);
-    // }
+    for (auto& lightModel : lightModels) {
+      lightModel.draw(commandBuffer, lightCubePipelineLayout, false);
+    }
 
     // -------------------- RENDER SKYBOX --------------------
 
-     vkCmdBindPipeline(
-       commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxPipeline);
+    vkCmdBindPipeline(
+      commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxPipeline);
 
-     skybox->draw(commandBuffer, skyboxPipelineLayout, camera->getCameraMatrix());
+    skybox->draw(
+      commandBuffer, skyboxPipelineLayout, camera->getCameraMatrix());
 
     vkCmdEndRenderPass(commandBuffer);
 
@@ -1743,10 +1416,6 @@ private:
     // make the Rare logo spin. i know, this should get its own index but i'm
     // running low on time
     models[models.size() - 1].rotate(1.0f, glm::vec3(0.0, 0.0, 1.0));
-    // glm::mat4 rareModelMatrix = models[models.size() - 1].modelMatrix;
-    // rareModelMatrix = glm::rotate(
-    //   rareModelMatrix, glm::radians(1.0f), glm::vec3(0.0, 0.0, 1.0));
-    // models[models.size() - 1].modelMatrix = rareModelMatrix;
 
     memcpy(uniformBuffersMapped[currentImage], &sUBO, sizeof(sUBO));
   }
@@ -1923,123 +1592,6 @@ private:
     return details;
   }
 
-  bool isDeviceSuitable(VkPhysicalDevice device)
-  {
-    QueueFamilyIndices indices = findQueueFamilies(device);
-
-    bool extensionsSupported = checkDeviceExtensionSupport(device);
-
-    bool swapChainAdequate = false;
-    if (extensionsSupported) {
-      SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
-      swapChainAdequate = !swapChainSupport.formats.empty() &&
-                          !swapChainSupport.presentModes.empty();
-    }
-
-    VkPhysicalDeviceFeatures supportedFeatures;
-    vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
-
-    return indices.isComplete() && extensionsSupported && swapChainAdequate &&
-           supportedFeatures.samplerAnisotropy;
-  }
-
-  bool checkDeviceExtensionSupport(VkPhysicalDevice device)
-  {
-    uint32_t extensionCount;
-    vkEnumerateDeviceExtensionProperties(
-      device, nullptr, &extensionCount, nullptr);
-
-    std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-    vkEnumerateDeviceExtensionProperties(
-      device, nullptr, &extensionCount, availableExtensions.data());
-
-    std::set<std::string> requiredExtensions(deviceExtensions.begin(),
-                                             deviceExtensions.end());
-
-    for (const auto& extension : availableExtensions) {
-      requiredExtensions.erase(extension.extensionName);
-    }
-
-    return requiredExtensions.empty();
-  }
-
-  QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
-  {
-    QueueFamilyIndices indices;
-
-    uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(
-      device, &queueFamilyCount, nullptr);
-
-    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(
-      device, &queueFamilyCount, queueFamilies.data());
-
-    int i = 0;
-    for (const auto& queueFamily : queueFamilies) {
-      if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-        indices.graphicsFamily = i;
-      }
-
-      VkBool32 presentSupport = false;
-      vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
-
-      if (presentSupport) {
-        indices.presentFamily = i;
-      }
-
-      if (indices.isComplete()) {
-        break;
-      }
-
-      i++;
-    }
-
-    return indices;
-  }
-
-  std::vector<const char*> getRequiredExtensions()
-  {
-    uint32_t glfwExtensionCount = 0;
-    const char** glfwExtensions;
-    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-    std::vector<const char*> extensions(glfwExtensions,
-                                        glfwExtensions + glfwExtensionCount);
-
-    if (enableValidationLayers) {
-      extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    }
-
-    return extensions;
-  }
-
-  bool checkValidationLayerSupport()
-  {
-    uint32_t layerCount;
-    vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-
-    std::vector<VkLayerProperties> availableLayers(layerCount);
-    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
-
-    for (const char* layerName : validationLayers) {
-      bool layerFound = false;
-
-      for (const auto& layerProperties : availableLayers) {
-        if (strcmp(layerName, layerProperties.layerName) == 0) {
-          layerFound = true;
-          break;
-        }
-      }
-
-      if (!layerFound) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
   static std::vector<char> readFile(const std::string& filename)
   {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
@@ -2058,23 +1610,12 @@ private:
 
     return buffer;
   }
-
-  static VKAPI_ATTR VkBool32 VKAPI_CALL
-  debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                VkDebugUtilsMessageTypeFlagsEXT messageType,
-                const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-                void* pUserData)
-  {
-    std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
-
-    return VK_FALSE;
-  }
 };
 
 int
 main()
 {
-  HelloTriangleApplication app;
+  DemoApplication app;
 
   try {
     app.run();

@@ -4,6 +4,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include <array>
+#include <iostream>
 
 Mesh::Mesh(VulkanDevice* vulkanDevice,
            size_t indexCount,

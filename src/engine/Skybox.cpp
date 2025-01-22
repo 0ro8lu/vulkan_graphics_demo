@@ -41,8 +41,8 @@ Skybox::Skybox(VulkanDevice* vulkanDevice, std::array<std::string, 6> filePaths)
   VkBuffer stagingBuffer;
   VmaAllocation stagingBufferAllocation;
 
-  char* data =
-    static_cast<char*>(vulkanDevice->createBuffer(imageSize * filePaths.size(),
+  char* data = static_cast<char*>(
+    vulkanDevice->createBuffer(imageSize * filePaths.size(),
                                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                                VulkanDevice::BufferType::STAGING_BUFFER,
                                stagingBuffer,
@@ -171,13 +171,14 @@ Skybox::Skybox(VulkanDevice* vulkanDevice, std::array<std::string, 6> filePaths)
   setupDescriptors();
 }
 
-Skybox::~Skybox() {
+Skybox::~Skybox()
+{
   vkDestroyImageView(vulkanDevice->logicalDevice, view, nullptr);
   vmaDestroyImage(vulkanDevice->allocator, image, imageAllocation);
   vkDestroySampler(vulkanDevice->logicalDevice, sampler, nullptr);
 
   vkDestroyDescriptorSetLayout(
-      vulkanDevice->logicalDevice, skyboxLayout, nullptr);
+    vulkanDevice->logicalDevice, skyboxLayout, nullptr);
 
   vkDestroyDescriptorPool(vulkanDevice->logicalDevice, descriptorPool, nullptr);
 }
@@ -357,17 +358,20 @@ Skybox::setupDescriptors()
                          nullptr);
 }
 
-void Skybox::draw(VkCommandBuffer commandBuffer,
-            VkPipelineLayout pipelineLayout, glm::mat4 cameraView) {
+void
+Skybox::draw(VkCommandBuffer commandBuffer,
+             VkPipelineLayout pipelineLayout,
+             glm::mat4 cameraView)
+{
 
   vkCmdBindDescriptorSets(commandBuffer,
-                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            pipelineLayout,
-                            1,
-                            1,
-                            &descriptorSet,
-                            0,
-                            nullptr);
+                          VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          pipelineLayout,
+                          1,
+                          1,
+                          &descriptorSet,
+                          0,
+                          nullptr);
 
   cube->draw(commandBuffer, pipelineLayout, false);
 }

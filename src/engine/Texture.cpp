@@ -1,5 +1,6 @@
 #include "Texture.h"
 #include "engine/VulkanDevice.h"
+#include <vulkan/vulkan_core.h>
 
 Texture::Texture()
   : vulkanDevice(nullptr)
@@ -47,7 +48,7 @@ Texture::Texture(VulkanDevice* vulkanDevice, std::string filePath)
 
   stbi_image_free(pixels);
 
-  createTextureImageView();
+  view = vulkanDevice->createImageView(image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
 
   // call this only if the global sampler is null.
   // futureproofing: make a sampler manager, hash the VkSamplerCreateInfo struct
@@ -83,7 +84,7 @@ Texture::createTextureImageFromPixels(stbi_uc* pixels,
   memcpy(data, pixels, static_cast<size_t>(imageSize));
 
   // Create the Vulkan image
-  createVulkanImage(texWidth, texHeight);
+  vulkanDevice->createImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,     VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, image, allocation);
 
   // Copy data from staging buffer to image
   transitionImageLayout(image,
@@ -122,42 +123,6 @@ Texture::createTextureImageView()
   if (vkCreateImageView(
         vulkanDevice->logicalDevice, &viewInfo, nullptr, &view) != VK_SUCCESS) {
     throw std::runtime_error("failed to create texture image view!");
-  }
-}
-
-void
-Texture::createVulkanImage(int width, int height)
-{
-
-  // -------------------- CREATE IMAGE --------------------
-  VkImageCreateInfo imageInfo{};
-  imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-  imageInfo.imageType = VK_IMAGE_TYPE_2D;
-  imageInfo.extent.width = width;
-  imageInfo.extent.height = height;
-  imageInfo.extent.depth = 1;
-  imageInfo.mipLevels = 1;
-  imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-  imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-  imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  imageInfo.usage =
-    VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-  imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-  imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  imageInfo.arrayLayers = 1;
-
-  VmaAllocationCreateInfo imageAllocCreateInfo = {};
-  imageAllocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-  imageAllocCreateInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
-  imageAllocCreateInfo.priority = 1.0f;
-
-  if (vmaCreateImage(vulkanDevice->allocator,
-                     &imageInfo,
-                     &imageAllocCreateInfo,
-                     &image,
-                     &allocation,
-                     nullptr) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create image!");
   }
 }
 

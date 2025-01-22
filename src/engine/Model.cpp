@@ -4,7 +4,6 @@
 #include "engine/Vertex.h"
 
 #include <iostream>
-#include <memory>
 #include <stdexcept>
 
 VkDescriptorSetLayout Model::textureLayout = VK_NULL_HANDLE;
@@ -107,20 +106,26 @@ Model::operator=(Model&& other) noexcept
   return *this;
 }
 
-void Model::applyTransform(const glm::mat4& transform) {
+void
+Model::applyTransform(const glm::mat4& transform)
+{
   for (auto& instance : meshInstances) {
     instance.transformation = instance.transformation * transform;
   }
 }
 
-void Model::rotate(float angle, glm::vec3 rotationAxis) {
-  glm::mat4 newMat = glm::rotate(glm::mat4(1.0), glm::radians(angle), rotationAxis);
+void
+Model::rotate(float angle, glm::vec3 rotationAxis)
+{
+  glm::mat4 newMat =
+    glm::rotate(glm::mat4(1.0), glm::radians(angle), rotationAxis);
   applyTransform(newMat);
 }
 
 void
 Model::draw(VkCommandBuffer commandBuffer,
-            VkPipelineLayout pipelineLayout, bool shouldRenderTexture)
+            VkPipelineLayout pipelineLayout,
+            bool shouldRenderTexture)
 {
   struct PushConstant
   {
@@ -136,7 +141,8 @@ Model::draw(VkCommandBuffer commandBuffer,
   for (const auto& instance : meshInstances) {
     PushConstant pc;
     pc.model = instance.transformation;
-    vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, 64, &pc);
+    vkCmdPushConstants(
+      commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, 64, &pc);
     instance.mesh->draw(commandBuffer, pipelineLayout, shouldRenderTexture);
   }
 }
@@ -186,14 +192,15 @@ Model::processNode(aiNode* node,
                    size_t& startIndex,
                    size_t& startVertex)
 {
-  glm::mat4 nodeTransform = modelMatrix * AssimpToGlmMatrix(node->mTransformation);
+  glm::mat4 nodeTransform =
+    modelMatrix * AssimpToGlmMatrix(node->mTransformation);
 
   for (unsigned int i = 0; i < node->mNumMeshes; i++) {
     aiMesh* assimpMesh = scene->mMeshes[node->mMeshes[i]];
     Mesh* mesh;
 
     auto it = uniqueMeshes.find(assimpMesh);
-    if(it == uniqueMeshes.end()) {    
+    if (it == uniqueMeshes.end()) {
       auto newMesh = processMesh(assimpMesh, scene, startIndex, startVertex);
       mesh = newMesh.get();
       uniqueMeshes[assimpMesh] = std::move(newMesh);
@@ -201,17 +208,14 @@ Model::processNode(aiNode* node,
       startIndex += scene->mMeshes[node->mMeshes[i]]->mNumFaces * 3;
       startVertex += assimpMesh->mNumVertices;
     } else {
-      std::cout << "non-unique mesh found! this is good news" << std::endl;
       mesh = it->second.get();
     }
 
-    meshInstances.push_back({nodeTransform, mesh});
-
+    meshInstances.push_back({ nodeTransform, mesh });
   }
 
   for (unsigned int i = 0; i < node->mNumChildren; i++) {
-    processNode(
-      node->mChildren[i], scene, startIndex, startVertex);
+    processNode(node->mChildren[i], scene, startIndex, startVertex);
   }
 }
 
@@ -270,8 +274,6 @@ Model::processMesh(aiMesh* mesh,
     vertices.push_back(vertex);
   }
 
-  std::cout << "creating texture" << std::endl;
-
   // If we do have textures
   Texture diffuseTexture;
   Texture specularTexture;
@@ -291,10 +293,10 @@ Model::processMesh(aiMesh* mesh,
   }
 
   auto newMesh = std::make_unique<Mesh>(vulkanDevice,
-                     mesh->mNumFaces * 3,
-                     startIndex,
-                     std::move(diffuseTexture),
-                     std::move(specularTexture));
+                                        mesh->mNumFaces * 3,
+                                        startIndex,
+                                        std::move(diffuseTexture),
+                                        std::move(specularTexture));
 
   for (unsigned int i = 0; i < mesh->mNumFaces; i++) {
     const aiFace& face = mesh->mFaces[i];
@@ -401,7 +403,8 @@ Model::setupDescriptors()
 
   // -------------------- DESCRIPTOR ALLOCATION --------------------
   for (const auto& uniqueMesh : uniqueMeshes) {
-    uniqueMesh.second->createDescriptorSet(descriptorPool, Model::textureLayout);
+    uniqueMesh.second->createDescriptorSet(descriptorPool,
+                                           Model::textureLayout);
   }
 }
 

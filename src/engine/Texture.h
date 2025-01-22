@@ -3,8 +3,8 @@
 
 #include <stb_image.h>
 
-#include <string>
 #include <stdexcept>
+#include <string>
 
 #include "VulkanDevice.h"
 
