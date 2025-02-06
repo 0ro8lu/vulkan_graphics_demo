@@ -1,18 +1,17 @@
-#include "Texture.h"
-#include "engine/VulkanDevice.h"
-#include <vulkan/vulkan_core.h>
+#include "engine/ModelLoading/TextreRefactored.h"
+#include "engine/VulkanContext.h"
 
-Texture::Texture()
-  : vulkanDevice(nullptr)
+TextureDO::TextureDO()
+  : vkContext(nullptr)
 {
   image = VK_NULL_HANDLE;
   view = VK_NULL_HANDLE;
   sampler = VK_NULL_HANDLE;
 }
 
-Texture::Texture(VulkanDevice* vulkanDevice, unsigned char* data, size_t size)
+TextureDO::TextureDO(VulkanContext* vkContext, unsigned char* data, size_t size)
 {
-  this->vulkanDevice = vulkanDevice;
+  this->vkContext = vkContext;
 
   int texWidth, texHeight, texChannels;
 
@@ -31,9 +30,9 @@ Texture::Texture(VulkanDevice* vulkanDevice, unsigned char* data, size_t size)
   createTextureSampler();
 }
 
-Texture::Texture(VulkanDevice* vulkanDevice, std::string filePath)
+TextureDO::TextureDO(VulkanContext* vkContext, std::string filePath)
 {
-  this->vulkanDevice = vulkanDevice;
+  this->vkContext = vkContext;
 
   int texWidth, texHeight, texChannels;
 
@@ -48,7 +47,8 @@ Texture::Texture(VulkanDevice* vulkanDevice, std::string filePath)
 
   stbi_image_free(pixels);
 
-  view = vulkanDevice->createImageView(image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+  view = vkContext->createImageView(
+    image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
 
   // call this only if the global sampler is null.
   // futureproofing: make a sampler manager, hash the VkSamplerCreateInfo struct
@@ -58,13 +58,13 @@ Texture::Texture(VulkanDevice* vulkanDevice, std::string filePath)
   createTextureSampler();
 }
 
-Texture::~Texture()
+TextureDO::~TextureDO()
 {
   cleanup();
 }
 
 void
-Texture::createTextureImageFromPixels(stbi_uc* pixels,
+TextureDO::createTextureImageFromPixels(stbi_uc* pixels,
                                       int texWidth,
                                       int texHeight)
 {
@@ -75,16 +75,23 @@ Texture::createTextureImageFromPixels(stbi_uc* pixels,
   VmaAllocation stagingBufferAllocation;
 
   void* data =
-    vulkanDevice->createBuffer(imageSize,
+    vkContext->createBuffer(imageSize,
                                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                               VulkanDevice::BufferType::STAGING_BUFFER,
+                               BufferType::STAGING_BUFFER,
                                stagingBuffer,
                                stagingBufferAllocation);
 
   memcpy(data, pixels, static_cast<size_t>(imageSize));
 
   // Create the Vulkan image
-  vulkanDevice->createImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,     VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, image, allocation);
+  image = vkContext->createImage(texWidth,
+                            texHeight,
+                            VK_FORMAT_R8G8B8A8_SRGB,
+                            VK_IMAGE_TILING_OPTIMAL,
+                            VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                              VK_IMAGE_USAGE_SAMPLED_BIT,
+                            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+                            allocation);
 
   // Copy data from staging buffer to image
   transitionImageLayout(image,
@@ -101,11 +108,11 @@ Texture::createTextureImageFromPixels(stbi_uc* pixels,
                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
   vmaDestroyBuffer(
-    vulkanDevice->allocator, stagingBuffer, stagingBufferAllocation);
+    vkContext->allocator, stagingBuffer, stagingBufferAllocation);
 }
 
 void
-Texture::createTextureImageView()
+TextureDO::createTextureImageView()
 {
   VkImageViewCreateInfo viewInfo{};
   viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -121,18 +128,18 @@ Texture::createTextureImageView()
   viewInfo.subresourceRange.layerCount = 1;
 
   if (vkCreateImageView(
-        vulkanDevice->logicalDevice, &viewInfo, nullptr, &view) != VK_SUCCESS) {
+        vkContext->logicalDevice, &viewInfo, nullptr, &view) != VK_SUCCESS) {
     throw std::runtime_error("failed to create texture image view!");
   }
 }
 
 void
-Texture::transitionImageLayout(VkImage image,
+TextureDO::transitionImageLayout(VkImage image,
                                VkFormat format,
                                VkImageLayout oldLayout,
                                VkImageLayout newLayout)
 {
-  VkCommandBuffer commandBuffer = vulkanDevice->beginSingleTimeCommands();
+  VkCommandBuffer commandBuffer = vkContext->beginSingleTimeCommands();
 
   // -------------------- TRANSITION LAYOUT --------------------
   VkImageMemoryBarrier barrier{};
@@ -180,16 +187,16 @@ Texture::transitionImageLayout(VkImage image,
                        1,
                        &barrier);
 
-  vulkanDevice->endSingleTimeCommands(commandBuffer);
+  vkContext->endSingleTimeCommands(commandBuffer);
 }
 
 void
-Texture::copyBufferToImage(VkBuffer buffer,
+TextureDO::copyBufferToImage(VkBuffer buffer,
                            VkImage image,
                            uint32_t width,
                            uint32_t height)
 {
-  VkCommandBuffer commandBuffer = vulkanDevice->beginSingleTimeCommands();
+  VkCommandBuffer commandBuffer = vkContext->beginSingleTimeCommands();
 
   VkBufferImageCopy region{};
   region.bufferOffset = 0;
@@ -209,14 +216,14 @@ Texture::copyBufferToImage(VkBuffer buffer,
                          1,
                          &region);
 
-  vulkanDevice->endSingleTimeCommands(commandBuffer);
+  vkContext->endSingleTimeCommands(commandBuffer);
 }
 
 void
-Texture::createTextureSampler()
+TextureDO::createTextureSampler()
 {
   VkPhysicalDeviceProperties properties{};
-  vkGetPhysicalDeviceProperties(vulkanDevice->physicalDevice, &properties);
+  vkGetPhysicalDeviceProperties(vkContext->physicalDevice, &properties);
 
   VkSamplerCreateInfo samplerInfo{};
   samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -234,25 +241,25 @@ Texture::createTextureSampler()
   samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
   if (vkCreateSampler(
-        vulkanDevice->logicalDevice, &samplerInfo, nullptr, &sampler) !=
+        vkContext->logicalDevice, &samplerInfo, nullptr, &sampler) !=
       VK_SUCCESS) {
     throw std::runtime_error("failed to create texture sampler!");
   }
 }
 
 void
-Texture::cleanup()
+TextureDO::cleanup()
 {
   if (view != VK_NULL_HANDLE && sampler != VK_NULL_HANDLE &&
       image != VK_NULL_HANDLE) {
-    vkDestroyImageView(vulkanDevice->logicalDevice, view, nullptr);
-    vmaDestroyImage(vulkanDevice->allocator, image, allocation);
-    vkDestroySampler(vulkanDevice->logicalDevice, sampler, nullptr);
+    vkDestroyImageView(vkContext->logicalDevice, view, nullptr);
+    vmaDestroyImage(vkContext->allocator, image, allocation);
+    vkDestroySampler(vkContext->logicalDevice, sampler, nullptr);
 
     view = VK_NULL_HANDLE;
     sampler = VK_NULL_HANDLE;
     image = VK_NULL_HANDLE;
     allocation = VK_NULL_HANDLE;
-    vulkanDevice = nullptr;
+    vkContext = nullptr;
   }
 }

@@ -1,7 +1,7 @@
 #ifndef MESH_H_
 #define MESH_H_
 
-#include "engine/Texture.h"
+#include "engine/ModelLoading/Texture.h"
 #include "engine/VulkanDevice.h"
 
 struct Vertex;

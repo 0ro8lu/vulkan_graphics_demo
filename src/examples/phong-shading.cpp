@@ -415,6 +415,8 @@ private:
       vkDestroyImageView(logicalDevice, imageView, nullptr);
     }
 
+    vmaDestroyImage(allocator, depthImage, depthAllocation);
+
     vkDestroyImageView(logicalDevice, depthImageView, nullptr);
 
     vkDestroySwapchainKHR(logicalDevice, swapChain, nullptr);
@@ -462,7 +464,6 @@ private:
     // destroy image created
     vmaDestroyImage(allocator, specularTextureImage, specularTextureAllocation);
     vmaDestroyImage(allocator, diffuseTextureImage, diffuseTextureAllocation);
-    vmaDestroyImage(allocator, depthImage, depthAllocation);
 
     vkDestroyDescriptorSetLayout(
       logicalDevice, globalDescriptorSetLayout, nullptr);
@@ -497,8 +498,8 @@ private:
 
   void initCamera()
   {
-    camera.reset(
-      new Camera3D(glm::vec3(0.0, 0.0, 3.0), glm::vec3(0.0, 0.0, -1.0)));
+    camera.reset(new Camera3D(
+      glm::vec3(0.0, 0.0, 3.0), glm::vec3(0.0, 0.0, -1.0), WIDTH, HEIGHT));
   }
 
   VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
@@ -591,6 +592,8 @@ private:
     createImageViews();
     createDepthResources();
     createFramebuffers();
+
+    camera->resizeCamera(width, height);
   }
 
   void createInstance()
@@ -2064,8 +2067,9 @@ private:
 
     // position, target, up
     sUBO.view = camera->getCameraMatrix();
-    sUBO.proj = glm::perspective(
-      glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
+    sUBO.proj = camera->getCameraProjectionMatrix();
+    // sUBO.proj = glm::perspective(
+    //   glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
     sUBO.cameraPos = glm::vec4(camera->getCameraPos().x,
                                camera->getCameraPos().y,
                                camera->getCameraPos().z,

@@ -1,11 +1,33 @@
 #include "Camera3D.h"
 
+#include <iostream>
+
 Camera3D::Camera3D(glm::vec3 cameraPos, glm::vec3 cameraFront)
   : cameraPos(cameraPos)
   , cameraFront(cameraFront)
   , needsUpdating(true)
   , cameraMatrix(1.0f)
 {
+}
+
+Camera3D::Camera3D(glm::vec3 cameraPos,
+                   glm::vec3 cameraFront,
+                   uint32_t width,
+                   uint32_t height)
+  : cameraPos(cameraPos)
+  , cameraFront(cameraFront)
+  , needsUpdating(true)
+  , cameraMatrix(1.0f)
+{
+  std::cout << width << " " << height << std::endl;
+  resizeCamera(width, height);
+}
+
+void
+Camera3D::resizeCamera(uint32_t width, uint32_t height)
+{
+  cameraProjection = glm::perspective(
+    glm::radians(45.0f), (float)width / (float)height, 0.1f, 100.0f);
 }
 
 void

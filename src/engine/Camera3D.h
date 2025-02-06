@@ -9,6 +9,10 @@ class Camera3D
 {
 public:
   Camera3D(glm::vec3 cameraPos, glm::vec3 cameraFront);
+  Camera3D(glm::vec3 cameraPos,
+           glm::vec3 cameraFront,
+           uint32_t width,
+           uint32_t height);
 
   void setPos(glm::vec3 newPosition)
   {
@@ -21,9 +25,15 @@ public:
     needsUpdating = true;
   }
 
+  void resizeCamera(uint32_t width, uint32_t height);
+
   void update();
 
   const glm::mat4& getCameraMatrix() const { return cameraMatrix; }
+  const glm::mat4& getCameraProjectionMatrix() const
+  {
+    return cameraProjection;
+  }
 
   const glm::vec3& getCameraPos() const { return cameraPos; }
   const glm::vec3& getCameraFront() const { return cameraFront; }
@@ -33,6 +43,7 @@ public:
 
 private:
   glm::mat4 cameraMatrix;
+  glm::mat4 cameraProjection;
 
   glm::vec3 cameraPos;
   glm::vec3 cameraFront;

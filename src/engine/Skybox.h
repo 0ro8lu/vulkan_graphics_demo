@@ -11,7 +11,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include "VulkanDevice.h"
-#include "engine/Model.h"
+#include "engine/ModelLoading/Model.h"
 
 class Skybox
 {

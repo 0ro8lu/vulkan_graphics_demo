@@ -1,5 +1,5 @@
 #include "Skybox.h"
-#include "engine/Model.h"
+#include "engine/ModelLoading/Model.h"
 #include "engine/VulkanDevice.h"
 
 #include <memory>

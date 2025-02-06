@@ -1,6 +1,6 @@
 #include "engine/Camera3D.h"
 #include "engine/FrameBufferAttachment.h"
-#include "engine/Model.h"
+#include "engine/ModelLoading/Model.h"
 #include "engine/Skybox.h"
 #include "engine/Vertex.h"
 #include "engine/VulkanBase.h"
@@ -229,7 +229,7 @@ private:
     createVMAAllocator();
     createCommandPool();
     createVulkanDevice();
-    
+
     createSwapChain();
     createImageViews();
     createIntermediateAttachment();
@@ -331,7 +331,8 @@ private:
     vkDestroyPipelineLayout(logicalDevice, lightCubePipelineLayout, nullptr);
 
     vkDestroyPipeline(logicalDevice, postProcessingPipeline, nullptr);
-    vkDestroyPipelineLayout(logicalDevice, postProcessingPipelineLayout, nullptr);
+    vkDestroyPipelineLayout(
+      logicalDevice, postProcessingPipelineLayout, nullptr);
 
     vkDestroyRenderPass(logicalDevice, renderPass, nullptr);
 
@@ -357,10 +358,10 @@ private:
     vkDestroyDescriptorPool(logicalDevice, mainDescriptorPool, nullptr);
 
     vkDestroyDescriptorSetLayout(
-      logicalDevice, descriptorSetLayoutAttachmentWrite
-  , nullptr);
+      logicalDevice, descriptorSetLayoutAttachmentWrite, nullptr);
     vkDestroyDescriptorSetLayout(logicalDevice, Model::textureLayout, nullptr);
-    vkDestroyDescriptorSetLayout(logicalDevice, descriptorSetLayoutAttachmentRead, nullptr);
+    vkDestroyDescriptorSetLayout(
+      logicalDevice, descriptorSetLayoutAttachmentRead, nullptr);
 
     vmaDestroyAllocator(allocator);
 
@@ -587,105 +588,124 @@ private:
     std::array<VkAttachmentDescription, 3> attachments{};
 
     attachments[0].format = swapChainImageFormat;
-	attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-	attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-	attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     attachments[1].format = swapChainImageFormat;
-	attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-	attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	attachments[1].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[1].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     attachments[2].format = findDepthFormat();
-	attachments[2].samples = VK_SAMPLE_COUNT_1_BIT;
-	attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	attachments[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	attachments[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	attachments[2].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	attachments[2].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    attachments[2].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[2].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[2].finalLayout =
+      VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-    std::array<VkSubpassDescription,2> subpassDescriptions{};
-
-    /*
-		First subpass
-		Fill the color and depth attachments
-	*/
-	VkAttachmentReference colorReference = { 1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-	VkAttachmentReference depthReference = { 2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
-
-	subpassDescriptions[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-	subpassDescriptions[0].colorAttachmentCount = 1;
-	subpassDescriptions[0].pColorAttachments = &colorReference;
-	subpassDescriptions[0].pDepthStencilAttachment = &depthReference;
+    std::array<VkSubpassDescription, 2> subpassDescriptions{};
 
     /*
-		Second subpass
-		Input attachment read and swap chain color attachment write
-	*/
+                First subpass
+                Fill the color and depth attachments
+        */
+    VkAttachmentReference colorReference = {
+      1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+    VkAttachmentReference depthReference = {
+      2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
 
-	// Color reference (target) for this sub pass is the swap chain color attachment
-	VkAttachmentReference colorReferenceSwapchain = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-
-	subpassDescriptions[1].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-	subpassDescriptions[1].colorAttachmentCount = 1;
-	subpassDescriptions[1].pColorAttachments = &colorReferenceSwapchain;
-
-	// Color and depth attachment written to in first sub pass will be used as input attachments to be read in the fragment shader
-	VkAttachmentReference inputReferences[2];
-	inputReferences[0] = { 1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-	inputReferences[1] = { 2, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-
-	// Use the attachments filled in the first pass as input attachments
-	subpassDescriptions[1].inputAttachmentCount = 2;
-	subpassDescriptions[1].pInputAttachments = inputReferences;
+    subpassDescriptions[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpassDescriptions[0].colorAttachmentCount = 1;
+    subpassDescriptions[0].pColorAttachments = &colorReference;
+    subpassDescriptions[0].pDepthStencilAttachment = &depthReference;
 
     /*
-		Subpass dependencies for layout transitions
-	*/
-	std::array<VkSubpassDependency, 3> dependencies;
+                Second subpass
+                Input attachment read and swap chain color attachment write
+        */
 
-	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[0].dstSubpass = 0;
-	dependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-	dependencies[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-	dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-	dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-	dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    // Color reference (target) for this sub pass is the swap chain color
+    // attachment
+    VkAttachmentReference colorReferenceSwapchain = {
+      0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
 
-	// This dependency transitions the input attachment from color attachment to shader read
-	dependencies[1].srcSubpass = 0;
-	dependencies[1].dstSubpass = 1;
-	dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-	dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-	dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-	dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    subpassDescriptions[1].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpassDescriptions[1].colorAttachmentCount = 1;
+    subpassDescriptions[1].pColorAttachments = &colorReferenceSwapchain;
 
-	dependencies[2].srcSubpass = 0;
-	dependencies[2].dstSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[2].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	dependencies[2].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-	dependencies[2].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-	dependencies[2].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-	dependencies[2].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    // Color and depth attachment written to in first sub pass will be used as
+    // input attachments to be read in the fragment shader
+    VkAttachmentReference inputReferences[2];
+    inputReferences[0] = { 1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+    inputReferences[1] = { 2, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+
+    // Use the attachments filled in the first pass as input attachments
+    subpassDescriptions[1].inputAttachmentCount = 2;
+    subpassDescriptions[1].pInputAttachments = inputReferences;
+
+    /*
+                Subpass dependencies for layout transitions
+        */
+    std::array<VkSubpassDependency, 3> dependencies;
+
+    dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[0].dstSubpass = 0;
+    dependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    dependencies[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    dependencies[0].dstStageMask =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+      VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependencies[0].dstAccessMask =
+      VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+      VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+      VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    // This dependency transitions the input attachment from color attachment to
+    // shader read
+    dependencies[1].srcSubpass = 0;
+    dependencies[1].dstSubpass = 1;
+    dependencies[1].srcStageMask =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    dependencies[2].srcSubpass = 0;
+    dependencies[2].dstSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[2].srcStageMask =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[2].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    dependencies[2].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                                    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[2].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    dependencies[2].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
     VkRenderPassCreateInfo renderPassInfo{};
-	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-	renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-	renderPassInfo.pAttachments = attachments.data();
-	renderPassInfo.subpassCount = static_cast<uint32_t>(subpassDescriptions.size());
-	renderPassInfo.pSubpasses = subpassDescriptions.data();
-	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	renderPassInfo.pDependencies = dependencies.data();
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+    renderPassInfo.pAttachments = attachments.data();
+    renderPassInfo.subpassCount =
+      static_cast<uint32_t>(subpassDescriptions.size());
+    renderPassInfo.pSubpasses = subpassDescriptions.data();
+    renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+    renderPassInfo.pDependencies = dependencies.data();
 
     if (vkCreateRenderPass(
           logicalDevice, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
@@ -734,12 +754,16 @@ private:
 
     VkDescriptorSetLayoutCreateInfo layoutInfoAttachmentWrite{};
 
-    layoutInfoAttachmentWrite.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfoAttachmentWrite.bindingCount = static_cast<uint32_t>(bindings.size());
+    layoutInfoAttachmentWrite.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfoAttachmentWrite.bindingCount =
+      static_cast<uint32_t>(bindings.size());
     layoutInfoAttachmentWrite.pBindings = bindings.data();
 
-    if (vkCreateDescriptorSetLayout(
-          logicalDevice, &layoutInfoAttachmentWrite, nullptr, &descriptorSetLayoutAttachmentWrite) !=
+    if (vkCreateDescriptorSetLayout(logicalDevice,
+                                    &layoutInfoAttachmentWrite,
+                                    nullptr,
+                                    &descriptorSetLayoutAttachmentWrite) !=
         VK_SUCCESS) {
       throw std::runtime_error("failed to create descriptor set layout!");
     }
@@ -750,15 +774,18 @@ private:
     attachmentBinding.descriptorCount = 1;
     attachmentBinding.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
     attachmentBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    
+
     VkDescriptorSetLayoutCreateInfo layoutInfoAttachmentRead{};
 
-    layoutInfoAttachmentRead.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfoAttachmentRead.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfoAttachmentRead.bindingCount = 1;
     layoutInfoAttachmentRead.pBindings = &attachmentBinding;
 
-    if (vkCreateDescriptorSetLayout(
-          logicalDevice, &layoutInfoAttachmentRead, nullptr, &descriptorSetLayoutAttachmentRead) !=
+    if (vkCreateDescriptorSetLayout(logicalDevice,
+                                    &layoutInfoAttachmentRead,
+                                    nullptr,
+                                    &descriptorSetLayoutAttachmentRead) !=
         VK_SUCCESS) {
       throw std::runtime_error("failed to create descriptor set layout!");
     }
@@ -774,8 +801,7 @@ private:
   {
     std::string shaderPath = SHADER_PATH;
 
-    VkDescriptorSetLayout mainLayouts[] = { descriptorSetLayoutAttachmentWrite
-  ,
+    VkDescriptorSetLayout mainLayouts[] = { descriptorSetLayoutAttachmentWrite,
                                             Model::textureLayout };
     createPipeline(shaderPath + "post_processing/built/texture_vert.spv",
                    shaderPath + "post_processing/built/texture_frag.spv",
@@ -784,8 +810,9 @@ private:
                    mainLayouts,
                    2,
                    0);
-    VkDescriptorSetLayout lightLayouts[] = { descriptorSetLayoutAttachmentWrite
-   };
+    VkDescriptorSetLayout lightLayouts[] = {
+      descriptorSetLayoutAttachmentWrite
+    };
     createPipeline(shaderPath + "post_processing/built/light_cube_vert.spv",
                    shaderPath + "post_processing/built/light_cube_frag.spv",
                    lightCubePipelineLayout,
@@ -793,9 +820,9 @@ private:
                    lightLayouts,
                    1,
                    0);
-    VkDescriptorSetLayout skyboxLayouts[] = { descriptorSetLayoutAttachmentWrite
-  ,
-                                              Skybox::skyboxLayout };
+    VkDescriptorSetLayout skyboxLayouts[] = {
+      descriptorSetLayoutAttachmentWrite, Skybox::skyboxLayout
+    };
     createPipeline(shaderPath + "post_processing/built/skybox_vert.spv",
                    shaderPath + "post_processing/built/skybox_frag.spv",
                    skyboxPipelineLayout,
@@ -805,8 +832,9 @@ private:
                    0,
                    VK_CULL_MODE_FRONT_BIT);
 
-        VkDescriptorSetLayout postProcessingLayout[] = { descriptorSetLayoutAttachmentRead
-   };
+    VkDescriptorSetLayout postProcessingLayout[] = {
+      descriptorSetLayoutAttachmentRead
+    };
 
     createPipeline(shaderPath + "post_processing/built/postprocessing_vert.spv",
                    shaderPath + "post_processing/built/postprocessing_frag.spv",
@@ -814,7 +842,7 @@ private:
                    postProcessingPipeline,
                    postProcessingLayout,
                    1,
-                   1, 
+                   1,
                    VK_CULL_MODE_NONE,
                    false);
   }
@@ -854,8 +882,8 @@ private:
 
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    if(usesVertices) {
+      VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    if (usesVertices) {
 
       auto bindingDescription = Vertex::getBindingDescription();
       auto attributeDescriptions = Vertex::getAttributeDescriptions();
@@ -864,8 +892,9 @@ private:
       vertexInputInfo.vertexAttributeDescriptionCount =
         static_cast<uint32_t>(attributeDescriptions.size());
       vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-      vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
-    } 
+      vertexInputInfo.pVertexAttributeDescriptions =
+        attributeDescriptions.data();
+    }
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType =
@@ -1233,9 +1262,8 @@ private:
   void createDescriptorSets()
   {
     /* descriptor sets for attachmentWrite */
-    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT,
-                                               descriptorSetLayoutAttachmentWrite
-                                            );
+    std::vector<VkDescriptorSetLayout> layouts(
+      MAX_FRAMES_IN_FLIGHT, descriptorSetLayoutAttachmentWrite);
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = mainDescriptorPool;
@@ -1243,9 +1271,9 @@ private:
     allocInfo.pSetLayouts = layouts.data();
 
     descriptorSetsAttachmentWrite.resize(MAX_FRAMES_IN_FLIGHT);
-    if (vkAllocateDescriptorSets(logicalDevice,
-                                 &allocInfo,
-                                 descriptorSetsAttachmentWrite.data()) != VK_SUCCESS) {
+    if (vkAllocateDescriptorSets(
+          logicalDevice, &allocInfo, descriptorSetsAttachmentWrite.data()) !=
+        VK_SUCCESS) {
       throw std::runtime_error("failed to allocate descriptor sets!");
     }
 
@@ -1337,12 +1365,7 @@ private:
     descriptorWrite.dstBinding = 0;
     descriptorWrite.pImageInfo = &imageInfo;
 
-    vkUpdateDescriptorSets(logicalDevice,
-                           1,
-                           &descriptorWrite,
-                           0,
-                           nullptr);
-
+    vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, nullptr);
   }
 
   void* createBuffer(VkDeviceSize size,

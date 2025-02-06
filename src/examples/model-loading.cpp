@@ -1,5 +1,5 @@
 #include "engine/Camera3D.h"
-#include "engine/Model.h"
+#include "engine/ModelLoading/Model.h"
 #include "engine/Vertex.h"
 
 #include <vulkan/vulkan_core.h>

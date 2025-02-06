@@ -43,25 +43,16 @@ vec3 sampleTex[9];
 
 void main()
 {
-	//invert
-	// outColor = vec4(1.0 - texture(samplerColor, inUV).rgb, 1.0);
-
-	//grayscale
-	// vec3 color = texture(samplerColor, inUV).rgb;
-	// float average = (0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) / 3.0;
-	// outColor = vec4(average, average, average, 1.0);
-
-	//kernel-based
-	// for(int i = 0; i < 9; i++)
- //    {
- //        sampleTex[i] = vec3(texture(samplerColor, inUV + offsets[i]).rgb);
- //    }
-	// vec3 col = vec3(0.0);
- //    for(int i = 0; i < 9; i++)
- //        col += sampleTex[i] * hallucination_kernel[i];
-    
-    // outColor = vec4(col, 1.0);
-
-    //none
-    outColor = vec4(texture(samplerColor, inUV).rgb, 1.0);
+    // HDR stuff
+    const float gamma = 2.2;
+    vec3 hdrColor = texture(samplerColor, inUV).rgb;
+  
+    // reinhard tone mapping
+    // vec3 mapped = hdrColor / (hdrColor + vec3(1.0));
+    vec3 mapped = vec3(1.0) - exp(-hdrColor * 1);
+    // gamma correction 
+    // mapped = pow(mapped, vec3(1.0 / gamma));
+  
+    // outColor = vec4(hdrColor, 1.0);
+    outColor = vec4(mapped, 1.0);
 }

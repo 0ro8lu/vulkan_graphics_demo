@@ -1,7 +1,7 @@
 #ifndef _MODEL_H_
 #define _MODEL_H_
 
-#include "Mesh.h"
+#include "engine/ModelLoading/Mesh.h"
 
 #include <assimp/Importer.hpp>
 #include <assimp/material.h>
@@ -64,8 +64,6 @@ public:
 
 private:
   VulkanDevice* vulkanDevice;
-
-  std::string filePath;
 
   glm::mat4 modelMatrix = glm::mat4(1.0);
   inline void applyTransform(const glm::mat4& transform);

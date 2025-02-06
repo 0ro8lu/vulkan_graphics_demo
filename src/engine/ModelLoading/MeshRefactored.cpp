@@ -1,17 +1,13 @@
-#include "Mesh.h"
-#include "engine/Texture.h"
-#include "engine/VulkanDevice.h"
-#include <vulkan/vulkan_core.h>
+#include "engine/ModelLoading/MeshRefactored.h"
 
 #include <array>
-#include <iostream>
 
-Mesh::Mesh(VulkanDevice* vulkanDevice,
+MeshDO::MeshDO(VulkanContext* vkContext,
            size_t indexCount,
            size_t startIndex,
-           Texture&& diffuseTexture,
-           Texture&& specularTexture)
-  : vulkanDevice(vulkanDevice)
+           TextureDO&& diffuseTexture,
+           TextureDO&& specularTexture)
+  : vkContext(vkContext)
   , indexCount(indexCount)
   , startIndex(startIndex)
   , diffuseTexture(std::move(diffuseTexture))
@@ -19,10 +15,10 @@ Mesh::Mesh(VulkanDevice* vulkanDevice,
 {
 }
 
-Mesh::~Mesh() {}
+MeshDO::~MeshDO() {}
 
 void
-Mesh::createDescriptorSet(VkDescriptorPool descriptorPool,
+MeshDO::createDescriptorSet(VkDescriptorPool descriptorPool,
                           VkDescriptorSetLayout descriptorLayout)
 {
   VkDescriptorSetAllocateInfo allocInfo{};
@@ -31,7 +27,7 @@ Mesh::createDescriptorSet(VkDescriptorPool descriptorPool,
   allocInfo.descriptorSetCount = 1;
   allocInfo.pSetLayouts = &descriptorLayout;
 
-  if (vkAllocateDescriptorSets(vulkanDevice->logicalDevice,
+  if (vkAllocateDescriptorSets(vkContext->logicalDevice,
                                &allocInfo,
                                &descriptorSet) != VK_SUCCESS) {
     throw std::runtime_error("failed to allocate descriptor sets!");
@@ -67,28 +63,9 @@ Mesh::createDescriptorSet(VkDescriptorPool descriptorPool,
   descriptorWrites[1].descriptorCount = 1;
   descriptorWrites[1].pImageInfo = &specularImageInfo;
 
-  vkUpdateDescriptorSets(vulkanDevice->logicalDevice,
+  vkUpdateDescriptorSets(vkContext->logicalDevice,
                          static_cast<uint32_t>(descriptorWrites.size()),
                          descriptorWrites.data(),
                          0,
                          nullptr);
-}
-
-void
-Mesh::draw(VkCommandBuffer commandBuffer,
-           VkPipelineLayout pipelineLayout,
-           bool shouldRenderTexture)
-{
-  if (shouldRenderTexture) {
-    vkCmdBindDescriptorSets(commandBuffer,
-                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            pipelineLayout,
-                            1,
-                            1,
-                            &descriptorSet,
-                            0,
-                            nullptr);
-  }
-
-  vkCmdDrawIndexed(commandBuffer, indexCount, 1, startIndex, 0, 0);
 }

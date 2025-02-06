@@ -1,21 +1,18 @@
-#include "Model.h"
-#include "engine/Mesh.h"
-#include "engine/Texture.h"
+#include "engine/ModelLoading/ModelRefactored.h"
+#include "engine/ModelLoading/MeshRefactored.h"
 #include "engine/Vertex.h"
 
 #include <iostream>
-#include <stdexcept>
 
-VkDescriptorSetLayout Model::textureLayout = VK_NULL_HANDLE;
+VkDescriptorSetLayout ModelDO::textureLayout = VK_NULL_HANDLE;
 
-Model::Model(const std::string& filePath,
-             VulkanDevice* vulkanDevice,
+ModelDO::ModelDO(const std::string& filePath,
+              VulkanContext* vkContext,
              glm::vec3 pos,
              glm::vec3 rotationAxis,
              float rotationAngle,
              glm::vec3 scale)
-  : vulkanDevice(vulkanDevice)
-  , filePath(filePath)
+  : vkContext(vkContext)
 {
 
   modelMatrix = glm::translate(modelMatrix, pos);
@@ -30,7 +27,6 @@ Model::Model(const std::string& filePath,
   createVertexBuffer(sizeof(vertices[0]) * vertices.size());
   createIndexBuffer(sizeof(indices[0]) * indices.size());
 
-  // create the descriptor layout and descriptor sets
   setupDescriptors();
 
   // clean the vectors by destroying their contents and releasing the memory of
@@ -44,12 +40,12 @@ Model::Model(const std::string& filePath,
   indices.swap(tmpIndices);
 }
 
-Model::~Model()
+ModelDO::~ModelDO()
 {
   cleanup();
 }
 
-Model::Model(Model&& other) noexcept
+ModelDO::ModelDO(ModelDO&& other) noexcept
 {
   modelMatrix = other.modelMatrix;
   meshInstances = std::move(other.meshInstances);
@@ -65,7 +61,7 @@ Model::Model(Model&& other) noexcept
   indexBufferAllocation = other.indexBufferAllocation;
   indexBufferMemory = other.indexBufferMemory;
 
-  vulkanDevice = other.vulkanDevice;
+  vkContext = other.vkContext;
   descriptorPool = other.descriptorPool;
 
   other.vertexBuffer = VK_NULL_HANDLE;
@@ -76,12 +72,11 @@ Model::Model(Model&& other) noexcept
   other.indexBufferAllocation = VK_NULL_HANDLE;
   other.indexBufferMemory = VK_NULL_HANDLE;
 
-  other.vulkanDevice = nullptr;
-  other.descriptorPool = VK_NULL_HANDLE;
+  other.vkContext = nullptr;
 }
 
-Model&
-Model::operator=(Model&& other) noexcept
+ModelDO&
+ModelDO::operator=(ModelDO&& other) noexcept
 {
   if (this != &other) {
     cleanup();
@@ -100,14 +95,13 @@ Model::operator=(Model&& other) noexcept
     indexBufferAllocation = other.indexBufferAllocation;
     indexBufferMemory = other.indexBufferMemory;
 
-    vulkanDevice = other.vulkanDevice;
-    descriptorPool = other.descriptorPool;
+    vkContext = other.vkContext;
   }
   return *this;
 }
 
 void
-Model::applyTransform(const glm::mat4& transform)
+ModelDO::applyTransform(const glm::mat4& transform)
 {
   for (auto& instance : meshInstances) {
     instance.transformation = instance.transformation * transform;
@@ -115,7 +109,7 @@ Model::applyTransform(const glm::mat4& transform)
 }
 
 void
-Model::rotate(float angle, glm::vec3 rotationAxis)
+ModelDO::rotate(float angle, glm::vec3 rotationAxis)
 {
   glm::mat4 newMat =
     glm::rotate(glm::mat4(1.0), glm::radians(angle), rotationAxis);
@@ -123,32 +117,7 @@ Model::rotate(float angle, glm::vec3 rotationAxis)
 }
 
 void
-Model::draw(VkCommandBuffer commandBuffer,
-            VkPipelineLayout pipelineLayout,
-            bool shouldRenderTexture)
-{
-  struct PushConstant
-  {
-    glm::mat4 model;
-  };
-
-  VkBuffer vertexBuffers[] = { vertexBuffer };
-  VkDeviceSize offsets[] = { 0 };
-  vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-
-  vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
-  for (const auto& instance : meshInstances) {
-    PushConstant pc;
-    pc.model = instance.transformation;
-    vkCmdPushConstants(
-      commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, 64, &pc);
-    instance.mesh->draw(commandBuffer, pipelineLayout, shouldRenderTexture);
-  }
-}
-
-void
-Model::loadModel(const std::string& filePath)
+ModelDO::loadModel(const std::string& filePath)
 {
   Assimp::Importer importer;
   unsigned int processFlags =
@@ -187,7 +156,7 @@ Model::loadModel(const std::string& filePath)
 }
 
 void
-Model::processNode(aiNode* node,
+ModelDO::processNode(aiNode* node,
                    const aiScene* scene,
                    size_t& startIndex,
                    size_t& startVertex)
@@ -197,7 +166,7 @@ Model::processNode(aiNode* node,
 
   for (unsigned int i = 0; i < node->mNumMeshes; i++) {
     aiMesh* assimpMesh = scene->mMeshes[node->mMeshes[i]];
-    Mesh* mesh;
+    MeshDO* mesh;
 
     auto it = uniqueMeshes.find(assimpMesh);
     if (it == uniqueMeshes.end()) {
@@ -220,7 +189,7 @@ Model::processNode(aiNode* node,
 }
 
 glm::mat4
-Model::AssimpToGlmMatrix(const aiMatrix4x4& from)
+ModelDO::AssimpToGlmMatrix(const aiMatrix4x4& from)
 {
   glm::mat4 to;
   to[0][0] = from.a1;
@@ -242,8 +211,8 @@ Model::AssimpToGlmMatrix(const aiMatrix4x4& from)
   return to;
 }
 
-std::unique_ptr<Mesh>
-Model::processMesh(aiMesh* mesh,
+std::unique_ptr<MeshDO>
+ModelDO::processMesh(aiMesh* mesh,
                    const aiScene* scene,
                    size_t& startIndex,
                    size_t& startVertex)
@@ -275,8 +244,8 @@ Model::processMesh(aiMesh* mesh,
   }
 
   // If we do have textures
-  Texture diffuseTexture;
-  Texture specularTexture;
+  TextureDO diffuseTexture;
+  TextureDO specularTexture;
   if (mesh->mMaterialIndex >= 0) {
     aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
 
@@ -286,13 +255,13 @@ Model::processMesh(aiMesh* mesh,
 
   std::string path = TEXTURE_PATH;
   if (diffuseTexture.view == VK_NULL_HANDLE) {
-    diffuseTexture = Texture(vulkanDevice, path + "empty_diffuse.png");
+    diffuseTexture = TextureDO(vkContext, path + "empty_diffuse.png");
   }
   if (specularTexture.view == VK_NULL_HANDLE) {
-    specularTexture = Texture(vulkanDevice, path + "empty_specular.png");
+    specularTexture = TextureDO(vkContext, path + "empty_specular.png");
   }
 
-  auto newMesh = std::make_unique<Mesh>(vulkanDevice,
+  auto newMesh = std::make_unique<MeshDO>(vkContext,
                                         mesh->mNumFaces * 3,
                                         startIndex,
                                         std::move(diffuseTexture),
@@ -309,8 +278,8 @@ Model::processMesh(aiMesh* mesh,
 }
 
 void
-Model::loadTexture(aiMaterial* material,
-                   Texture& texture,
+ModelDO::loadTexture(aiMaterial* material,
+                   TextureDO& texture,
                    const aiScene* scene,
                    aiTextureType type)
 {
@@ -327,7 +296,7 @@ Model::loadTexture(aiMaterial* material,
       // mHeight == 0 means the texture is compressed
       if (aiTexture->mHeight == 0) {
         // Compressed texture data
-        texture = Texture(vulkanDevice,
+        texture = TextureDO(vkContext,
                           reinterpret_cast<unsigned char*>(aiTexture->pcData),
                           aiTexture->mWidth);
       } else {
@@ -339,14 +308,12 @@ Model::loadTexture(aiMaterial* material,
       }
     } else {
       // Load texture from file path
-      texture = Texture(vulkanDevice, str.C_Str());
+      texture = TextureDO(vkContext, str.C_Str());
     }
   }
 }
 
-void
-Model::setupDescriptors()
-{
+void ModelDO::setupDescriptors() {
   // -------------------- DESCRIPTOR POOL --------------------
   VkDescriptorPoolSize poolSize;
 
@@ -360,13 +327,13 @@ Model::setupDescriptors()
   poolInfo.maxSets = meshInstances.size();
 
   if (vkCreateDescriptorPool(
-        vulkanDevice->logicalDevice, &poolInfo, nullptr, &descriptorPool) !=
+        vkContext->logicalDevice, &poolInfo, nullptr, &descriptorPool) !=
       VK_SUCCESS) {
     throw std::runtime_error("failed to create descriptor pool!");
   }
 
   // -------------------- DESCRIPTOR LAYOUT --------------------
-  if (Model::textureLayout == VK_NULL_HANDLE) {
+  if (ModelDO::textureLayout == VK_NULL_HANDLE) {
     VkDescriptorSetLayoutBinding diffuseLayoutBinding{};
     diffuseLayoutBinding.binding = 0;
     diffuseLayoutBinding.descriptorCount = 1;
@@ -393,10 +360,10 @@ Model::setupDescriptors()
     layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
     layoutInfo.pBindings = bindings.data();
 
-    if (vkCreateDescriptorSetLayout(vulkanDevice->logicalDevice,
+    if (vkCreateDescriptorSetLayout(vkContext->logicalDevice,
                                     &layoutInfo,
                                     nullptr,
-                                    &Model::textureLayout) != VK_SUCCESS) {
+                                    &ModelDO::textureLayout) != VK_SUCCESS) {
       throw std::runtime_error("failed to create descriptor set layout!");
     }
   }
@@ -404,77 +371,78 @@ Model::setupDescriptors()
   // -------------------- DESCRIPTOR ALLOCATION --------------------
   for (const auto& uniqueMesh : uniqueMeshes) {
     uniqueMesh.second->createDescriptorSet(descriptorPool,
-                                           Model::textureLayout);
+                                           ModelDO::textureLayout);
   }
 }
 
+
 void
-Model::createVertexBuffer(VkDeviceSize bufferSize)
+ModelDO::createVertexBuffer(VkDeviceSize bufferSize)
 {
   VkBuffer stagingBuffer;
   VkDeviceMemory stagingBufferMemory;
   VmaAllocation stagingBufferAllocation;
   void* data =
-    vulkanDevice->createBuffer(bufferSize,
+    vkContext->createBuffer(bufferSize,
                                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                               VulkanDevice::BufferType::STAGING_BUFFER,
+                               BufferType::STAGING_BUFFER,
                                stagingBuffer,
                                stagingBufferAllocation);
 
   memcpy(data, vertices.data(), (size_t)bufferSize);
 
-  vulkanDevice->createBuffer(bufferSize,
+  vkContext->createBuffer(bufferSize,
                              VK_BUFFER_USAGE_TRANSFER_DST_BIT |
                                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                             VulkanDevice::BufferType::GPU_BUFFER,
+                             BufferType::GPU_BUFFER,
                              vertexBuffer,
                              vertexBufferAllocation);
 
-  vulkanDevice->copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+  vkContext->copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 
   vmaDestroyBuffer(
-    vulkanDevice->allocator, stagingBuffer, stagingBufferAllocation);
+    vkContext->allocator, stagingBuffer, stagingBufferAllocation);
 }
 
 void
-Model::createIndexBuffer(VkDeviceSize bufferSize)
+ModelDO::createIndexBuffer(VkDeviceSize bufferSize)
 {
   VkBuffer stagingBuffer;
   VkDeviceMemory stagingBufferMemory;
   VmaAllocation stagingBufferAllocation;
   void* data =
-    vulkanDevice->createBuffer(bufferSize,
+    vkContext->createBuffer(bufferSize,
                                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                               VulkanDevice::BufferType::STAGING_BUFFER,
+                               BufferType::STAGING_BUFFER,
                                stagingBuffer,
                                stagingBufferAllocation);
 
   memcpy(data, indices.data(), (size_t)bufferSize);
 
-  vulkanDevice->createBuffer(bufferSize,
+  vkContext->createBuffer(bufferSize,
                              VK_BUFFER_USAGE_TRANSFER_DST_BIT |
                                VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                             VulkanDevice::BufferType::GPU_BUFFER,
+                             BufferType::GPU_BUFFER,
                              indexBuffer,
                              indexBufferAllocation);
 
-  vulkanDevice->copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+  vkContext->copyBuffer(stagingBuffer, indexBuffer, bufferSize);
 
   vmaDestroyBuffer(
-    vulkanDevice->allocator, stagingBuffer, stagingBufferAllocation);
+    vkContext->allocator, stagingBuffer, stagingBufferAllocation);
 }
 
 void
-Model::cleanup()
+ModelDO::cleanup()
 {
-  if (vertexBuffer != VK_NULL_HANDLE && indexBuffer != VK_NULL_HANDLE &&
+    if (vertexBuffer != VK_NULL_HANDLE && indexBuffer != VK_NULL_HANDLE &&
       descriptorPool != VK_NULL_HANDLE) {
     vmaDestroyBuffer(
-      vulkanDevice->allocator, vertexBuffer, vertexBufferAllocation);
+      vkContext->allocator, vertexBuffer, vertexBufferAllocation);
     vmaDestroyBuffer(
-      vulkanDevice->allocator, indexBuffer, indexBufferAllocation);
+      vkContext->allocator, indexBuffer, indexBufferAllocation);
 
     vkDestroyDescriptorPool(
-      vulkanDevice->logicalDevice, descriptorPool, nullptr);
+      vkContext->logicalDevice, descriptorPool, nullptr);
   }
 }

@@ -4,6 +4,7 @@
 #include "engine/Skybox.h"
 #include "engine/Vertex.h"
 #include "engine/VulkanBase.h"
+#include <vulkan/vulkan_core.h>
 
 #ifdef WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32
@@ -15,6 +16,11 @@
 #include <cute_sound.h>
 
 #define VMA_IMPLEMENTATION
+#define VMA_DEBUG_DETECT_CORRUPTION 1
+#define VMA_DEBUG_MARGIN 16
+#define VMA_DEBUG_INITIALIZE_ALLOCATIONS 1
+#define VMA_RECORD_ALLOCATION_CALL_STACK 1
+#define VMA_DEBUG_LOG
 #include <vk_mem_alloc.h>
 
 #define GLM_FORCE_RADIANS
@@ -41,19 +47,11 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
+// TODO: remove this and all the vectors
 const int MAX_FRAMES_IN_FLIGHT = 1;
 
 // this needs to be aligned with the one in the shader
 const unsigned int NR_POINT_LIGHTS = 5;
-
-// positions of the point lights
-glm::vec3 pointLightPositions[] = { glm::vec3(0, 0, 0),
-                                    glm::vec3(0.0f, -2.0f, 0.0f),
-                                    glm::vec3(2.3f, -1.3f, -4.0f),
-                                    glm::vec3(-4.0f, -2.0f, -12.0f),
-                                    glm::vec3(0.0f, 0.0f, -3.0f) };
-
-const unsigned int NR_OBJECTS = 10;
 
 enum BufferType
 {
@@ -88,6 +86,15 @@ struct DirectionalLight
 struct PointLight
 {
   glm::vec4 position;
+  glm::vec4 color;
+};
+std::array<PointLight, NR_POINT_LIGHTS> pointLights{
+  glm::vec4(0, -3, 0, 1),
+  glm::vec4(5, 5, 5, 0),
+  // glm::vec4(5.0f, -0.0f, 0.0f, 1.0), glm::vec4(12.0f, 0.0f, 0.0f, 1.0),
+  // glm::vec4(2.3f, -0.3f, -4.0f, 1.0), glm::vec4(0.0, 1.0, 0.0, 1.0),
+  // glm::vec4(-4.0, -2.0, -12.0, 1.0), glm::vec4(1),
+  // glm::vec4(0.0, 0.0, -3.0, 1.0), glm::vec4(0.0, 0.0, 59.0, 1.0),
 };
 
 struct SpotLight
@@ -129,11 +136,18 @@ private:
   std::vector<VkImageView> swapChainImageViews;
   std::vector<VkFramebuffer> swapChainFramebuffers;
 
-  VkRenderPass renderPass;
+  FrameBufferAttachment* depthAttachment;
+  FrameBufferAttachment* colorAttachment;
+  VkSampler colorAttachmentSampler;
 
-  VkDescriptorSetLayout globalDescriptorSetLayout;
-  VkDescriptorPool globalDescriptorPool;
-  std::vector<VkDescriptorSet> globalDescriptorSets;
+  VkRenderPass renderPass;
+  VkDescriptorPool mainDescriptorPool;
+
+  VkDescriptorSetLayout descriptorSetLayoutAttachmentWrite;
+  std::vector<VkDescriptorSet> descriptorSetsAttachmentWrite;
+
+  VkDescriptorSetLayout descriptorSetLayoutAttachmentRead;
+  VkDescriptorSet descriptorSetsAttachmentRead;
 
   VkPipelineLayout mainPipelineLayout;
   VkPipeline mainGraphicsPipeline;
@@ -141,16 +155,14 @@ private:
   VkPipeline lightCubePipeline;
   VkPipelineLayout skyboxPipelineLayout;
   VkPipeline skyboxPipeline;
+  VkPipelineLayout postProcessingPipelineLayout;
+  VkPipeline postProcessingPipeline;
 
   VkCommandPool commandPool;
-
-  FrameBufferAttachment* depthAttachment;
 
   std::vector<VkBuffer> uniformBuffers;
   std::vector<VmaAllocation> uniformBuffersAllocation;
   std::vector<void*> uniformBuffersMapped;
-
-  std::vector<glm::mat4> lightMat;
 
   // lights
   std::vector<VkBuffer> directionalLightBuffers;
@@ -216,17 +228,18 @@ private:
     createCommandPool();
     createVulkanDevice();
 
-    createSwapChain();
-    createImageViews();
-    createRenderPass();
-    prepareModels();
-    prepareAudio();
-    createDepthResources();
-    createFramebuffers();
     createUniformBuffers();
     createDescriptorPool();
     createDescriptorSetLayout();
     createDescriptorSets();
+    createSwapChain();
+    createIntermediateAttachment();
+    createImageViews();
+    createRenderPass();
+    prepareModels();
+    // prepareAudio();
+    createDepthResources();
+    createFramebuffers();
     createGraphicsPipelines();
     createCommandBuffers();
     createSyncObjects();
@@ -254,7 +267,7 @@ private:
 
       updateCamera(delta_time.count());
 
-      cs_update(0);
+      // cs_update(0);
 
       drawFrame();
 
@@ -297,6 +310,7 @@ private:
     }
 
     delete depthAttachment;
+    delete colorAttachment;
 
     vkDestroySwapchainKHR(logicalDevice, swapChain, nullptr);
   }
@@ -304,6 +318,8 @@ private:
   void cleanup()
   {
     cleanupSwapChain();
+
+    vkDestroySampler(logicalDevice, colorAttachmentSampler, nullptr);
 
     vkDestroyPipeline(logicalDevice, mainGraphicsPipeline, nullptr);
     vkDestroyPipelineLayout(logicalDevice, mainPipelineLayout, nullptr);
@@ -313,6 +329,10 @@ private:
 
     vkDestroyPipeline(logicalDevice, lightCubePipeline, nullptr);
     vkDestroyPipelineLayout(logicalDevice, lightCubePipelineLayout, nullptr);
+
+    vkDestroyPipeline(logicalDevice, postProcessingPipeline, nullptr);
+    vkDestroyPipelineLayout(
+      logicalDevice, postProcessingPipelineLayout, nullptr);
 
     vkDestroyRenderPass(logicalDevice, renderPass, nullptr);
 
@@ -335,14 +355,13 @@ private:
     lightModels.clear();
     skybox.reset();
 
-    // vmaDestroyImage(allocator, depthImage, depthAllocation);
-
-    vkDestroyDescriptorPool(logicalDevice, globalDescriptorPool, nullptr);
+    vkDestroyDescriptorPool(logicalDevice, mainDescriptorPool, nullptr);
 
     vkDestroyDescriptorSetLayout(
-      logicalDevice, globalDescriptorSetLayout, nullptr);
+      logicalDevice, descriptorSetLayoutAttachmentWrite, nullptr);
+    vkDestroyDescriptorSetLayout(logicalDevice, Model::textureLayout, nullptr);
     vkDestroyDescriptorSetLayout(
-      vulkanDevice->logicalDevice, Model::textureLayout, nullptr);
+      logicalDevice, descriptorSetLayoutAttachmentRead, nullptr);
 
     vmaDestroyAllocator(allocator);
 
@@ -367,7 +386,35 @@ private:
 
     glfwTerminate();
 
-    cs_free_audio_source(voice);
+    // cs_free_audio_source(voice);
+  }
+
+  VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
+                               VkImageTiling tiling,
+                               VkFormatFeatureFlags features)
+  {
+    for (VkFormat format : candidates) {
+      VkFormatProperties props;
+      vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
+
+      if (tiling == VK_IMAGE_TILING_LINEAR &&
+          (props.linearTilingFeatures & features) == features) {
+        return format;
+      } else if (tiling == VK_IMAGE_TILING_OPTIMAL &&
+                 (props.optimalTilingFeatures & features) == features) {
+        return format;
+      }
+    }
+    throw std::runtime_error("failed to find supported format!");
+  }
+
+  VkFormat findDepthFormat()
+  {
+    return findSupportedFormat({ VK_FORMAT_D32_SFLOAT,
+                                 VK_FORMAT_D32_SFLOAT_S8_UINT,
+                                 VK_FORMAT_D24_UNORM_S8_UINT },
+                               VK_IMAGE_TILING_OPTIMAL,
+                               VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
   }
 
   bool hasStencilComponent(VkFormat format)
@@ -431,6 +478,7 @@ private:
     createSwapChain();
     createImageViews();
     createDepthResources();
+    createIntermediateAttachment();
     createFramebuffers();
   }
 
@@ -514,6 +562,55 @@ private:
     swapChainExtent = extent;
   }
 
+  void createIntermediateAttachment()
+  {
+    colorAttachment = new FrameBufferAttachment(
+      VK_FORMAT_R16G16B16A16_SFLOAT,
+      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+      swapChainExtent.width,
+      swapChainExtent.height,
+      vulkanDevice);
+
+    if (colorAttachmentSampler == VK_NULL_HANDLE) {
+
+      VkSamplerCreateInfo samplerInfo{};
+      samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+      samplerInfo.magFilter = VK_FILTER_LINEAR;
+      samplerInfo.minFilter = VK_FILTER_LINEAR;
+      samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+      samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+      samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+      samplerInfo.anisotropyEnable = VK_TRUE;
+      samplerInfo.maxAnisotropy = 1.0;
+      samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+      samplerInfo.unnormalizedCoordinates = VK_FALSE;
+      samplerInfo.compareEnable = VK_FALSE;
+      samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+      samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+      if (vkCreateSampler(
+            logicalDevice, &samplerInfo, nullptr, &colorAttachmentSampler) !=
+          VK_SUCCESS) {
+        throw std::runtime_error("failed to create texture sampler!");
+      }
+    }
+
+    VkDescriptorImageInfo imageInfo{};
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageInfo.imageView = colorAttachment->view;
+    imageInfo.sampler = colorAttachmentSampler;
+
+    VkWriteDescriptorSet descriptorWrite{};
+    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrite.dstSet = descriptorSetsAttachmentRead;
+    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorWrite.descriptorCount = 1;
+    descriptorWrite.dstBinding = 0;
+    descriptorWrite.pImageInfo = &imageInfo;
+
+    vkUpdateDescriptorSets(logicalDevice, 1, &descriptorWrite, 0, nullptr);
+  }
+
   void createImageViews()
   {
     swapChainImageViews.resize(swapChainImages.size());
@@ -526,120 +623,131 @@ private:
 
   void createRenderPass()
   {
-    // attachment for color
-    VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = swapChainImageFormat;
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    std::array<VkAttachmentDescription, 3> attachments{};
 
-    // attachment for depth
-    VkAttachmentDescription depthAttachment{};
-    depthAttachment.format = findDepthFormat();
-    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    depthAttachment.finalLayout =
+    attachments[0].format = swapChainImageFormat;
+    attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    attachments[1].format = VK_FORMAT_R16G16B16A16_SFLOAT;
+    attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[1].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    attachments[2].format = findDepthFormat();
+    attachments[2].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[2].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[2].finalLayout =
       VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-    VkAttachmentReference colorAttachmentRef{};
-    colorAttachmentRef.attachment = 0;
-    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    std::array<VkSubpassDescription, 2> subpassDescriptions{};
 
-    VkAttachmentReference depthAttachmentRef{};
-    depthAttachmentRef.attachment = 1;
-    depthAttachmentRef.layout =
-      VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    /*
+                First subpass
+                Fill the color and depth attachments
+        */
+    VkAttachmentReference colorReference = {
+      1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+    VkAttachmentReference depthReference = {
+      2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
 
-    VkSubpassDescription subpass{};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorAttachmentRef;
-    subpass.pDepthStencilAttachment = &depthAttachmentRef;
+    subpassDescriptions[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpassDescriptions[0].colorAttachmentCount = 1;
+    subpassDescriptions[0].pColorAttachments = &colorReference;
+    subpassDescriptions[0].pDepthStencilAttachment = &depthReference;
 
-    VkSubpassDependency dependency{};
-    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                              VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependency.srcAccessMask = 0;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                              VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                               VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    /*
+                Second subpass
+                Input attachment read and swap chain color attachment write
+        */
 
-    std::array<VkAttachmentDescription, 2> attachments = { colorAttachment,
-                                                           depthAttachment };
+    // Color reference (target) for this sub pass is the swap chain color
+    // attachment
+    VkAttachmentReference colorReferenceSwapchain = {
+      0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+
+    subpassDescriptions[1].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpassDescriptions[1].colorAttachmentCount = 1;
+    subpassDescriptions[1].pColorAttachments = &colorReferenceSwapchain;
+
+    // Color and depth attachment written to in first sub pass will be used as
+    // input attachments to be read in the fragment shader
+    VkAttachmentReference inputReferences[2];
+    inputReferences[0] = { 1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+    inputReferences[1] = { 2, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+
+    // Use the attachments filled in the first pass as input attachments
+    subpassDescriptions[1].inputAttachmentCount = 2;
+    subpassDescriptions[1].pInputAttachments = inputReferences;
+
+    /*
+                Subpass dependencies for layout transitions
+        */
+    std::array<VkSubpassDependency, 3> dependencies;
+
+    dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[0].dstSubpass = 0;
+    dependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    dependencies[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    dependencies[0].dstStageMask =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+      VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependencies[0].dstAccessMask =
+      VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+      VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+      VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    // This dependency transitions the input attachment from color attachment to
+    // shader read
+    dependencies[1].srcSubpass = 0;
+    dependencies[1].dstSubpass = 1;
+    dependencies[1].srcStageMask =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[1].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    dependencies[2].srcSubpass = 0;
+    dependencies[2].dstSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[2].srcStageMask =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[2].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    dependencies[2].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                                    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[2].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    dependencies[2].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
     VkRenderPassCreateInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
     renderPassInfo.pAttachments = attachments.data();
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = 1;
-    renderPassInfo.pDependencies = &dependency;
+    renderPassInfo.subpassCount =
+      static_cast<uint32_t>(subpassDescriptions.size());
+    renderPassInfo.pSubpasses = subpassDescriptions.data();
+    renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+    renderPassInfo.pDependencies = dependencies.data();
 
     if (vkCreateRenderPass(
           logicalDevice, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
       throw std::runtime_error("failed to create render pass!");
-    }
-  }
-
-  void createDescriptorSetLayout()
-  {
-    VkDescriptorSetLayoutBinding uboLayoutBinding{};
-    uboLayoutBinding.binding = 0;
-    uboLayoutBinding.descriptorCount = 1;
-    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboLayoutBinding.pImmutableSamplers = nullptr;
-    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    VkDescriptorSetLayoutBinding directionalLightLayoutBinding{};
-    directionalLightLayoutBinding.binding = 4;
-    directionalLightLayoutBinding.descriptorCount = 1;
-    directionalLightLayoutBinding.descriptorType =
-      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    directionalLightLayoutBinding.pImmutableSamplers = nullptr;
-    directionalLightLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutBinding pointLightLayoutBinding{};
-    pointLightLayoutBinding.binding = 5;
-    pointLightLayoutBinding.descriptorCount = 1;
-    pointLightLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    pointLightLayoutBinding.pImmutableSamplers = nullptr;
-    pointLightLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutBinding spotLightLayoutBinding{};
-    spotLightLayoutBinding.binding = 6;
-    spotLightLayoutBinding.descriptorCount = 1;
-    spotLightLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    spotLightLayoutBinding.pImmutableSamplers = nullptr;
-    spotLightLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    std::array<VkDescriptorSetLayoutBinding, 4> bindings = {
-      uboLayoutBinding,
-      directionalLightLayoutBinding,
-      pointLightLayoutBinding,
-      spotLightLayoutBinding
-    };
-
-    VkDescriptorSetLayoutCreateInfo layoutInfo{};
-
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-    layoutInfo.pBindings = bindings.data();
-
-    if (vkCreateDescriptorSetLayout(
-          logicalDevice, &layoutInfo, nullptr, &globalDescriptorSetLayout) !=
-        VK_SUCCESS) {
-      throw std::runtime_error("failed to create descriptor set layout!");
     }
   }
 
@@ -653,30 +761,72 @@ private:
   {
     std::string shaderPath = SHADER_PATH;
 
-    VkDescriptorSetLayout mainLayouts[] = { globalDescriptorSetLayout,
+    VkPushConstantRange modelMatrixRange{};
+    modelMatrixRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    modelMatrixRange.offset = 0;
+    modelMatrixRange.size = 64;
+
+    std::vector<VkPushConstantRange> pushConstants;
+    pushConstants.push_back(modelMatrixRange);
+    VkDescriptorSetLayout mainLayouts[] = { descriptorSetLayoutAttachmentWrite,
                                             Model::textureLayout };
-    createPipeline(shaderPath + "demo/built/texture_vert.spv",
-                   shaderPath + "demo/built/texture_frag.spv",
+    createPipeline(shaderPath + "hdr/built/texture_vert.spv",
+                   shaderPath + "hdr/built/texture_frag.spv",
                    mainPipelineLayout,
                    mainGraphicsPipeline,
                    mainLayouts,
-                   2);
-    VkDescriptorSetLayout lightLayouts[] = { globalDescriptorSetLayout };
-    createPipeline(shaderPath + "demo/built/light_cube_vert.spv",
-                   shaderPath + "demo/built/light_cube_frag.spv",
+                   2,
+                   0,
+                   pushConstants);
+
+    VkPushConstantRange lightCubeRange{};
+    lightCubeRange.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    lightCubeRange.offset = 64;
+    lightCubeRange.size = 16;
+
+    std::vector<VkPushConstantRange> lightCubePushConstants;
+    lightCubePushConstants.push_back(modelMatrixRange);
+    lightCubePushConstants.push_back(lightCubeRange);
+    VkDescriptorSetLayout lightLayouts[] = {
+      descriptorSetLayoutAttachmentWrite
+    };
+    createPipeline(shaderPath + "hdr/built/light_cube_vert.spv",
+                   shaderPath + "hdr/built/light_cube_frag.spv",
                    lightCubePipelineLayout,
                    lightCubePipeline,
                    lightLayouts,
-                   1);
-    VkDescriptorSetLayout skyboxLayouts[] = { globalDescriptorSetLayout,
-                                              Skybox::skyboxLayout };
-    createPipeline(shaderPath + "demo/built/skybox_vert.spv",
-                   shaderPath + "demo/built/skybox_frag.spv",
+                   1,
+                   0,
+                   lightCubePushConstants);
+    VkDescriptorSetLayout skyboxLayouts[] = {
+      descriptorSetLayoutAttachmentWrite, Skybox::skyboxLayout
+    };
+
+    std::vector<VkPushConstantRange> empty;
+    createPipeline(shaderPath + "hdr/built/skybox_vert.spv",
+                   shaderPath + "hdr/built/skybox_frag.spv",
                    skyboxPipelineLayout,
                    skyboxPipeline,
                    skyboxLayouts,
                    2,
+                   0,
+                   pushConstants,
                    VK_CULL_MODE_FRONT_BIT);
+
+    VkDescriptorSetLayout postProcessingLayout[] = {
+      descriptorSetLayoutAttachmentRead
+    };
+
+    createPipeline(shaderPath + "hdr/built/postprocessing_vert.spv",
+                   shaderPath + "hdr/built/postprocessing_frag.spv",
+                   postProcessingPipelineLayout,
+                   postProcessingPipeline,
+                   postProcessingLayout,
+                   1,
+                   1,
+                   empty,
+                   VK_CULL_MODE_NONE,
+                   false);
   }
 
   void createPipeline(std::string vertexShader,
@@ -685,7 +835,10 @@ private:
                       VkPipeline& pipeline,
                       VkDescriptorSetLayout* pLayouts,
                       uint32_t numLayouts,
-                      VkCullModeFlags cullMode = VK_CULL_MODE_BACK_BIT)
+                      uint32_t subPass,
+                      std::vector<VkPushConstantRange> pushConstants,
+                      VkCullModeFlags cullMode = VK_CULL_MODE_BACK_BIT,
+                      bool usesVertices = true)
   {
     auto vertShaderCode = readFile(vertexShader);
     auto fragShaderCode = readFile(fragmentShader);
@@ -713,15 +866,18 @@ private:
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType =
       VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    if (usesVertices) {
 
-    auto bindingDescription = Vertex::getBindingDescription();
-    auto attributeDescriptions = Vertex::getAttributeDescriptions();
+      auto bindingDescription = Vertex::getBindingDescription();
+      auto attributeDescriptions = Vertex::getAttributeDescriptions();
 
-    vertexInputInfo.vertexBindingDescriptionCount = 1;
-    vertexInputInfo.vertexAttributeDescriptionCount =
-      static_cast<uint32_t>(attributeDescriptions.size());
-    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+      vertexInputInfo.vertexBindingDescriptionCount = 1;
+      vertexInputInfo.vertexAttributeDescriptionCount =
+        static_cast<uint32_t>(attributeDescriptions.size());
+      vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+      vertexInputInfo.pVertexAttributeDescriptions =
+        attributeDescriptions.data();
+    }
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType =
@@ -742,7 +898,6 @@ private:
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizer.lineWidth = 1.0f;
     rasterizer.cullMode = cullMode;
-    // rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;
 
@@ -787,10 +942,10 @@ private:
                                                   VK_DYNAMIC_STATE_SCISSOR };
 
     // allocate push constant
-    VkPushConstantRange range{};
-    range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    range.offset = 0;
-    range.size = 64;
+    // VkPushConstantRange range{};
+    // range.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    // range.offset = 0;
+    // range.size = 64;
 
     VkPipelineDynamicStateCreateInfo dynamicState{};
     dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -802,8 +957,9 @@ private:
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = numLayouts;
     pipelineLayoutInfo.pSetLayouts = pLayouts;
-    pipelineLayoutInfo.pushConstantRangeCount = 1;
-    pipelineLayoutInfo.pPushConstantRanges = &range;
+    pipelineLayoutInfo.pushConstantRangeCount =
+      static_cast<uint32_t>(pushConstants.size());
+    pipelineLayoutInfo.pPushConstantRanges = pushConstants.data();
 
     if (vkCreatePipelineLayout(
           logicalDevice, &pipelineLayoutInfo, nullptr, &pipelineLayout) !=
@@ -824,7 +980,7 @@ private:
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = pipelineLayout;
     pipelineInfo.renderPass = renderPass;
-    pipelineInfo.subpass = 0;
+    pipelineInfo.subpass = subPass;
     pipelineInfo.pDepthStencilState = &depthStencil;
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
@@ -846,9 +1002,9 @@ private:
     swapChainFramebuffers.resize(swapChainImageViews.size());
 
     for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-      std::array<VkImageView, 2> attachments = { swapChainImageViews[i],
+      std::array<VkImageView, 3> attachments = { swapChainImageViews[i],
+                                                 colorAttachment->view,
                                                  depthAttachment->view };
-      // depthImageView };
 
       VkFramebufferCreateInfo framebufferInfo{};
       framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -910,24 +1066,24 @@ private:
 
     Model plane = Model(modelPath + "for_demo/plane.glb",
                         vulkanDevice,
-                        glm::vec3(0.0, 1.0f, -3.0f),
+                        glm::vec3(0.0, 1.0f, 0.0f),
                         glm::vec3(0),
                         0,
                         glm::vec3(100.0f));
     models.push_back(std::move(plane));
-    Model desk = Model(modelPath + "for_demo/prova_optimized.glb",
-                       vulkanDevice,
-                       glm::vec3(0.0, 1.0f, -3.0f),
-                       glm::vec3(0.0, 1.0, 0.0),
-                       180.0f,
-                       glm::vec3(1.0f));
+    // Model desk = Model(modelPath + "for_demo/prova_optimized.glb",
+    //                    vulkanDevice,
+    //                    glm::vec3(0.0, 1.0f, -3.0f),
+    //                    glm::vec3(0.0, 1.0, 0.0),
+    //                    180.0f,
+    //                    glm::vec3(1.0f));
     // Model desk = Model(modelPath + "for_demo/prova.glb",
     //                    vulkanDevice,
     //                    glm::vec3(0.0, 1.0f, -3.0f),
     //                    glm::vec3(0.0, 1.0, 0.0),
     //                    180.0f,
     //                    glm::vec3(1.0f));
-    models.push_back(std::move(desk));
+    // models.push_back(std::move(desk));
 
     Model rare = Model(modelPath + "for_demo/rare_logo/rare.glb",
                        vulkanDevice,
@@ -940,7 +1096,7 @@ private:
     for (int i = 0; i < NR_POINT_LIGHTS; i++) {
       Model cube = Model(modelPath + "cube.glb",
                          vulkanDevice,
-                         pointLightPositions[i],
+                         pointLights[i].position,
                          glm::vec3(0.0),
                          0,
                          glm::vec3(0.1f));
@@ -1030,20 +1186,13 @@ private:
                      spotLightBuffersAllocation[i]);
     }
 
-    for (int i = 0; i < NR_POINT_LIGHTS; i++) {
-      glm::mat4 model = glm::mat4(1.0);
-      model = glm::translate(model, pointLightPositions[i]);
-      model = glm::scale(model, glm::vec3(0.2f));
-      lightMat.push_back(model);
-    }
-
     // ------------------ LIGHTS ------------------
 
-    std::array<PointLight, NR_POINT_LIGHTS> pointLights{};
+    // std::array<PointLight, NR_POINT_LIGHTS> pointLights{};
 
-    for (int i = 0; i < NR_POINT_LIGHTS; i++) {
-      pointLights[i].position = glm::vec4(pointLightPositions[i], 1.0);
-    }
+    // for (int i = 0; i < NR_POINT_LIGHTS; i++) {
+    // pointLights[i].position = glm::vec4(pointLightPositions[i], 1.0);
+    // }
 
     // point lights
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -1065,39 +1214,120 @@ private:
 
   void createDescriptorPool()
   {
-    std::array<VkDescriptorPoolSize, 1> poolSizes{};
+    std::array<VkDescriptorPoolSize, 2> poolSizes{};
 
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount =
-      static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 4;
+    poolSizes[0].descriptorCount = 4;
+
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[1].descriptorCount = 1;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    poolInfo.maxSets = 2;
 
     if (vkCreateDescriptorPool(
-          logicalDevice, &poolInfo, nullptr, &globalDescriptorPool) !=
+          logicalDevice, &poolInfo, nullptr, &mainDescriptorPool) !=
         VK_SUCCESS) {
       throw std::runtime_error("failed to create descriptor pool!");
     }
   }
 
+  void createDescriptorSetLayout()
+  {
+    /* Descriptor layout for Attachment Write */
+    VkDescriptorSetLayoutBinding uboLayoutBinding{};
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.pImmutableSamplers = nullptr;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutBinding directionalLightLayoutBinding{};
+    directionalLightLayoutBinding.binding = 1;
+    directionalLightLayoutBinding.descriptorCount = 1;
+    directionalLightLayoutBinding.descriptorType =
+      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    directionalLightLayoutBinding.pImmutableSamplers = nullptr;
+    directionalLightLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutBinding pointLightLayoutBinding{};
+    pointLightLayoutBinding.binding = 2;
+    pointLightLayoutBinding.descriptorCount = 1;
+    pointLightLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    pointLightLayoutBinding.pImmutableSamplers = nullptr;
+    pointLightLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutBinding spotLightLayoutBinding{};
+    spotLightLayoutBinding.binding = 3;
+    spotLightLayoutBinding.descriptorCount = 1;
+    spotLightLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    spotLightLayoutBinding.pImmutableSamplers = nullptr;
+    spotLightLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    std::array<VkDescriptorSetLayoutBinding, 4> bindings = {
+      uboLayoutBinding,
+      directionalLightLayoutBinding,
+      pointLightLayoutBinding,
+      spotLightLayoutBinding
+    };
+
+    VkDescriptorSetLayoutCreateInfo layoutInfoAttachmentWrite{};
+    layoutInfoAttachmentWrite.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfoAttachmentWrite.bindingCount =
+      static_cast<uint32_t>(bindings.size());
+    layoutInfoAttachmentWrite.pBindings = bindings.data();
+
+    if (vkCreateDescriptorSetLayout(logicalDevice,
+                                    &layoutInfoAttachmentWrite,
+                                    nullptr,
+                                    &descriptorSetLayoutAttachmentWrite) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("failed to create descriptor set layout!");
+    }
+
+    /* Descriptor layout for Attachment Read */
+    VkDescriptorSetLayoutBinding attachmentBinding{};
+    attachmentBinding.binding = 0;
+    attachmentBinding.descriptorCount = 1;
+    attachmentBinding.descriptorType =
+      VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    attachmentBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfoAttachmentRead{};
+
+    layoutInfoAttachmentRead.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfoAttachmentRead.bindingCount = 1;
+    layoutInfoAttachmentRead.pBindings = &attachmentBinding;
+
+    if (vkCreateDescriptorSetLayout(logicalDevice,
+                                    &layoutInfoAttachmentRead,
+                                    nullptr,
+                                    &descriptorSetLayoutAttachmentRead) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("failed to create descriptor set layout!");
+    }
+  }
+
   void createDescriptorSets()
   {
-    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT,
-                                               globalDescriptorSetLayout);
+    /* descriptor sets for attachmentWrite */
+    std::vector<VkDescriptorSetLayout> layouts(
+      MAX_FRAMES_IN_FLIGHT, descriptorSetLayoutAttachmentWrite);
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = globalDescriptorPool;
+    allocInfo.descriptorPool = mainDescriptorPool;
     allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
     allocInfo.pSetLayouts = layouts.data();
 
-    globalDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-    if (vkAllocateDescriptorSets(logicalDevice,
-                                 &allocInfo,
-                                 globalDescriptorSets.data()) != VK_SUCCESS) {
+    descriptorSetsAttachmentWrite.resize(MAX_FRAMES_IN_FLIGHT);
+    if (vkAllocateDescriptorSets(
+          logicalDevice, &allocInfo, descriptorSetsAttachmentWrite.data()) !=
+        VK_SUCCESS) {
       throw std::runtime_error("failed to allocate descriptor sets!");
     }
 
@@ -1125,7 +1355,7 @@ private:
       std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
 
       descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-      descriptorWrites[0].dstSet = globalDescriptorSets[i];
+      descriptorWrites[0].dstSet = descriptorSetsAttachmentWrite[i];
       descriptorWrites[0].dstBinding = 0;
       descriptorWrites[0].dstArrayElement = 0;
       descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1133,24 +1363,24 @@ private:
       descriptorWrites[0].pBufferInfo = &uniformBufferInfo;
 
       descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-      descriptorWrites[1].dstSet = globalDescriptorSets[i];
-      descriptorWrites[1].dstBinding = 4;
+      descriptorWrites[1].dstSet = descriptorSetsAttachmentWrite[i];
+      descriptorWrites[1].dstBinding = 1;
       descriptorWrites[1].dstArrayElement = 0;
       descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
       descriptorWrites[1].descriptorCount = 1;
       descriptorWrites[1].pBufferInfo = &directionalLightBufferInfo;
 
       descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-      descriptorWrites[2].dstSet = globalDescriptorSets[i];
-      descriptorWrites[2].dstBinding = 5;
+      descriptorWrites[2].dstSet = descriptorSetsAttachmentWrite[i];
+      descriptorWrites[2].dstBinding = 2;
       descriptorWrites[2].dstArrayElement = 0;
       descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
       descriptorWrites[2].descriptorCount = 1;
       descriptorWrites[2].pBufferInfo = &pointLightBufferInfo;
 
       descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-      descriptorWrites[3].dstSet = globalDescriptorSets[i];
-      descriptorWrites[3].dstBinding = 6;
+      descriptorWrites[3].dstSet = descriptorSetsAttachmentWrite[i];
+      descriptorWrites[3].dstBinding = 3;
       descriptorWrites[3].dstArrayElement = 0;
       descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
       descriptorWrites[3].descriptorCount = 1;
@@ -1161,6 +1391,19 @@ private:
                              descriptorWrites.data(),
                              0,
                              nullptr);
+    }
+
+    /* descriptor sets for attachmentRead */
+    VkDescriptorSetAllocateInfo allocInfoRead{};
+    allocInfoRead.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfoRead.descriptorPool = mainDescriptorPool;
+    allocInfoRead.descriptorSetCount = 1;
+    allocInfoRead.pSetLayouts = &descriptorSetLayoutAttachmentRead;
+
+    if (vkAllocateDescriptorSets(logicalDevice,
+                                 &allocInfoRead,
+                                 &descriptorSetsAttachmentRead) != VK_SUCCESS) {
+      throw std::runtime_error("failed to allocate descriptor sets!");
     }
   }
 
@@ -1298,9 +1541,10 @@ private:
     renderPassInfo.renderArea.offset = { 0, 0 };
     renderPassInfo.renderArea.extent = swapChainExtent;
 
-    std::array<VkClearValue, 2> clearValues{};
+    std::array<VkClearValue, 3> clearValues{};
     clearValues[0].color = { { 0.21f, 0.68f, 0.8f, 1.0f } };
-    clearValues[1].depthStencil = { 1.0f, 0 };
+    clearValues[1].color = { { 0.21f, 0.68f, 0.8f, 1.0f } };
+    clearValues[2].depthStencil = { 1.0f, 0 };
 
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
@@ -1331,7 +1575,7 @@ private:
                             mainPipelineLayout,
                             0,
                             1,
-                            &globalDescriptorSets[currentFrame],
+                            &descriptorSetsAttachmentWrite[currentFrame],
                             0,
                             nullptr);
 
@@ -1345,17 +1589,64 @@ private:
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-    for (auto& lightModel : lightModels) {
-      lightModel.draw(commandBuffer, lightCubePipelineLayout, false);
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            lightCubePipelineLayout,
+                            0,
+                            1,
+                            &descriptorSetsAttachmentWrite[currentFrame],
+                            0,
+                            nullptr);
+
+    for (int i = 0; i < lightModels.size(); i++) {
+      struct LightColor
+      {
+        glm::vec4 lightColor;
+      };
+
+      LightColor lightColor;
+      glm::vec3 color = pointLights[i].color;
+      lightColor.lightColor = glm::vec4(color, 1.0);
+      vkCmdPushConstants(commandBuffer,
+                         lightCubePipelineLayout,
+                         VK_SHADER_STAGE_FRAGMENT_BIT,
+                         64,
+                         16,
+                         &lightColor);
+
+      lightModels[i].draw(commandBuffer, lightCubePipelineLayout, false);
     }
 
     // -------------------- RENDER SKYBOX --------------------
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            skyboxPipelineLayout,
+                            0,
+                            1,
+                            &descriptorSetsAttachmentWrite[currentFrame],
+                            0,
+                            nullptr);
 
     vkCmdBindPipeline(
       commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxPipeline);
 
     skybox->draw(
       commandBuffer, skyboxPipelineLayout, camera->getCameraMatrix());
+
+    vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+
+    vkCmdBindPipeline(
+      commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, postProcessingPipeline);
+
+    vkCmdBindDescriptorSets(commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            postProcessingPipelineLayout,
+                            0,
+                            1,
+                            &descriptorSetsAttachmentRead,
+                            0,
+                            nullptr);
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
 
@@ -1401,8 +1692,13 @@ private:
 
     // position, target, up
     sUBO.view = camera->getCameraMatrix();
-    sUBO.proj = glm::perspective(
-      glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
+    sUBO.proj = glm::perspective(glm::radians(45.0f),
+                                 (float)swapChainExtent.width /
+                                   (float)swapChainExtent.height,
+                                 0.1f,
+                                 100.0f);
+    // sUBO.proj = glm::perspective(
+    //   glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
     sUBO.cameraPos = glm::vec4(camera->getCameraPos().x,
                                camera->getCameraPos().y,
                                camera->getCameraPos().z,

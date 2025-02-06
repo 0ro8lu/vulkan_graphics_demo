@@ -1,9 +1,9 @@
 #version 450
 
-layout(set = 1, binding = 0) uniform sampler2D diffuseTexSampler;
-layout(set = 1, binding = 1) uniform sampler2D specularTexSampler;
+layout(set = 2, binding = 0) uniform sampler2D diffuseTexSampler;
+layout(set = 2, binding = 1) uniform sampler2D specularTexSampler;
 
-layout(binding = 1) uniform DirectionalLight{
+layout(set = 1, binding = 1) uniform DirectionalLight{
     vec4 direction;
 } directionalLight;
 
@@ -12,12 +12,12 @@ struct PointLight {
     vec4 color;
 };
 
-#define NR_POINT_LIGHTS 5
-layout(binding = 2) uniform PointLights {
+#define NR_POINT_LIGHTS 2
+layout(set = 1, binding = 2) uniform PointLights {
     PointLight pointLights[NR_POINT_LIGHTS];
 } pointLights;
 
-layout(binding = 3) uniform SpotLight{
+layout(set = 1, binding = 3) uniform SpotLight{
     vec4 direction;
     vec4 position;
 } spotLight;
@@ -45,6 +45,7 @@ void main() {
     vec3 viewDir = normalize(viewPos - fragPos);
 
     vec3 result = 0.2 * CalcDirLight(vec3(directionalLight.direction.xyz), norm, viewDir);
+    // vec3 result = vec3(0);
 
     for(int i = 0; i < NR_POINT_LIGHTS; i++) {
         result += CalcPointLight(vec3(pointLights.pointLights[i].position.xyz), vec3(pointLights.pointLights[i].color.xyz), norm, fragPos, viewDir);
