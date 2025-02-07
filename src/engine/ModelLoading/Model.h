@@ -2,6 +2,7 @@
 #define _MODEL_H_
 
 #include "engine/ModelLoading/Mesh.h"
+#include "engine/VulkanContext.h"
 
 #include <assimp/Importer.hpp>
 #include <assimp/material.h>
@@ -25,7 +26,7 @@ class Model
 {
 public:
   Model(const std::string& filePath,
-        VulkanDevice* vulkanDevice,
+        VulkanContext* vulkanContext,
         glm::vec3 pos = glm::vec3(0),
         glm::vec3 rotationAxis = glm::vec3(0),
         float rotationAngle = 0.0f,
@@ -38,7 +39,6 @@ public:
   Model(Model&& other) noexcept;
   Model& operator=(Model&& other) noexcept;
 
-  Model(VulkanDevice* vulkanDevice); // todo remove this later
   ~Model();
 
   const glm::mat4& getModelMatrix() const { return modelMatrix; }
@@ -50,10 +50,6 @@ public:
   std::unordered_map<aiMesh*, std::unique_ptr<Mesh>> uniqueMeshes;
   std::vector<MeshInstance> meshInstances;
 
-  void draw(VkCommandBuffer commandBuffer,
-            VkPipelineLayout pipelineLayout,
-            bool shouldRenderTexture = false);
-
   std::vector<Vertex> vertices;
   VkBuffer vertexBuffer = VK_NULL_HANDLE;
 
@@ -63,13 +59,13 @@ public:
   static VkDescriptorSetLayout textureLayout;
 
 private:
-  VulkanDevice* vulkanDevice;
+  VulkanContext* vkContext;
 
   glm::mat4 modelMatrix = glm::mat4(1.0);
   inline void applyTransform(const glm::mat4& transform);
 
   VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-  void setupDescriptors();
+  void setupDescriptors(); 
 
   void loadModel(const std::string& filePath);
   void processNode(aiNode* node,
@@ -85,7 +81,6 @@ private:
                    Texture& texture,
                    const aiScene* scene,
                    aiTextureType type);
-  void printMaterialTypes(const aiScene* scene);
 
   unsigned int vertexCount;
 

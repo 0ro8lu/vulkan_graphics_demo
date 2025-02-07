@@ -1,19 +1,17 @@
-#include "Skybox.h"
-#include "engine/ModelLoading/Model.h"
-#include "engine/VulkanDevice.h"
+#include "engine/Skybox.h"
 
-#include <memory>
 #include <stb_image.h>
 #include <stdexcept>
 #include <vector>
 
 VkDescriptorSetLayout Skybox::skyboxLayout = VK_NULL_HANDLE;
 
-Skybox::Skybox(VulkanDevice* vulkanDevice, std::array<std::string, 6> filePaths)
-  : vulkanDevice(vulkanDevice)
+Skybox::Skybox(VulkanContext* vkContext,
+                                   std::array<std::string, 6> filePaths)
+  : vkContext(vkContext)
 {
   std::string modelPath = MODEL_PATH;
-  cube = std::make_unique<Model>(modelPath + "cube.glb", vulkanDevice);
+  cube = std::make_unique<Model>(modelPath + "cube.glb", vkContext);
 
   int texWidth, texHeight, texChannels;
 
@@ -41,12 +39,12 @@ Skybox::Skybox(VulkanDevice* vulkanDevice, std::array<std::string, 6> filePaths)
   VkBuffer stagingBuffer;
   VmaAllocation stagingBufferAllocation;
 
-  char* data = static_cast<char*>(
-    vulkanDevice->createBuffer(imageSize * filePaths.size(),
-                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                               VulkanDevice::BufferType::STAGING_BUFFER,
-                               stagingBuffer,
-                               stagingBufferAllocation));
+  char* data =
+    static_cast<char*>(vkContext->createBuffer(imageSize * filePaths.size(),
+                                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                               BufferType::STAGING_BUFFER,
+                                               stagingBuffer,
+                                               stagingBufferAllocation));
 
   size_t byteOffset = 0;
   std::vector<size_t> byteOffsets;
@@ -97,7 +95,7 @@ Skybox::Skybox(VulkanDevice* vulkanDevice, std::array<std::string, 6> filePaths)
   imageAllocCreateInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
   imageAllocCreateInfo.priority = 1.0f;
 
-  if (vmaCreateImage(vulkanDevice->allocator,
+  if (vmaCreateImage(vkContext->allocator,
                      &imageInfo,
                      &imageAllocCreateInfo,
                      &image,
@@ -134,14 +132,14 @@ Skybox::Skybox(VulkanDevice* vulkanDevice, std::array<std::string, 6> filePaths)
   viewInfo.subresourceRange.layerCount = 6;
   viewInfo.subresourceRange.levelCount = 1;
 
-  if (vkCreateImageView(
-        vulkanDevice->logicalDevice, &viewInfo, nullptr, &view) != VK_SUCCESS) {
+  if (vkCreateImageView(vkContext->logicalDevice, &viewInfo, nullptr, &view) !=
+      VK_SUCCESS) {
     throw std::runtime_error("failed to create texture image view!");
   }
 
   // -------------------- CREATE SAMPLER --------------------
   VkPhysicalDeviceProperties properties{};
-  vkGetPhysicalDeviceProperties(vulkanDevice->physicalDevice, &properties);
+  vkGetPhysicalDeviceProperties(vkContext->physicalDevice, &properties);
 
   VkSamplerCreateInfo samplerInfo{};
   samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -160,37 +158,36 @@ Skybox::Skybox(VulkanDevice* vulkanDevice, std::array<std::string, 6> filePaths)
   samplerInfo.anisotropyEnable = VK_TRUE;
 
   if (vkCreateSampler(
-        vulkanDevice->logicalDevice, &samplerInfo, nullptr, &sampler) !=
+        vkContext->logicalDevice, &samplerInfo, nullptr, &sampler) !=
       VK_SUCCESS) {
     throw std::runtime_error("failed to create texture sampler!");
   }
 
   vmaDestroyBuffer(
-    vulkanDevice->allocator, stagingBuffer, stagingBufferAllocation);
+    vkContext->allocator, stagingBuffer, stagingBufferAllocation);
 
   setupDescriptors();
 }
 
 Skybox::~Skybox()
 {
-  vkDestroyImageView(vulkanDevice->logicalDevice, view, nullptr);
-  vmaDestroyImage(vulkanDevice->allocator, image, imageAllocation);
-  vkDestroySampler(vulkanDevice->logicalDevice, sampler, nullptr);
+  vkDestroyImageView(vkContext->logicalDevice, view, nullptr);
+  vmaDestroyImage(vkContext->allocator, image, imageAllocation);
+  vkDestroySampler(vkContext->logicalDevice, sampler, nullptr);
 
-  vkDestroyDescriptorSetLayout(
-    vulkanDevice->logicalDevice, skyboxLayout, nullptr);
+  vkDestroyDescriptorSetLayout(vkContext->logicalDevice, skyboxLayout, nullptr);
 
-  vkDestroyDescriptorPool(vulkanDevice->logicalDevice, descriptorPool, nullptr);
+  vkDestroyDescriptorPool(vkContext->logicalDevice, descriptorPool, nullptr);
 }
 
 void
 Skybox::transitionImageLayout(VkImage image,
-                              VkFormat format,
-                              std::vector<size_t> offsets,
-                              VkImageLayout oldLayout,
-                              VkImageLayout newLayout)
+                                        VkFormat format,
+                                        std::vector<size_t> offsets,
+                                        VkImageLayout oldLayout,
+                                        VkImageLayout newLayout)
 {
-  VkCommandBuffer commandBuffer = vulkanDevice->beginSingleTimeCommands();
+  VkCommandBuffer commandBuffer = vkContext->beginSingleTimeCommands();
 
   // -------------------- TRANSITION LAYOUT --------------------
   VkImageMemoryBarrier barrier{};
@@ -238,17 +235,17 @@ Skybox::transitionImageLayout(VkImage image,
                        1,
                        &barrier);
 
-  vulkanDevice->endSingleTimeCommands(commandBuffer);
+  vkContext->endSingleTimeCommands(commandBuffer);
 }
 
 void
 Skybox::copyBufferToImage(VkBuffer buffer,
-                          VkImage image,
-                          std::vector<size_t> offsets,
-                          uint32_t width,
-                          uint32_t height)
+                                    VkImage image,
+                                    std::vector<size_t> offsets,
+                                    uint32_t width,
+                                    uint32_t height)
 {
-  VkCommandBuffer commandBuffer = vulkanDevice->beginSingleTimeCommands();
+  VkCommandBuffer commandBuffer = vkContext->beginSingleTimeCommands();
 
   std::vector<VkBufferImageCopy> bufferCopyRegions;
   for (int i = 0; i < offsets.size(); i++) {
@@ -271,7 +268,7 @@ Skybox::copyBufferToImage(VkBuffer buffer,
                          static_cast<uint32_t>(bufferCopyRegions.size()),
                          bufferCopyRegions.data());
 
-  vulkanDevice->endSingleTimeCommands(commandBuffer);
+  vkContext->endSingleTimeCommands(commandBuffer);
 }
 
 void
@@ -290,7 +287,7 @@ Skybox::setupDescriptors()
   poolInfo.maxSets = 1;
 
   if (vkCreateDescriptorPool(
-        vulkanDevice->logicalDevice, &poolInfo, nullptr, &descriptorPool) !=
+        vkContext->logicalDevice, &poolInfo, nullptr, &descriptorPool) !=
       VK_SUCCESS) {
     throw std::runtime_error("failed to create descriptor pool!");
   }
@@ -314,10 +311,11 @@ Skybox::setupDescriptors()
     layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
     layoutInfo.pBindings = bindings.data();
 
-    if (vkCreateDescriptorSetLayout(vulkanDevice->logicalDevice,
+    if (vkCreateDescriptorSetLayout(vkContext->logicalDevice,
                                     &layoutInfo,
                                     nullptr,
-                                    &Skybox::skyboxLayout) != VK_SUCCESS) {
+                                    &Skybox::skyboxLayout) !=
+        VK_SUCCESS) {
       throw std::runtime_error("failed to create descriptor set layout!");
     }
   }
@@ -328,9 +326,8 @@ Skybox::setupDescriptors()
   allocInfo.descriptorSetCount = 1;
   allocInfo.pSetLayouts = &Skybox::skyboxLayout;
 
-  if (vkAllocateDescriptorSets(vulkanDevice->logicalDevice,
-                               &allocInfo,
-                               &descriptorSet) != VK_SUCCESS) {
+  if (vkAllocateDescriptorSets(
+        vkContext->logicalDevice, &allocInfo, &descriptorSet) != VK_SUCCESS) {
     throw std::runtime_error("failed to allocate descriptor sets!");
   }
 
@@ -351,27 +348,9 @@ Skybox::setupDescriptors()
   descriptorWrites[0].descriptorCount = 1;
   descriptorWrites[0].pImageInfo = &cubemapImageInfo;
 
-  vkUpdateDescriptorSets(vulkanDevice->logicalDevice,
+  vkUpdateDescriptorSets(vkContext->logicalDevice,
                          static_cast<uint32_t>(descriptorWrites.size()),
                          descriptorWrites.data(),
                          0,
                          nullptr);
-}
-
-void
-Skybox::draw(VkCommandBuffer commandBuffer,
-             VkPipelineLayout pipelineLayout,
-             glm::mat4 cameraView)
-{
-
-  vkCmdBindDescriptorSets(commandBuffer,
-                          VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          pipelineLayout,
-                          1,
-                          1,
-                          &descriptorSet,
-                          0,
-                          nullptr);
-
-  cube->draw(commandBuffer, pipelineLayout, false);
 }

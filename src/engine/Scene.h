@@ -2,13 +2,13 @@
 #define _SCENE_H_
 
 #include "engine/Camera3D.h"
-#include "engine/ModelLoading/ModelRefactored.h"
+#include "engine/ModelLoading/Model.h"
+#include "engine/Skybox.h"
 #include "engine/VulkanContext.h"
 
-#include <vector>
+#include <array>
 
-const uint32_t MAX_POINT_LIGHTS = 2;
-// const uint32_t MAX_POINT_LIGHTS = 10;
+const uint32_t MAX_POINT_LIGHTS = 5;
 const uint32_t MAX_SPOT_LIGHTS = 10;
 
 class Scene
@@ -26,11 +26,14 @@ public:
   VkDescriptorSet cameraUBODescriptorset;
   VkDescriptorSet lightsUBODescriptorset;
 
-  std::vector<ModelDO> models;
+  std::vector<Model> models;
+  std::vector<Model> lightCubes;
 
-  std::vector<PointLight> pointLights;
+  Skybox* skybox;
+
+  std::array<PointLight, MAX_POINT_LIGHTS> pointLights;
   DirectionalLight directionalLight;
-  std::vector<SpotLight> spotLights;
+  std::array<SpotLight, MAX_SPOT_LIGHTS> spotLights;
 
   Camera3D* camera;
 

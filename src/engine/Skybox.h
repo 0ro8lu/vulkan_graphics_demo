@@ -8,38 +8,33 @@
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
 
-#include <vulkan/vulkan_core.h>
-
-#include "VulkanDevice.h"
 #include "engine/ModelLoading/Model.h"
+#include "engine/VulkanContext.h"
 
 class Skybox
 {
 public:
-  Skybox(VulkanDevice* vulkanDevice, std::array<std::string, 6> filePaths);
+  Skybox(VulkanContext* vkContext,
+                   std::array<std::string, 6> filePaths);
   ~Skybox();
 
   static VkDescriptorSetLayout skyboxLayout;
 
-  void draw(VkCommandBuffer commandBuffer,
-            VkPipelineLayout pipelineLayout,
-            glm::mat4 cameraView);
-
+  VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
   void update(glm::mat4 viewMatrix);
 
+  std::unique_ptr<Model> cube;
+
 private:
-  VulkanDevice* vulkanDevice;
+  VulkanContext* vkContext;
 
   VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-  VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
 
   VkImage image = VK_NULL_HANDLE;
   VkImageView view = VK_NULL_HANDLE;
   VkSampler sampler = VK_NULL_HANDLE;
 
   VmaAllocation imageAllocation = VK_NULL_HANDLE;
-
-  std::unique_ptr<Model> cube;
 
   void transitionImageLayout(VkImage image,
                              VkFormat format,

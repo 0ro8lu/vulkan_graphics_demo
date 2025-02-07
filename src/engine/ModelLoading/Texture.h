@@ -3,17 +3,16 @@
 
 #include <stb_image.h>
 
-#include <stdexcept>
 #include <string>
 
-#include "engine/VulkanDevice.h"
+#include "engine/VulkanContext.h"
 
 class Texture
 {
 public:
   Texture();
-  Texture(VulkanDevice* vulkanDevice, unsigned char* data, size_t size);
-  Texture(VulkanDevice* vulkanDevice, std::string filePath);
+  Texture(VulkanContext* vkContext, unsigned char* data, size_t size);
+  Texture(VulkanContext* vkContext, std::string filePath);
 
   // try to delete copy constructor
   Texture(Texture& texture) = delete;
@@ -26,13 +25,13 @@ public:
     sampler = other.sampler;
     image = other.image;
     allocation = other.allocation;
-    vulkanDevice = other.vulkanDevice;
+    vkContext = other.vkContext;
 
     other.view = VK_NULL_HANDLE;
     other.sampler = VK_NULL_HANDLE;
     other.image = VK_NULL_HANDLE;
     other.allocation = VK_NULL_HANDLE;
-    other.vulkanDevice = nullptr;
+    other.vkContext = nullptr;
   }
 
   // Move assignment operator
@@ -45,13 +44,13 @@ public:
       sampler = other.sampler;
       image = other.image;
       allocation = other.allocation;
-      vulkanDevice = other.vulkanDevice;
+      vkContext = other.vkContext;
 
       other.view = VK_NULL_HANDLE;
       other.sampler = VK_NULL_HANDLE;
       other.image = VK_NULL_HANDLE;
       other.allocation = VK_NULL_HANDLE;
-      other.vulkanDevice = nullptr;
+      other.vkContext = nullptr;
     }
     return *this;
   }
@@ -65,7 +64,7 @@ private:
   VkImage image = VK_NULL_HANDLE;
   VmaAllocation allocation = VK_NULL_HANDLE;
 
-  VulkanDevice* vulkanDevice = nullptr;
+  VulkanContext* vkContext;
 
   void cleanup();
 

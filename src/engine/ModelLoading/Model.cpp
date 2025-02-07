@@ -1,18 +1,18 @@
 #include "engine/ModelLoading/Model.h"
+#include "engine/ModelLoading/Mesh.h"
 #include "engine/Vertex.h"
 
 #include <iostream>
-#include <stdexcept>
 
 VkDescriptorSetLayout Model::textureLayout = VK_NULL_HANDLE;
 
 Model::Model(const std::string& filePath,
-             VulkanDevice* vulkanDevice,
+              VulkanContext* vkContext,
              glm::vec3 pos,
              glm::vec3 rotationAxis,
              float rotationAngle,
              glm::vec3 scale)
-  : vulkanDevice(vulkanDevice)
+  : vkContext(vkContext)
 {
 
   modelMatrix = glm::translate(modelMatrix, pos);
@@ -27,7 +27,6 @@ Model::Model(const std::string& filePath,
   createVertexBuffer(sizeof(vertices[0]) * vertices.size());
   createIndexBuffer(sizeof(indices[0]) * indices.size());
 
-  // create the descriptor layout and descriptor sets
   setupDescriptors();
 
   // clean the vectors by destroying their contents and releasing the memory of
@@ -62,7 +61,7 @@ Model::Model(Model&& other) noexcept
   indexBufferAllocation = other.indexBufferAllocation;
   indexBufferMemory = other.indexBufferMemory;
 
-  vulkanDevice = other.vulkanDevice;
+  vkContext = other.vkContext;
   descriptorPool = other.descriptorPool;
 
   other.vertexBuffer = VK_NULL_HANDLE;
@@ -73,8 +72,7 @@ Model::Model(Model&& other) noexcept
   other.indexBufferAllocation = VK_NULL_HANDLE;
   other.indexBufferMemory = VK_NULL_HANDLE;
 
-  other.vulkanDevice = nullptr;
-  other.descriptorPool = VK_NULL_HANDLE;
+  other.vkContext = nullptr;
 }
 
 Model&
@@ -97,8 +95,7 @@ Model::operator=(Model&& other) noexcept
     indexBufferAllocation = other.indexBufferAllocation;
     indexBufferMemory = other.indexBufferMemory;
 
-    vulkanDevice = other.vulkanDevice;
-    descriptorPool = other.descriptorPool;
+    vkContext = other.vkContext;
   }
   return *this;
 }
@@ -117,31 +114,6 @@ Model::rotate(float angle, glm::vec3 rotationAxis)
   glm::mat4 newMat =
     glm::rotate(glm::mat4(1.0), glm::radians(angle), rotationAxis);
   applyTransform(newMat);
-}
-
-void
-Model::draw(VkCommandBuffer commandBuffer,
-            VkPipelineLayout pipelineLayout,
-            bool shouldRenderTexture)
-{
-  struct PushConstant
-  {
-    glm::mat4 model;
-  };
-
-  VkBuffer vertexBuffers[] = { vertexBuffer };
-  VkDeviceSize offsets[] = { 0 };
-  vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-
-  vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
-  for (const auto& instance : meshInstances) {
-    PushConstant pc;
-    pc.model = instance.transformation;
-    vkCmdPushConstants(
-      commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, 64, &pc);
-    instance.mesh->draw(commandBuffer, pipelineLayout, shouldRenderTexture);
-  }
 }
 
 void
@@ -283,13 +255,13 @@ Model::processMesh(aiMesh* mesh,
 
   std::string path = TEXTURE_PATH;
   if (diffuseTexture.view == VK_NULL_HANDLE) {
-    diffuseTexture = Texture(vulkanDevice, path + "empty_diffuse.png");
+    diffuseTexture = Texture(vkContext, path + "empty_diffuse.png");
   }
   if (specularTexture.view == VK_NULL_HANDLE) {
-    specularTexture = Texture(vulkanDevice, path + "empty_specular.png");
+    specularTexture = Texture(vkContext, path + "empty_specular.png");
   }
 
-  auto newMesh = std::make_unique<Mesh>(vulkanDevice,
+  auto newMesh = std::make_unique<Mesh>(vkContext,
                                         mesh->mNumFaces * 3,
                                         startIndex,
                                         std::move(diffuseTexture),
@@ -324,7 +296,7 @@ Model::loadTexture(aiMaterial* material,
       // mHeight == 0 means the texture is compressed
       if (aiTexture->mHeight == 0) {
         // Compressed texture data
-        texture = Texture(vulkanDevice,
+        texture = Texture(vkContext,
                           reinterpret_cast<unsigned char*>(aiTexture->pcData),
                           aiTexture->mWidth);
       } else {
@@ -336,14 +308,12 @@ Model::loadTexture(aiMaterial* material,
       }
     } else {
       // Load texture from file path
-      texture = Texture(vulkanDevice, str.C_Str());
+      texture = Texture(vkContext, str.C_Str());
     }
   }
 }
 
-void
-Model::setupDescriptors()
-{
+void Model::setupDescriptors() {
   // -------------------- DESCRIPTOR POOL --------------------
   VkDescriptorPoolSize poolSize;
 
@@ -357,7 +327,7 @@ Model::setupDescriptors()
   poolInfo.maxSets = meshInstances.size();
 
   if (vkCreateDescriptorPool(
-        vulkanDevice->logicalDevice, &poolInfo, nullptr, &descriptorPool) !=
+        vkContext->logicalDevice, &poolInfo, nullptr, &descriptorPool) !=
       VK_SUCCESS) {
     throw std::runtime_error("failed to create descriptor pool!");
   }
@@ -390,7 +360,7 @@ Model::setupDescriptors()
     layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
     layoutInfo.pBindings = bindings.data();
 
-    if (vkCreateDescriptorSetLayout(vulkanDevice->logicalDevice,
+    if (vkCreateDescriptorSetLayout(vkContext->logicalDevice,
                                     &layoutInfo,
                                     nullptr,
                                     &Model::textureLayout) != VK_SUCCESS) {
@@ -405,6 +375,7 @@ Model::setupDescriptors()
   }
 }
 
+
 void
 Model::createVertexBuffer(VkDeviceSize bufferSize)
 {
@@ -412,25 +383,25 @@ Model::createVertexBuffer(VkDeviceSize bufferSize)
   VkDeviceMemory stagingBufferMemory;
   VmaAllocation stagingBufferAllocation;
   void* data =
-    vulkanDevice->createBuffer(bufferSize,
+    vkContext->createBuffer(bufferSize,
                                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                               VulkanDevice::BufferType::STAGING_BUFFER,
+                               BufferType::STAGING_BUFFER,
                                stagingBuffer,
                                stagingBufferAllocation);
 
   memcpy(data, vertices.data(), (size_t)bufferSize);
 
-  vulkanDevice->createBuffer(bufferSize,
+  vkContext->createBuffer(bufferSize,
                              VK_BUFFER_USAGE_TRANSFER_DST_BIT |
                                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                             VulkanDevice::BufferType::GPU_BUFFER,
+                             BufferType::GPU_BUFFER,
                              vertexBuffer,
                              vertexBufferAllocation);
 
-  vulkanDevice->copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+  vkContext->copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 
   vmaDestroyBuffer(
-    vulkanDevice->allocator, stagingBuffer, stagingBufferAllocation);
+    vkContext->allocator, stagingBuffer, stagingBufferAllocation);
 }
 
 void
@@ -440,38 +411,38 @@ Model::createIndexBuffer(VkDeviceSize bufferSize)
   VkDeviceMemory stagingBufferMemory;
   VmaAllocation stagingBufferAllocation;
   void* data =
-    vulkanDevice->createBuffer(bufferSize,
+    vkContext->createBuffer(bufferSize,
                                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                               VulkanDevice::BufferType::STAGING_BUFFER,
+                               BufferType::STAGING_BUFFER,
                                stagingBuffer,
                                stagingBufferAllocation);
 
   memcpy(data, indices.data(), (size_t)bufferSize);
 
-  vulkanDevice->createBuffer(bufferSize,
+  vkContext->createBuffer(bufferSize,
                              VK_BUFFER_USAGE_TRANSFER_DST_BIT |
                                VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                             VulkanDevice::BufferType::GPU_BUFFER,
+                             BufferType::GPU_BUFFER,
                              indexBuffer,
                              indexBufferAllocation);
 
-  vulkanDevice->copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+  vkContext->copyBuffer(stagingBuffer, indexBuffer, bufferSize);
 
   vmaDestroyBuffer(
-    vulkanDevice->allocator, stagingBuffer, stagingBufferAllocation);
+    vkContext->allocator, stagingBuffer, stagingBufferAllocation);
 }
 
 void
 Model::cleanup()
 {
-  if (vertexBuffer != VK_NULL_HANDLE && indexBuffer != VK_NULL_HANDLE &&
+    if (vertexBuffer != VK_NULL_HANDLE && indexBuffer != VK_NULL_HANDLE &&
       descriptorPool != VK_NULL_HANDLE) {
     vmaDestroyBuffer(
-      vulkanDevice->allocator, vertexBuffer, vertexBufferAllocation);
+      vkContext->allocator, vertexBuffer, vertexBufferAllocation);
     vmaDestroyBuffer(
-      vulkanDevice->allocator, indexBuffer, indexBufferAllocation);
+      vkContext->allocator, indexBuffer, indexBufferAllocation);
 
     vkDestroyDescriptorPool(
-      vulkanDevice->logicalDevice, descriptorPool, nullptr);
+      vkContext->logicalDevice, descriptorPool, nullptr);
   }
 }

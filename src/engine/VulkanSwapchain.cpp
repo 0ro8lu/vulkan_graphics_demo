@@ -1,5 +1,9 @@
 #include "engine/VulkanSwapchain.h"
 
+#include <array>
+#include <stdexcept>
+#include <algorithm>
+
 #include "GLFW/glfw3.h"
 #include "engine/VulkanQueueFamiliesHelper.h"
 

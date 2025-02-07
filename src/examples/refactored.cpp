@@ -27,7 +27,6 @@ moveCamera(GLFWwindow* window, float deltaTime, Camera3D* camera);
 int
 main()
 {
-
   GLFWwindow* window;
 
   glfwInit();
@@ -53,11 +52,12 @@ main()
   vkSwapchain->createSwapChainFrameBuffer();
   vkSwapchain->setMainRenderCamera(scene.camera);
 
-  // TODO: fix lights
-  // TODO: reimplement skybox, could that be in its own pass? or maybe not.
-  // TODO: add HDR pass back.
-  // TODO: remove old files and commit everything to the main repo.
+  // today: 7th February.
+  // TODO: adjust CMAKE file and the rest of the build 
   // TODO: test everything on Windows
+
+  // Tomorrow? 
+  // TODO: add HDR pass back.
   // TODO: work on the bloom pass
   auto frame_duration = calculateFrameDuration(60.0f); // 16666665984 µs
   frame_duration = std::chrono::microseconds(8333);

@@ -21,11 +21,17 @@ public:
 private:
   void createRenderPass(VulkanSwapchain* vkSwapchain);
 
-  VkPipeline pipeline;
-  VkPipelineLayout pipelineLayout;
-  void createPipeline(const Scene& scene);
+  VkPipeline blinnPhongPipeline;
+  VkPipelineLayout blinnPhongPipelineLayout;
+  void createMainPipeline(const Scene& scene);
 
-  // std::vector<VkDescriptorSet> descriptorSets;
+  VkPipeline skyboxPipeline;
+  VkPipelineLayout skyboxPipelineLayout;
+  void createSkyboxPipeline(const Scene& scene);
+
+  VkPipeline lightCubesPipeline;
+  VkPipelineLayout lightCubesPipelineLayout;
+  void createLightCubesPipeline(const Scene& scene);
 };
 
 #endif

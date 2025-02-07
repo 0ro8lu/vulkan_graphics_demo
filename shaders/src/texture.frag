@@ -1,9 +1,9 @@
 #version 450
 
-layout(set = 1, binding = 0) uniform sampler2D diffuseTexSampler;
-layout(set = 1, binding = 1) uniform sampler2D specularTexSampler;
+layout(set = 2, binding = 0) uniform sampler2D diffuseTexSampler;
+layout(set = 2, binding = 1) uniform sampler2D specularTexSampler;
 
-layout(binding = 1) uniform DirectionalLight{
+layout(set = 1, binding = 1) uniform DirectionalLight{
     vec4 direction;
 } directionalLight;
 
@@ -13,11 +13,11 @@ struct PointLight {
 };
 
 #define NR_POINT_LIGHTS 5
-layout(binding = 2) uniform PointLights {
+layout(set = 1, binding = 2) uniform PointLights {
     PointLight pointLights[NR_POINT_LIGHTS];
 } pointLights;
 
-layout(binding = 3) uniform SpotLight{
+layout(set = 1, binding = 3) uniform SpotLight{
     vec4 direction;
     vec4 position;
 } spotLight;
@@ -32,9 +32,9 @@ layout(location = 0) out vec4 outColor;
 float linear = 0.09;
 float quadratic = 0.032;
 
-vec3 ambient = vec3(0.2f, 0.2f, 0.2f);
-vec3 diffuse = vec3(0.5f, 0.5f, 0.5f);
-vec3 specular = vec3(1.0f, 1.0f, 1.0f);
+vec3 baseAmbient = vec3(0.2f, 0.2f, 0.2f);
+vec3 baseDiffuse = vec3(0.5f, 0.5f, 0.5f);
+vec3 baseSpecular = vec3(1.0f, 1.0f, 1.0f);
 
 vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir);
 vec3 CalcPointLight(vec3 lightPos, vec3 lightColor, vec3 normal, vec3 fragPos, vec3 viewDir);
@@ -45,6 +45,7 @@ void main() {
     vec3 viewDir = normalize(viewPos - fragPos);
 
     vec3 result = 0.2 * CalcDirLight(vec3(directionalLight.direction.xyz), norm, viewDir);
+    // vec3 result = vec3(0);
 
     for(int i = 0; i < NR_POINT_LIGHTS; i++) {
         result += CalcPointLight(vec3(pointLights.pointLights[i].position.xyz), vec3(pointLights.pointLights[i].color.xyz), norm, fragPos, viewDir);
@@ -70,9 +71,9 @@ vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir)
     // float spec = pow(max(dot(normal, halfwayDir), 0.0), 16.0);
 
     // combine results
-    vec3 ambient = ambient * vec3(texture(diffuseTexSampler, fragTexCoord));
-    vec3 diffuse = diffuse * diff * vec3(texture(diffuseTexSampler, fragTexCoord));
-    vec3 specular = specular * spec * vec3(texture(specularTexSampler, fragTexCoord));
+    vec3 ambient = baseAmbient * vec3(texture(diffuseTexSampler, fragTexCoord));
+    vec3 diffuse = baseDiffuse * diff * vec3(texture(diffuseTexSampler, fragTexCoord));
+    vec3 specular = baseSpecular * spec * vec3(texture(specularTexSampler, fragTexCoord));
     return (ambient + diffuse + specular);
 }
 
@@ -101,9 +102,9 @@ vec3 CalcPointLight(vec3 lightPos, vec3 lightColor, vec3 normal, vec3 fragPos, v
     float attenuation = 1.0 / (distance * distance);
 
     // combine results
-    vec3 resultAmbient = ambient * lightColor * vec3(texture(diffuseTexSampler, fragTexCoord));
-    vec3 resultDiffuse = diffuse * lightColor * diff * vec3(texture(diffuseTexSampler, fragTexCoord));
-    vec3 resultSpecular = specular * lightColor * spec * vec3(texture(specularTexSampler, fragTexCoord));
+    vec3 resultAmbient = baseAmbient * lightColor * vec3(texture(diffuseTexSampler, fragTexCoord));
+    vec3 resultDiffuse = baseDiffuse * lightColor * diff * vec3(texture(diffuseTexSampler, fragTexCoord));
+    vec3 resultSpecular = baseSpecular * lightColor * spec * vec3(texture(specularTexSampler, fragTexCoord));
     resultAmbient *= attenuation;
     resultDiffuse *= attenuation;
     resultSpecular *= attenuation;

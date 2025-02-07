@@ -1,14 +1,14 @@
-#include "Mesh.h"
-#include "engine/VulkanDevice.h"
+#include "engine/ModelLoading/Mesh.h"
 
 #include <array>
+#include <stdexcept>
 
-Mesh::Mesh(VulkanDevice* vulkanDevice,
+Mesh::Mesh(VulkanContext* vkContext,
            size_t indexCount,
            size_t startIndex,
            Texture&& diffuseTexture,
            Texture&& specularTexture)
-  : vulkanDevice(vulkanDevice)
+  : vkContext(vkContext)
   , indexCount(indexCount)
   , startIndex(startIndex)
   , diffuseTexture(std::move(diffuseTexture))
@@ -28,7 +28,7 @@ Mesh::createDescriptorSet(VkDescriptorPool descriptorPool,
   allocInfo.descriptorSetCount = 1;
   allocInfo.pSetLayouts = &descriptorLayout;
 
-  if (vkAllocateDescriptorSets(vulkanDevice->logicalDevice,
+  if (vkAllocateDescriptorSets(vkContext->logicalDevice,
                                &allocInfo,
                                &descriptorSet) != VK_SUCCESS) {
     throw std::runtime_error("failed to allocate descriptor sets!");
@@ -64,28 +64,9 @@ Mesh::createDescriptorSet(VkDescriptorPool descriptorPool,
   descriptorWrites[1].descriptorCount = 1;
   descriptorWrites[1].pImageInfo = &specularImageInfo;
 
-  vkUpdateDescriptorSets(vulkanDevice->logicalDevice,
+  vkUpdateDescriptorSets(vkContext->logicalDevice,
                          static_cast<uint32_t>(descriptorWrites.size()),
                          descriptorWrites.data(),
                          0,
                          nullptr);
-}
-
-void
-Mesh::draw(VkCommandBuffer commandBuffer,
-           VkPipelineLayout pipelineLayout,
-           bool shouldRenderTexture)
-{
-  if (shouldRenderTexture) {
-    vkCmdBindDescriptorSets(commandBuffer,
-                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            pipelineLayout,
-                            1,
-                            1,
-                            &descriptorSet,
-                            0,
-                            nullptr);
-  }
-
-  vkCmdDrawIndexed(commandBuffer, indexCount, 1, startIndex, 0, 0);
 }

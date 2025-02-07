@@ -2,6 +2,7 @@
 #include "engine/VulkanQueueFamiliesHelper.h"
 #include "engine/VulkanSwapchain.h"
 
+#include <cstring>
 #include <set>
 #include <stdexcept>
 #include <string>

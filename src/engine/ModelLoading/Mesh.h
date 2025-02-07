@@ -1,15 +1,15 @@
-#ifndef MESH_H_
-#define MESH_H_
+#ifndef _MESH_H_
+#define _MESH_H_
 
 #include "engine/ModelLoading/Texture.h"
-#include "engine/VulkanDevice.h"
+#include "engine/VulkanContext.h"
 
 struct Vertex;
 
 class Mesh
 {
 public:
-  Mesh(VulkanDevice* vulkanDevice,
+  Mesh(VulkanContext* vkContext,
        size_t indexCount,
        size_t startIndex,
        Texture&& diffuseTexture,
@@ -28,18 +28,15 @@ public:
   Texture diffuseTexture;
   Texture specularTexture;
 
-  void draw(VkCommandBuffer commandBuffer,
-            VkPipelineLayout pipelineLayout,
-            bool shouldRenderTexture);
   void createDescriptorSet(VkDescriptorPool descriptorPool,
                            VkDescriptorSetLayout descriptorLayout);
 
-private:
+  VkDescriptorSet descriptorSet;
   size_t indexCount;
   size_t startIndex;
+private:
 
-  VulkanDevice* vulkanDevice;
-  VkDescriptorSet descriptorSet;
+  VulkanContext* vkContext;
 };
 
 #endif

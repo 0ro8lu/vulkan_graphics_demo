@@ -1,11 +1,8 @@
 #include "Scene.h"
-
 #include "engine/Buffers.h"
-#include "engine/Camera3D.h"
-#include "engine/ModelLoading/ModelRefactored.h"
-#include "engine/VulkanContext.h"
 
 #include <vulkan/vulkan_core.h>
+#include <stdexcept>
 
 Scene::Scene(VulkanContext* vkContext)
   : vkContext(vkContext)
@@ -13,37 +10,63 @@ Scene::Scene(VulkanContext* vkContext)
   // --------------------- Init Scene ---------------------
   DirectionalLight directionalLight;
   directionalLight.direction = glm::vec4(0.0f, -1.0f, 0.0f, 0.0);
-  // directionalLight.direction = glm::vec4(0.2f, -1.0f, 0.3f, 0.0);
 
-  pointLights.push_back({ glm::vec4(0, -3, 0, 1), glm::vec4(0.5) });
-  pointLights.push_back({ glm::vec4(0, -5, 0, 1), glm::vec4(5, 2, 3, 1) });
-  // pointLights.push_back({ glm::vec4(5, 0, 0, 1), glm::vec4(10, 0, 0, 1) });
+  pointLights[0] =
+    PointLight{ glm::vec4(0, 1, -10, 0), glm::vec4(5, 0.4, 0.1, 1) };
+  pointLights[1] =
+    PointLight{ glm::vec4(0, -2, -20, 0), glm::vec4(5, 1, 1, 1) };
+  pointLights[2] = 
+    PointLight{ glm::vec4(0, -2, -30, 1), glm::vec4(0.5) };
+  pointLights[3] =
+    PointLight{ glm::vec4(0, -2, -40, 1), glm::vec4(5, 2, 3, 1) };
+  pointLights[4] =
+    PointLight{ glm::vec4(40, -2, 0, 1), glm::vec4(10, 0, 0, 1) };
+
+  // create light cubes for the lights
+  std::string modelPath = MODEL_PATH;
+  for (auto& pointLight : pointLights) {
+    Model cube = Model(modelPath + "cube.glb",
+                           vkContext,
+                           pointLight.position,
+                           glm::vec3(0.0),
+                           0,
+                           glm::vec3(0.1f));
+    lightCubes.push_back(std::move(cube));
+  }
 
   camera = new Camera3D(glm::vec3(0.0, 0.0, 3.0), glm::vec3(0.0, 0.0, -1.0));
 
+  // create new skybox
+  std::string texturePath = TEXTURE_PATH;
+  std::array<std::string, 6> files = {
+    texturePath + "skybox/right.jpg", texturePath + "skybox/left.jpg",
+    texturePath + "skybox/top.jpg",   texturePath + "skybox/bottom.jpg",
+    texturePath + "skybox/front.jpg", texturePath + "skybox/back.jpg"
+  };
+  skybox = new Skybox(vkContext, files);
+
   // finish initializing models and loading them, setup camera etc.
-  std::string modelPath = MODEL_PATH;
-      ModelDO plane = ModelDO(modelPath + "for_demo/plane.glb",
-                        vkContext,
-                        glm::vec3(0.0, 1.0f, 0.0f),
-                        glm::vec3(0),
-                        0,
-                        glm::vec3(100.0f));
-    models.push_back(std::move(plane));
-   ModelDO desk = ModelDO(modelPath + "for_demo/prova_optimized.glb",
+  Model plane = Model(modelPath + "for_demo/plane.glb",
                           vkContext,
-                          glm::vec3(0.0, 1.0f, -3.0f),
-                          glm::vec3(0.0, 1.0, 0.0),
-                          180.0f,
-                          glm::vec3(1.0f));
-   models.push_back(std::move(desk));
-  ModelDO rare = ModelDO(modelPath + "for_demo/rare_logo/rare.glb",
-                         vkContext,
-                         glm::vec3(-1.85, -0.7, -19.5f),
-                         glm::vec3(1.0, 0.0, 0.0),
-                         -90.0f,
-                         glm::vec3(0.1f));
-  models.push_back(std::move(rare));
+                          glm::vec3(0.0, 1.0f, 0.0f),
+                          glm::vec3(0),
+                          0,
+                          glm::vec3(100.0f));
+  models.push_back(std::move(plane));
+  //   ModelDO desk = ModelDO(modelPath + "for_demo/prova_optimized.glb",
+  //                          vkContext,
+  //                          glm::vec3(0.0, 1.0f, -3.0f),
+  //                          glm::vec3(0.0, 1.0, 0.0),
+  //                          180.0f,
+  //                          glm::vec3(1.0f));
+  //   models.push_back(std::move(desk));
+  //  ModelDO rare = ModelDO(modelPath + "for_demo/rare_logo/rare.glb",
+  //                         vkContext,
+  //                         glm::vec3(-1.85, -0.7, -19.5f),
+  //                         glm::vec3(1.0, 0.0, 0.0),
+  //                         -90.0f,
+  //                         glm::vec3(0.1f));
+  //  models.push_back(std::move(rare));
 
   // --------------------- Create Buffers ---------------------
   createBuffers();
@@ -55,11 +78,12 @@ Scene::~Scene()
 {
   // destroy camera
   delete camera;
+  delete skybox;
 
   // destroy models
   models.clear();
   vkDestroyDescriptorSetLayout(
-    vkContext->logicalDevice, ModelDO::textureLayout, nullptr);
+    vkContext->logicalDevice, Model::textureLayout, nullptr);
 
   // destroy layout
   vkDestroyDescriptorSetLayout(
@@ -225,7 +249,7 @@ Scene::createDescriptors()
     VkDescriptorBufferInfo pointLightBufferInfo{};
     pointLightBufferInfo.buffer = pointLightsBuffer.buffer;
     pointLightBufferInfo.offset = 0;
-    pointLightBufferInfo.range = sizeof(PointLight);
+    pointLightBufferInfo.range = sizeof(PointLight) * MAX_POINT_LIGHTS;
 
     VkDescriptorBufferInfo spotLightBufferInfo{};
     spotLightBufferInfo.buffer = spotLightsBuffer.buffer;
@@ -323,6 +347,4 @@ Scene::update()
   cb.cameraPos = glm::vec4(camera->getCameraPos(), 1);
 
   memcpy(cameraBuffer.mapped, &cb, sizeof(CameraBuffer));
-
-  // TODO: udpate also light infomation if you make them change position/color
 }
