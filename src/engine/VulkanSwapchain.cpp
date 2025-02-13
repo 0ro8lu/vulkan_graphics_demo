@@ -1,8 +1,9 @@
 #include "engine/VulkanSwapchain.h"
 
-#include <array>
-#include <stdexcept>
 #include <algorithm>
+#include <array>
+#include <iostream>
+#include <stdexcept>
 
 #include "GLFW/glfw3.h"
 #include "engine/VulkanQueueFamiliesHelper.h"
@@ -83,8 +84,7 @@ VulkanSwapchain::createSwapChainFrameBuffer()
   swapChainFramebuffers.resize(swapChainImageViews.size());
 
   for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-    std::array<VkImageView, 2> attachments = { swapChainImageViews[i],
-                                               depthImageView };
+    std::array<VkImageView, 1> attachments = { swapChainImageViews[i] };
 
     VkFramebufferCreateInfo framebufferInfo{};
     framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -120,13 +120,6 @@ VulkanSwapchain::createCommandBuffer()
 }
 
 void
-VulkanSwapchain::setMainRenderCamera(Camera3D* camera)
-{
-  this->camera = camera;
-  this->camera->resizeCamera(width, height);
-}
-
-void
 VulkanSwapchain::prepareFrame()
 {
   vkWaitForFences(
@@ -148,6 +141,12 @@ VulkanSwapchain::prepareFrame()
 
   vkResetFences(vkContext->logicalDevice, 1, &inFlightFence);
   vkResetCommandBuffer(commandBuffer, 0);
+
+  VkCommandBufferBeginInfo beginInfo{};
+  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+    throw std::runtime_error("failed to begin recording command buffer!");
+  }
 }
 
 void
@@ -274,7 +273,7 @@ VulkanSwapchain::createSwapChain()
   }
 
   // create depth resources
-  VkFormat depthFormat =
+  depthFormat =
     findSupportedFormat({ VK_FORMAT_D32_SFLOAT,
                           VK_FORMAT_D32_SFLOAT_S8_UINT,
                           VK_FORMAT_D24_UNORM_S8_UINT },
@@ -308,7 +307,8 @@ VulkanSwapchain::recreateSwapChain()
   createSwapChain();
   createSwapChainFrameBuffer();
 
-  camera->resizeCamera(width, height);
+  onResize(swapChainExtent.width, swapChainExtent.height);
+  onResize(width, height);
 }
 
 void

@@ -1,6 +1,7 @@
 #ifndef _BLINN_PHONG_PASS_H_
 #define _BLINN_PHONG_PASS_H_
 
+#include "engine/FramebufferAttachment.h"
 #include "engine/IPassHelper.h"
 #include "engine/Scene.h"
 #include "engine/VulkanSwapchain.h"
@@ -10,16 +11,30 @@
 class BlinnPhongPass : public IPassHelper
 {
 public:
-  BlinnPhongPass(VulkanContext* vkContext);
+  BlinnPhongPass(VulkanContext* vkContext,
+                 std::array<AttachmentData, 16> attachmentData,
+                 const Scene& scene,
+                 uint32_t attachmentWidth,
+                 uint32_t attachmentHeight);
   ~BlinnPhongPass();
 
-  void init(VulkanSwapchain* vulkanSwapchain, const Scene& scene) override;
   void draw(VulkanSwapchain* vkSwapchain, const Scene& scene) override;
+  void recreateAttachments(
+    int width,
+    int height,
+    std::array<AttachmentData, 16> attachmentData) override;
+  void updateDescriptors(
+    std::array<FramebufferAttachment*, 16> attachments) override {};
 
+  FramebufferAttachment* hdrAttachment;
+
+  VkFramebuffer hdrFramebuffer;
   VkRenderPass renderPass;
 
 private:
-  void createRenderPass(VulkanSwapchain* vkSwapchain);
+  void createFrameBuffer(std::array<AttachmentData, 16> attachmentData);
+  void createAttachments(uint32_t width, uint32_t height);
+  void createRenderPass(std::array<AttachmentData, 16> attachmentData);
 
   VkPipeline blinnPhongPipeline;
   VkPipelineLayout blinnPhongPipelineLayout;

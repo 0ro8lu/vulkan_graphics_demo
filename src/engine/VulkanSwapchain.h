@@ -4,11 +4,9 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include <vk_mem_alloc.h>
-
+#include <functional>
 #include <vector>
-
-#include "engine/Camera3D.h"
+#include <vk_mem_alloc.h>
 
 #include "engine/VulkanContext.h"
 
@@ -19,18 +17,17 @@ class VulkanSwapchain
 {
 public:
   // void present
-  VkFormat getSwapChainImageFormat() { return swapChainImageFormat; }
+  VkFormat getSwapChainImageFormat() const { return swapChainImageFormat; }
+  VkFormat getDepthImageFormat() const { return depthFormat; }
   VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
                                VkImageTiling tiling,
                                VkFormatFeatureFlags features);
+  std::function<void(int, int)> onResize;
   void recreateSwapChain();
   void createSwapChainFrameBuffer();
 
   VkCommandBuffer commandBuffer;
   void createCommandBuffer();
-
-  Camera3D* camera;
-  void setMainRenderCamera(Camera3D* camera);
 
   void prepareFrame();
   void submitFrame();
@@ -40,6 +37,8 @@ public:
   int height;
 
   VkRenderPass drawingPass;
+
+  VkImageView depthImageView;
 
   uint32_t imageIndex;
   std::vector<VkFramebuffer> swapChainFramebuffers;
@@ -63,8 +62,8 @@ private:
   SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
 
   VkImage depthImage;
-  VkImageView depthImageView;
   VmaAllocation depthAllocation;
+  VkFormat depthFormat;
 
   VkSwapchainKHR swapChain;
   std::vector<VkImage> swapChainImages;

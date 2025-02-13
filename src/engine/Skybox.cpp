@@ -6,8 +6,7 @@
 
 VkDescriptorSetLayout Skybox::skyboxLayout = VK_NULL_HANDLE;
 
-Skybox::Skybox(VulkanContext* vkContext,
-                                   std::array<std::string, 6> filePaths)
+Skybox::Skybox(VulkanContext* vkContext, std::array<std::string, 6> filePaths)
   : vkContext(vkContext)
 {
   std::string modelPath = MODEL_PATH;
@@ -182,10 +181,10 @@ Skybox::~Skybox()
 
 void
 Skybox::transitionImageLayout(VkImage image,
-                                        VkFormat format,
-                                        std::vector<size_t> offsets,
-                                        VkImageLayout oldLayout,
-                                        VkImageLayout newLayout)
+                              VkFormat format,
+                              std::vector<size_t> offsets,
+                              VkImageLayout oldLayout,
+                              VkImageLayout newLayout)
 {
   VkCommandBuffer commandBuffer = vkContext->beginSingleTimeCommands();
 
@@ -240,10 +239,10 @@ Skybox::transitionImageLayout(VkImage image,
 
 void
 Skybox::copyBufferToImage(VkBuffer buffer,
-                                    VkImage image,
-                                    std::vector<size_t> offsets,
-                                    uint32_t width,
-                                    uint32_t height)
+                          VkImage image,
+                          std::vector<size_t> offsets,
+                          uint32_t width,
+                          uint32_t height)
 {
   VkCommandBuffer commandBuffer = vkContext->beginSingleTimeCommands();
 
@@ -314,8 +313,7 @@ Skybox::setupDescriptors()
     if (vkCreateDescriptorSetLayout(vkContext->logicalDevice,
                                     &layoutInfo,
                                     nullptr,
-                                    &Skybox::skyboxLayout) !=
-        VK_SUCCESS) {
+                                    &Skybox::skyboxLayout) != VK_SUCCESS) {
       throw std::runtime_error("failed to create descriptor set layout!");
     }
   }

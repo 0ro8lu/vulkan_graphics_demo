@@ -53,3 +53,14 @@ Following are some cool screenshots of the end result.
     <img src="./screenshots/hallucination.png" width="250" alt="hallucination">
     <img src="./screenshots/blur.png" width="250" alt="blur">
 </div>
+
+## 13th of February: Gloomy Bloomy post-processing effects
+This has been such a massive milestone for me, the excitement and satisfaction i felt today is something i will remember for a long time =D :3
+It took a massive refactoring, a broken heart and some creativity and voila'! Bloom =D 
+I feel like the beast that is Vulkan has been somewhat tamed now. The refactoring process and the bloom pipeline really allowed me to get an even fuller and complete picture of the underlying
+systems that drive this marvelous API. Here are some juicy screenshots i hope you will enjoy, dear reader <3.
+
+<div style="display: flex; gap: 10px;">
+    <img src="./screenshots/bloom.png" width="400" alt="bloom">
+    <img src="./screenshots/no_bloom.png" width="400" alt="no bloom">
+</div>

@@ -1,12 +1,25 @@
-#include "BlinnPhongPass.h"
+#include "engine/BlinnPhongPass.h"
 #include "engine/IPassHelper.h"
 #include "engine/ModelLoading/Model.h"
 #include "engine/Vertex.h"
 #include <vulkan/vulkan_core.h>
 
-BlinnPhongPass::BlinnPhongPass(VulkanContext* vkContext)
-  : IPassHelper(vkContext)
+BlinnPhongPass::BlinnPhongPass(VulkanContext* vkContext,
+                               std::array<AttachmentData, 16> attachmentData,
+                               const Scene& scene,
+                               uint32_t attachmentWidth,
+                               uint32_t attachmentHeight)
+  : IPassHelper(vkContext, scene)
 {
+  createAttachments(attachmentWidth, attachmentHeight);
+
+  createRenderPass(attachmentData);
+
+  createFrameBuffer(attachmentData);
+
+  createMainPipeline(scene);
+  createSkyboxPipeline(scene);
+  createLightCubesPipeline(scene);
 }
 
 BlinnPhongPass::~BlinnPhongPass()
@@ -24,36 +37,18 @@ BlinnPhongPass::~BlinnPhongPass()
   vkDestroyPipeline(vkContext->logicalDevice, lightCubesPipeline, nullptr);
   vkDestroyPipelineLayout(
     vkContext->logicalDevice, lightCubesPipelineLayout, nullptr);
-}
 
-void
-BlinnPhongPass::init(VulkanSwapchain* vkSwapchain, const Scene& scene)
-{
-  //  renderpass
-  createRenderPass(vkSwapchain);
-
-  // pipeline
-  createMainPipeline(scene);
-  createSkyboxPipeline(scene);
-  createLightCubesPipeline(scene);
+  delete hdrAttachment;
+  vkDestroyFramebuffer(vkContext->logicalDevice, hdrFramebuffer, nullptr);
 }
 
 void
 BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
 {
-  VkCommandBufferBeginInfo beginInfo{};
-  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  if (vkBeginCommandBuffer(vkSwapchain->commandBuffer, &beginInfo) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to begin recording command buffer!");
-  }
-
-  vkSwapchain->swapChainFramebuffers[vkSwapchain->imageIndex];
   VkRenderPassBeginInfo renderPassInfo{};
   renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   renderPassInfo.renderPass = renderPass;
-  renderPassInfo.framebuffer =
-    vkSwapchain->swapChainFramebuffers[vkSwapchain->imageIndex];
+  renderPassInfo.framebuffer = hdrFramebuffer;
   renderPassInfo.renderArea.offset = { 0, 0 };
   renderPassInfo.renderArea.extent = vkSwapchain->swapChainExtent;
 
@@ -187,7 +182,7 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
                          VK_SHADER_STAGE_VERTEX_BIT,
                          0,
                          64,
-                         &pc); 
+                         &pc);
 
       LightColor lightColor;
       glm::vec3 color = scene.pointLights[i].color;
@@ -266,41 +261,79 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
 }
 
 void
-BlinnPhongPass::createRenderPass(VulkanSwapchain* vkSwapchain)
+BlinnPhongPass::recreateAttachments(
+  int width,
+  int height,
+  std::array<AttachmentData, 16> attachmentData)
 {
-  // attachment for color
-  VkAttachmentDescription colorAttachment{};
-  colorAttachment.format = vkSwapchain->getSwapChainImageFormat();
-  colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-  colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-  colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-  colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  hdrAttachment->resize(width, height);
+  vkDestroyFramebuffer(vkContext->logicalDevice, hdrFramebuffer, nullptr);
+  createFrameBuffer(attachmentData);
+}
 
-  VkFormat depthFormat = vkSwapchain->findSupportedFormat(
-    { VK_FORMAT_D32_SFLOAT,
-      VK_FORMAT_D32_SFLOAT_S8_UINT,
-      VK_FORMAT_D24_UNORM_S8_UINT },
-    VK_IMAGE_TILING_OPTIMAL,
-    VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+void
+BlinnPhongPass::createFrameBuffer(std::array<AttachmentData, 16> attachmentData)
+{
+  std::array<VkImageView, 2> attachments = { hdrAttachment->view,
+                                             attachmentData[0].view };
+
+  VkFramebufferCreateInfo framebufferInfo{};
+  framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+  framebufferInfo.renderPass = renderPass;
+  framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+  framebufferInfo.pAttachments = attachments.data();
+  framebufferInfo.width = hdrAttachment->width;
+  framebufferInfo.height = hdrAttachment->height;
+  framebufferInfo.layers = 1;
+
+  if (vkCreateFramebuffer(
+        vkContext->logicalDevice, &framebufferInfo, nullptr, &hdrFramebuffer) !=
+      VK_SUCCESS) {
+    throw std::runtime_error("failed to create framebuffer!");
+  }
+}
+
+void
+BlinnPhongPass::createAttachments(uint32_t width, uint32_t height)
+{
+  hdrAttachment = new FramebufferAttachment(
+    VK_FORMAT_R16G16B16A16_SFLOAT,
+    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+    width,
+    height,
+    vkContext);
+}
+
+void
+BlinnPhongPass::createRenderPass(std::array<AttachmentData, 16> attachmentData)
+{
+  // attachment for HDR attachment
+  VkAttachmentDescription hdrAttachmentDescription{};
+  hdrAttachmentDescription.format = hdrAttachment->format;
+  hdrAttachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
+  hdrAttachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  hdrAttachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  hdrAttachmentDescription.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  hdrAttachmentDescription.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  hdrAttachmentDescription.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  hdrAttachmentDescription.finalLayout =
+    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
   // attachment for depth
   VkAttachmentDescription depthAttachment{};
-  depthAttachment.format = depthFormat;
+  depthAttachment.format = attachmentData[0].format;
   depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
   depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
   depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
   depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
   depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
   depthAttachment.finalLayout =
     VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-  VkAttachmentReference colorAttachmentRef{};
-  colorAttachmentRef.attachment = 0;
-  colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  VkAttachmentReference hdrAttachmentRef{};
+  hdrAttachmentRef.attachment = 0;
+  hdrAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
   VkAttachmentReference depthAttachmentRef{};
   depthAttachmentRef.attachment = 1;
@@ -309,7 +342,7 @@ BlinnPhongPass::createRenderPass(VulkanSwapchain* vkSwapchain)
   VkSubpassDescription subpass{};
   subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
   subpass.colorAttachmentCount = 1;
-  subpass.pColorAttachments = &colorAttachmentRef;
+  subpass.pColorAttachments = &hdrAttachmentRef;
   subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
   VkSubpassDependency dependency{};
@@ -323,8 +356,9 @@ BlinnPhongPass::createRenderPass(VulkanSwapchain* vkSwapchain)
   dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                              VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-  std::array<VkAttachmentDescription, 2> attachments = { colorAttachment,
-                                                         depthAttachment };
+  std::array<VkAttachmentDescription, 2> attachments = {
+    hdrAttachmentDescription, depthAttachment
+  };
   VkRenderPassCreateInfo renderPassInfo{};
   renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -345,10 +379,8 @@ void
 BlinnPhongPass::createMainPipeline(const Scene& scene)
 {
   std::string shaderPath = SHADER_PATH;
-  auto vertShaderCode =
-    readFile(shaderPath + "texture_vert.spv");
-  auto fragShaderCode =
-    readFile(shaderPath + "texture_frag.spv");
+  auto vertShaderCode = readFile(shaderPath + "texture_vert.spv");
+  auto fragShaderCode = readFile(shaderPath + "texture_frag.spv");
 
   VkShaderModule vertShaderModule =
     vkContext->createShaderModule(vertShaderCode);
@@ -510,10 +542,8 @@ void
 BlinnPhongPass::createSkyboxPipeline(const Scene& scene)
 {
   std::string shaderPath = SHADER_PATH;
-  auto vertShaderCode =
-    readFile(shaderPath + "skybox_vert.spv");
-  auto fragShaderCode =
-    readFile(shaderPath + "skybox_frag.spv");
+  auto vertShaderCode = readFile(shaderPath + "skybox_vert.spv");
+  auto fragShaderCode = readFile(shaderPath + "skybox_frag.spv");
 
   VkShaderModule vertShaderModule =
     vkContext->createShaderModule(vertShaderCode);
@@ -674,10 +704,8 @@ void
 BlinnPhongPass::createLightCubesPipeline(const Scene& scene)
 {
   std::string shaderPath = SHADER_PATH;
-  auto vertShaderCode =
-    readFile(shaderPath + "light_cube_vert.spv");
-  auto fragShaderCode =
-    readFile(shaderPath + "light_cube_frag.spv");
+  auto vertShaderCode = readFile(shaderPath + "light_cube_vert.spv");
+  auto fragShaderCode = readFile(shaderPath + "light_cube_frag.spv");
 
   VkShaderModule vertShaderModule =
     vkContext->createShaderModule(vertShaderCode);

@@ -1,5 +1,8 @@
 #include "GLFW/glfw3.h"
+
 #include "engine/BlinnPhongPass.h"
+#include "engine/HDRPass.h"
+
 #include "engine/Scene.h"
 #include "engine/VulkanInitializer.h"
 #include <vulkan/vulkan_core.h>
@@ -42,24 +45,29 @@ main()
 
   Scene scene(vkContext);
 
-  // set up all passes
-  BlinnPhongPass blinnPhongPass(vkContext);
-  blinnPhongPass.init(vkSwapchain, scene);
+  int width, height;
+  glfwGetFramebufferSize(window, &width, &height);
+
+  BlinnPhongPass blinnPhongPass(vkContext, {vkSwapchain->depthImageView, vkSwapchain->getDepthImageFormat()}, scene, width, height);
+  HDRPass hdrPass(vkContext, {VK_NULL_HANDLE, vkSwapchain->getSwapChainImageFormat()}, scene, width, height);
+
+  // update descriptors
+  hdrPass.updateDescriptors({blinnPhongPass.hdrAttachment});
 
   // swapchain create framebuffer with pass associated with rendering the final
   // step
-  vkSwapchain->drawingPass = blinnPhongPass.renderPass;
+  vkSwapchain->drawingPass = hdrPass.presentationRenderPass;
   vkSwapchain->createSwapChainFrameBuffer();
-  vkSwapchain->setMainRenderCamera(scene.camera);
+  vkSwapchain->onResize = [&blinnPhongPass, &hdrPass, vkSwapchain](int width, int height) {
+    blinnPhongPass.recreateAttachments(width, height, {vkSwapchain->depthImageView, vkSwapchain->getDepthImageFormat()});
+    hdrPass.recreateAttachments(width, height, {VK_NULL_HANDLE, vkSwapchain->getSwapChainImageFormat()});
 
-  // today: 7th February.
-  // TODO: adjust CMAKE file and the rest of the build 
-  // TODO: test everything on Windows
+    hdrPass.updateDescriptors({blinnPhongPass.hdrAttachment});
+  };
 
-  // Tomorrow? 
-  // TODO: add HDR pass back.
-  // TODO: work on the bloom pass
-  auto frame_duration = calculateFrameDuration(60.0f); // 16666665984 µs
+  scene.camera->resizeCamera(width, height);
+
+  auto frame_duration = calculateFrameDuration(60.0f);
   frame_duration = std::chrono::microseconds(8333);
   auto lastFrameTime = std::chrono::steady_clock::now();
 
@@ -78,8 +86,8 @@ main()
     moveCamera(window, deltaTime.count(), scene.camera);
     scene.update();
 
-    // for every pass
     blinnPhongPass.draw(vkSwapchain, scene);
+    hdrPass.draw(vkSwapchain, scene);
 
     vkSwapchain->submitFrame();
 
@@ -101,7 +109,6 @@ main()
 std::chrono::microseconds
 calculateFrameDuration(int target_fps)
 {
-  // Calculate microseconds per frame (1,000,000 µs / target_fps)
   float microseconds_per_frame = 1.0f / static_cast<float>(target_fps);
 
   return std::chrono::duration_cast<std::chrono::microseconds>(

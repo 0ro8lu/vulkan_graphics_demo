@@ -43,9 +43,18 @@ vec3 sampleTex[9];
 
 void main()
 {
+    for(int i = 0; i < 9; i++)
+    {
+        sampleTex[i] = vec3(texture(samplerColor, inUV + offsets[i]).rgb);
+    }
+	vec3 col = vec3(0.0);
+    for(int i = 0; i < 9; i++)
+        col += sampleTex[i] * blur_kernel[i];
+
     // HDR stuff
     const float gamma = 2.2;
-    vec3 hdrColor = texture(samplerColor, inUV).rgb;
+    vec3 hdrColor = col;
+    // vec3 hdrColor = texture(samplerColor, inUV).rgb;
   
     // reinhard tone mapping
     // vec3 mapped = hdrColor / (hdrColor + vec3(1.0));

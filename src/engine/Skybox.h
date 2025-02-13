@@ -14,8 +14,7 @@
 class Skybox
 {
 public:
-  Skybox(VulkanContext* vkContext,
-                   std::array<std::string, 6> filePaths);
+  Skybox(VulkanContext* vkContext, std::array<std::string, 6> filePaths);
   ~Skybox();
 
   static VkDescriptorSetLayout skyboxLayout;

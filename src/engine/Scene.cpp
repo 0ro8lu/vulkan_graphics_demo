@@ -1,8 +1,8 @@
 #include "Scene.h"
 #include "engine/Buffers.h"
 
-#include <vulkan/vulkan_core.h>
 #include <stdexcept>
+#include <vulkan/vulkan_core.h>
 
 Scene::Scene(VulkanContext* vkContext)
   : vkContext(vkContext)
@@ -15,8 +15,7 @@ Scene::Scene(VulkanContext* vkContext)
     PointLight{ glm::vec4(0, 1, -10, 0), glm::vec4(5, 0.4, 0.1, 1) };
   pointLights[1] =
     PointLight{ glm::vec4(0, -2, -20, 0), glm::vec4(5, 1, 1, 1) };
-  pointLights[2] = 
-    PointLight{ glm::vec4(0, -2, -30, 1), glm::vec4(0.5) };
+  pointLights[2] = PointLight{ glm::vec4(0, -2, -30, 1), glm::vec4(0.5) };
   pointLights[3] =
     PointLight{ glm::vec4(0, -2, -40, 1), glm::vec4(5, 2, 3, 1) };
   pointLights[4] =
@@ -26,11 +25,11 @@ Scene::Scene(VulkanContext* vkContext)
   std::string modelPath = MODEL_PATH;
   for (auto& pointLight : pointLights) {
     Model cube = Model(modelPath + "cube.glb",
-                           vkContext,
-                           pointLight.position,
-                           glm::vec3(0.0),
-                           0,
-                           glm::vec3(0.1f));
+                       vkContext,
+                       pointLight.position,
+                       glm::vec3(0.0),
+                       0,
+                       glm::vec3(0.1f));
     lightCubes.push_back(std::move(cube));
   }
 
@@ -47,11 +46,11 @@ Scene::Scene(VulkanContext* vkContext)
 
   // finish initializing models and loading them, setup camera etc.
   Model plane = Model(modelPath + "for_demo/plane.glb",
-                          vkContext,
-                          glm::vec3(0.0, 1.0f, 0.0f),
-                          glm::vec3(0),
-                          0,
-                          glm::vec3(100.0f));
+                      vkContext,
+                      glm::vec3(0.0, 1.0f, 0.0f),
+                      glm::vec3(0),
+                      0,
+                      glm::vec3(100.0f));
   models.push_back(std::move(plane));
   //   ModelDO desk = ModelDO(modelPath + "for_demo/prova_optimized.glb",
   //                          vkContext,
