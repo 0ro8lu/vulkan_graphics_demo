@@ -17,9 +17,9 @@ Scene::Scene(VulkanContext* vkContext)
     PointLight{ glm::vec4(0, -2, -20, 0), glm::vec4(5, 1, 1, 1) };
   pointLights[2] = PointLight{ glm::vec4(0, -2, -30, 1), glm::vec4(0.5) };
   pointLights[3] =
-    PointLight{ glm::vec4(0, -2, -40, 1), glm::vec4(5, 2, 3, 1) };
+    PointLight{ glm::vec4(0, -2, -30, 1), glm::vec4(5, 2, 3, 1) };
   pointLights[4] =
-    PointLight{ glm::vec4(40, -2, 0, 1), glm::vec4(10, 0, 0, 1) };
+    PointLight{ glm::vec4(0, -2, -40, 1), glm::vec4(10, 0, 0, 1) };
 
   // create light cubes for the lights
   std::string modelPath = MODEL_PATH;

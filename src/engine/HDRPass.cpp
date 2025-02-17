@@ -182,7 +182,7 @@ HDRPass::recreateAttachments(int width,
 {
   brightSpotsAttachment->resize(width, height);
   intermediateBloomAttachment->resize(width, height);
-  
+
   vkDestroyFramebuffer(vkContext->logicalDevice, bloomFramebuffer, nullptr);
 
   createFrameBuffer(attachmentData);

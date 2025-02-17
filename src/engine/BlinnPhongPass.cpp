@@ -423,10 +423,10 @@ BlinnPhongPass::createMainPipeline(const Scene& scene)
   inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   inputAssembly.primitiveRestartEnable = VK_FALSE;
 
-  VkPushConstantRange ModelPCRange{};
-  ModelPCRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-  ModelPCRange.offset = 0;
-  ModelPCRange.size = 64;
+  VkPushConstantRange modelPCRange{};
+  modelPCRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+  modelPCRange.offset = 0;
+  modelPCRange.size = 64;
 
   VkPipelineViewportStateCreateInfo viewportState{};
   viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -499,7 +499,7 @@ BlinnPhongPass::createMainPipeline(const Scene& scene)
     static_cast<uint32_t>(descriptorSetLayouts.size());
   pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
   pipelineLayoutInfo.pushConstantRangeCount = 1;
-  pipelineLayoutInfo.pPushConstantRanges = &ModelPCRange;
+  pipelineLayoutInfo.pPushConstantRanges = &modelPCRange;
 
   if (vkCreatePipelineLayout(vkContext->logicalDevice,
                              &pipelineLayoutInfo,
@@ -586,10 +586,10 @@ BlinnPhongPass::createSkyboxPipeline(const Scene& scene)
   inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   inputAssembly.primitiveRestartEnable = VK_FALSE;
 
-  VkPushConstantRange ModelPCRange{};
-  ModelPCRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-  ModelPCRange.offset = 0;
-  ModelPCRange.size = 64;
+  VkPushConstantRange modelPCRange{};
+  modelPCRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+  modelPCRange.offset = 0;
+  modelPCRange.size = 64;
 
   VkPipelineViewportStateCreateInfo viewportState{};
   viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -661,7 +661,7 @@ BlinnPhongPass::createSkyboxPipeline(const Scene& scene)
     static_cast<uint32_t>(descriptorSetLayouts.size());
   pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
   pipelineLayoutInfo.pushConstantRangeCount = 1;
-  pipelineLayoutInfo.pPushConstantRanges = &ModelPCRange;
+  pipelineLayoutInfo.pPushConstantRanges = &modelPCRange;
 
   if (vkCreatePipelineLayout(vkContext->logicalDevice,
                              &pipelineLayoutInfo,

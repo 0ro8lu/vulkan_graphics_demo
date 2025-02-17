@@ -9,10 +9,6 @@ class Camera3D
 {
 public:
   Camera3D(glm::vec3 cameraPos, glm::vec3 cameraFront);
-  Camera3D(glm::vec3 cameraPos,
-           glm::vec3 cameraFront,
-           uint32_t width,
-           uint32_t height);
 
   void setPos(glm::vec3 newPosition)
   {

@@ -1,5 +1,6 @@
 #include "GLFW/glfw3.h"
 
+#include "engine/ShadowMapPass.h"
 #include "engine/BlinnPhongPass.h"
 #include "engine/HDRPass.h"
 
@@ -48,6 +49,7 @@ main()
   int width, height;
   glfwGetFramebufferSize(window, &width, &height);
 
+  ShadowMapPass shadowMapPass(vkContext, {}, scene, 1024, 1024); // <- 1024 is the fixed resolution i've chosen for the shadowmaps
   BlinnPhongPass blinnPhongPass(vkContext, {vkSwapchain->depthImageView, vkSwapchain->getDepthImageFormat()}, scene, width, height);
   HDRPass hdrPass(vkContext, {VK_NULL_HANDLE, vkSwapchain->getSwapChainImageFormat()}, scene, width, height);
 
@@ -86,6 +88,7 @@ main()
     moveCamera(window, deltaTime.count(), scene.camera);
     scene.update();
 
+    shadowMapPass.draw(vkSwapchain, scene);
     blinnPhongPass.draw(vkSwapchain, scene);
     hdrPass.draw(vkSwapchain, scene);
 

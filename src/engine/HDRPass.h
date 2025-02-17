@@ -57,10 +57,6 @@ private:
   VkPipeline compositionPipeline;
   VkPipelineLayout compositionPipelineLayout;
   void createCompositionPipeline();
-
-  // VkPipeline hdrPipeline;
-  // VkPipelineLayout hdrPipelineLayout;
-  // void createHDRPipeline();
 };
 
 #endif

@@ -18,7 +18,7 @@ public:
   VkFormat format;
   VkImage image = VK_NULL_HANDLE;
   VkImageView view = VK_NULL_HANDLE;
-  VkSampler sampler;
+  VkSampler sampler = VK_NULL_HANDLE;
   VmaAllocation allocation;
   VkImageUsageFlags usage;
 

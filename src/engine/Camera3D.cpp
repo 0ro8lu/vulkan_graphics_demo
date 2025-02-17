@@ -10,19 +10,6 @@ Camera3D::Camera3D(glm::vec3 cameraPos, glm::vec3 cameraFront)
 {
 }
 
-Camera3D::Camera3D(glm::vec3 cameraPos,
-                   glm::vec3 cameraFront,
-                   uint32_t width,
-                   uint32_t height)
-  : cameraPos(cameraPos)
-  , cameraFront(cameraFront)
-  , needsUpdating(true)
-  , cameraMatrix(1.0f)
-{
-  std::cout << width << " " << height << std::endl;
-  resizeCamera(width, height);
-}
-
 void
 Camera3D::resizeCamera(uint32_t width, uint32_t height)
 {

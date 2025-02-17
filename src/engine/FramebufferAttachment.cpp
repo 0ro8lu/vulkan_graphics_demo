@@ -1,5 +1,7 @@
 #include "engine/FramebufferAttachment.h"
 
+#include <stdexcept>
+
 FramebufferAttachment::FramebufferAttachment(VkFormat format,
                                              VkImageUsageFlags usage,
                                              uint32_t width,
@@ -45,7 +47,8 @@ FramebufferAttachment::create()
                                  height,
                                  format,
                                  VK_IMAGE_TILING_OPTIMAL,
-                                 usage | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+                                 usage | VK_IMAGE_USAGE_SAMPLED_BIT |
+                                   VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
                                  // usage | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
                                  VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
                                  allocation);
