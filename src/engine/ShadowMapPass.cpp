@@ -2,11 +2,12 @@
 
 #include "engine/Vertex.h"
 
-ShadowMapPass::ShadowMapPass(VulkanContext* vkContext,
-                             std::array<AttachmentData, 16> attachmentData,
-                             const Scene& scene,
-                             uint32_t shadowMapWidth,
-                             uint32_t shadowMapHeight)
+ShadowMapPass::ShadowMapPass(
+  VulkanContext* vkContext,
+  const std::array<AttachmentData, 16>& attachmentData,
+  const Scene& scene,
+  const uint32_t shadowMapWidth,
+  const uint32_t shadowMapHeight)
   : IPassHelper(vkContext, scene)
 {
   createShadowMaps(shadowMapWidth, shadowMapHeight);
@@ -15,17 +16,18 @@ ShadowMapPass::ShadowMapPass(VulkanContext* vkContext,
 
   createFrameBuffer(attachmentData);
 
-  createDirectionalLightSpaceMatrix();
-
   createDirectionalShadowMapPipeline();
 }
 
 ShadowMapPass::~ShadowMapPass()
 {
-  vkDestroyFramebuffer(vkContext->logicalDevice, directionalShadowMapFramebuffer, nullptr);
-  vkDestroyRenderPass(vkContext->logicalDevice, directionalShadowMapRenderPass, nullptr);
+  vkDestroyFramebuffer(
+    vkContext->logicalDevice, directionalShadowMapFramebuffer, nullptr);
+  vkDestroyRenderPass(
+    vkContext->logicalDevice, directionalShadowMapRenderPass, nullptr);
 
-  vkDestroyPipeline(vkContext->logicalDevice, directionalShadowMapPipeline, nullptr);
+  vkDestroyPipeline(
+    vkContext->logicalDevice, directionalShadowMapPipeline, nullptr);
   vkDestroyPipelineLayout(
     vkContext->logicalDevice, directionalShadowMapPipelineLayout, nullptr);
 
@@ -54,11 +56,10 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
   renderPassInfo.renderArea.extent.width = directionalShadowMap->width;
   renderPassInfo.renderArea.extent.height = directionalShadowMap->height;
 
-  std::array<VkClearValue, 2> clearValues{};
-  clearValues[1].depthStencil = { 1.0f, 0 };
+  VkClearValue depthClearValue = { 1.0f, 0 };
 
-  renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-  renderPassInfo.pClearValues = clearValues.data();
+  renderPassInfo.clearValueCount = 1;
+  renderPassInfo.pClearValues = &depthClearValue;
 
   vkCmdBeginRenderPass(
     vkSwapchain->commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -77,7 +78,7 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
   viewport.maxDepth = 1.0f;
   vkCmdSetViewport(vkSwapchain->commandBuffer, 0, 1, &viewport);
 
-  VkRect2D scissor {};
+  VkRect2D scissor{};
   scissor.extent.width = directionalShadowMap->width;
   scissor.extent.height = directionalShadowMap->height;
   scissor.offset.x = 0;
@@ -85,11 +86,11 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
 
   vkCmdSetScissor(vkSwapchain->commandBuffer, 0, 1, &scissor);
 
-  vkCmdSetDepthBias(
-					vkSwapchain->commandBuffer,
-					1.25,
-					0.0f,
-					1.75);
+  // vkCmdSetDepthBias(
+  // 			vkSwapchain->commandBuffer,
+  // 			1.25,
+  // 			0.0f,
+  // 			1.75);
 
   struct PushConstant
   {
@@ -108,7 +109,9 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
 
     for (const auto& instance : model.meshInstances) {
       PushConstant pc;
-      pc.lightSpaceMatrix = instance.transformation * lightSpaceMatrix;
+      pc.lightSpaceMatrix =
+        scene.directionalLight->directionalLightTransform.lightSpaceMatrix *
+        instance.transformation;
 
       vkCmdPushConstants(vkSwapchain->commandBuffer,
                          directionalShadowMapPipelineLayout,
@@ -207,22 +210,12 @@ ShadowMapPass::createRenderPass(std::array<AttachmentData, 16> attachmentData)
   }
 }
 
-void ShadowMapPass::createDirectionalLightSpaceMatrix() {
-  // glm::mat4 depthProjectionMatrix = glm::perspective(glm::radians(lightFOV), 1.0f, zNear, zFar);
-  float near_plane = 1.0f, far_plane = 7.5f;
-  glm::mat4 lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, near_plane, far_plane);
-  glm::mat4 lightView = glm::lookAt(glm::vec3(-2.0f, 4.0f, -1.0f), // <- later, change this to actual light position
-                                  glm::vec3( 0.0f, 0.0f,  0.0f), 
-                                  glm::vec3( 0.0f, 1.0f,  0.0f));
-  // glm::mat4 depthViewMatrix = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0, 1, 0));
-
-  lightSpaceMatrix = lightProjection * lightView;
-}
-
-void ShadowMapPass::createDirectionalShadowMapPipeline()
+void
+ShadowMapPass::createDirectionalShadowMapPipeline()
 {
   std::string shaderPath = SHADER_PATH;
-  auto vertShaderCode = readFile(shaderPath + "shadows/directional_shadow_vert.spv");
+  auto vertShaderCode =
+    readFile(shaderPath + "shadows/directional_shadow_vert.spv");
 
   VkShaderModule vertShaderModule =
     vkContext->createShaderModule(vertShaderCode);
@@ -269,7 +262,7 @@ void ShadowMapPass::createDirectionalShadowMapPipeline()
   rasterizer.rasterizerDiscardEnable = VK_FALSE;
   rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
   rasterizer.lineWidth = 1.0f;
-  rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
+  rasterizer.cullMode = VK_CULL_MODE_NONE;
   rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   rasterizer.depthBiasEnable = VK_TRUE;
 
@@ -285,27 +278,27 @@ void ShadowMapPass::createDirectionalShadowMapPipeline()
   depthStencil.depthTestEnable = VK_TRUE;
   depthStencil.depthWriteEnable = VK_TRUE;
   depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-  depthStencil.depthBoundsTestEnable = VK_FALSE;
-  depthStencil.minDepthBounds = 0.0f; // Optional
-  depthStencil.maxDepthBounds = 1.0f; // Optional
-  depthStencil.stencilTestEnable = VK_FALSE;
-  depthStencil.front = {}; // Optional
-  depthStencil.back = {};  // Optional
+  // depthStencil.depthBoundsTestEnable = VK_FALSE;
+  // depthStencil.minDepthBounds = 0.0f; // Optional
+  // depthStencil.maxDepthBounds = 1.0f; // Optional
+  // depthStencil.stencilTestEnable = VK_FALSE;
+  // depthStencil.front = {}; // Optional
+  // depthStencil.back = {};  // Optional
 
   VkPipelineColorBlendStateCreateInfo colorBlending{};
   colorBlending.sType =
     VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
   colorBlending.logicOpEnable = VK_FALSE;
-  colorBlending.logicOp = VK_LOGIC_OP_COPY;
-  colorBlending.attachmentCount = 0;
-  colorBlending.blendConstants[0] = 0.0f;
-  colorBlending.blendConstants[1] = 0.0f;
-  colorBlending.blendConstants[2] = 0.0f;
-  colorBlending.blendConstants[3] = 0.0f;
+  // colorBlending.logicOp = VK_LOGIC_OP_COPY;
+  // colorBlending.attachmentCount = 0;
+  // colorBlending.blendConstants[0] = 0.0f;
+  // colorBlending.blendConstants[1] = 0.0f;
+  // colorBlending.blendConstants[2] = 0.0f;
+  // colorBlending.blendConstants[3] = 0.0f;
 
   std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT,
-                                                VK_DYNAMIC_STATE_SCISSOR,
-                                                VK_DYNAMIC_STATE_DEPTH_BIAS };
+                                                VK_DYNAMIC_STATE_SCISSOR };
+  // VK_DYNAMIC_STATE_DEPTH_BIAS };
 
   VkPipelineDynamicStateCreateInfo dynamicState{};
   dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;

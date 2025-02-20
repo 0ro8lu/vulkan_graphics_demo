@@ -31,9 +31,9 @@ public:
   virtual void recreateAttachments(
     int width,
     int height,
-    std::array<AttachmentData, 16> attachmentData) = 0;
+    const std::array<AttachmentData, 16>& attachmentData) = 0;
   virtual void updateDescriptors(
-    std::array<FramebufferAttachment*, 16> attachments) = 0;
+    const std::array<FramebufferAttachment*, 16>& attachments) = 0;
 
   std::vector<char> readFile(const std::string& filename)
   {

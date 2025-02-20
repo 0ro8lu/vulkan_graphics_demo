@@ -20,32 +20,4 @@ struct VulkanBufferDefinition
   void* mapped;
 };
 
-// --------------------- Camera Buffer ---------------------
-struct CameraBuffer
-{
-  alignas(16) glm::mat4 view;
-  alignas(16) glm::mat4 proj;
-  alignas(16) glm::vec4 cameraPos;
-};
-
-// --------------------- Lights ---------------------
-struct PointLight
-{
-  alignas(16) glm::vec4 position;
-  alignas(16) glm::vec4 color;
-};
-
-struct DirectionalLight
-{
-  alignas(16) glm::vec4 direction;
-  alignas(16) glm::vec4 color;
-};
-
-struct SpotLight
-{
-  alignas(16) glm::vec4 direction;
-  alignas(16) glm::vec4 position;
-  alignas(16) glm::vec4 color;
-};
-
 #endif

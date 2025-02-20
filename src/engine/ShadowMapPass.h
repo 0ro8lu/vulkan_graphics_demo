@@ -7,19 +7,19 @@ class ShadowMapPass : public IPassHelper
 {
 public:
   ShadowMapPass(VulkanContext* vkContext,
-                std::array<AttachmentData, 16> attachmentData,
+                const std::array<AttachmentData, 16>& attachmentData,
                 const Scene& scene,
-                uint32_t shadowMapWidth,
-                uint32_t shadowMapHeight);
+                const uint32_t shadowMapWidth,
+                const uint32_t shadowMapHeight);
   ~ShadowMapPass();
 
   void draw(VulkanSwapchain* vkSwapchain, const Scene& scene) override;
   void recreateAttachments(
     int width,
     int height,
-    std::array<AttachmentData, 16> attachmentData) override {};
+    const std::array<AttachmentData, 16>& attachmentData) override {};
   void updateDescriptors(
-    std::array<FramebufferAttachment*, 16> attachments) override {};
+    const std::array<FramebufferAttachment*, 16>& attachments) override {};
 
   FramebufferAttachment* directionalShadowMap;
 
@@ -34,9 +34,6 @@ private:
   VkPipeline directionalShadowMapPipeline;
   VkPipelineLayout directionalShadowMapPipelineLayout;
   void createDirectionalShadowMapPipeline();
-
-  glm::mat4 lightSpaceMatrix;
-  void createDirectionalLightSpaceMatrix();
 };
 
 #endif

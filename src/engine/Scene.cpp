@@ -1,5 +1,6 @@
 #include "Scene.h"
 #include "engine/Buffers.h"
+#include "engine/Lights.h"
 
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
@@ -8,8 +9,8 @@ Scene::Scene(VulkanContext* vkContext)
   : vkContext(vkContext)
 {
   // --------------------- Init Scene ---------------------
-  DirectionalLight directionalLight;
-  directionalLight.direction = glm::vec4(0.0f, -1.0f, 0.0f, 0.0);
+  directionalLight =
+    new DirectionalLight(glm::vec4(0.0f, -5.0f, 3.0f, 0.0), glm::vec4(10, 0, 0, 1));
 
   pointLights[0] =
     PointLight{ glm::vec4(0, 1, -10, 0), glm::vec4(5, 0.4, 0.1, 1) };
@@ -52,13 +53,13 @@ Scene::Scene(VulkanContext* vkContext)
                       0,
                       glm::vec3(100.0f));
   models.push_back(std::move(plane));
-  //   ModelDO desk = ModelDO(modelPath + "for_demo/prova_optimized.glb",
-  //                          vkContext,
-  //                          glm::vec3(0.0, 1.0f, -3.0f),
-  //                          glm::vec3(0.0, 1.0, 0.0),
-  //                          180.0f,
-  //                          glm::vec3(1.0f));
-  //   models.push_back(std::move(desk));
+  Model desk = Model(modelPath + "for_demo/prova_optimized.glb",
+                     vkContext,
+                     glm::vec3(0.0, 1.0f, -3.0f),
+                     glm::vec3(0.0, 1.0, 0.0),
+                     180.0f,
+                     glm::vec3(1.0f));
+  models.push_back(std::move(desk));
   //  ModelDO rare = ModelDO(modelPath + "for_demo/rare_logo/rare.glb",
   //                         vkContext,
   //                         glm::vec3(-1.85, -0.7, -19.5f),
@@ -89,6 +90,10 @@ Scene::~Scene()
     vkContext->logicalDevice, cameraUBOLayout, nullptr);
   vkDestroyDescriptorSetLayout(
     vkContext->logicalDevice, lightsUBOLayout, nullptr);
+  vkDestroyDescriptorSetLayout(
+    vkContext->logicalDevice, directionalLightSpaceLayout, nullptr);
+  vkDestroyDescriptorSetLayout(
+    vkContext->logicalDevice, directionalShadowMapLayout, nullptr);
 
   // destroy pool
   vkDestroyDescriptorPool(
@@ -103,6 +108,10 @@ Scene::~Scene()
                    directionalLightBuffer.allocation);
 
   vmaDestroyBuffer(vkContext->allocator,
+                   directionalLightTransformBuffer.buffer,
+                   directionalLightTransformBuffer.allocation);
+
+  vmaDestroyBuffer(vkContext->allocator,
                    pointLightsBuffer.buffer,
                    pointLightsBuffer.allocation);
 
@@ -114,16 +123,20 @@ void
 Scene::createDescriptors()
 {
   // --------------------- Create Pool ---------------------
-  VkDescriptorPoolSize poolSize;
-  poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  poolSize.descriptorCount =
-    4; // UBO, PointLights, DirectionalLights, SpotLights
+  std::array<VkDescriptorPoolSize, 2> poolSizes;
+
+  poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  poolSizes[0].descriptorCount =
+    5; // UBO, PointLights, DirectionalLights, SpotLights, LSM
+
+  poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  poolSizes[1].descriptorCount = 1; // ShadowMap
 
   VkDescriptorPoolCreateInfo poolInfo{};
   poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-  poolInfo.poolSizeCount = 1;
-  poolInfo.pPoolSizes = &poolSize;
-  poolInfo.maxSets = 2;
+  poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+  poolInfo.pPoolSizes = poolSizes.data();
+  poolInfo.maxSets = 4;
 
   if (vkCreateDescriptorPool(
         vkContext->logicalDevice, &poolInfo, nullptr, &sceneDescriptorPool) !=
@@ -191,6 +204,56 @@ Scene::createDescriptors()
     }
   }
 
+  // --------------------- Create Light Space Layout ---------------------
+  {
+    std::array<VkDescriptorSetLayoutBinding, 1> bindings;
+    bindings[0].binding = 0;
+    bindings[0].descriptorCount = 1;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[0].pImmutableSamplers = nullptr;
+    bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfoAttachmentWrite{};
+    layoutInfoAttachmentWrite.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfoAttachmentWrite.bindingCount =
+      static_cast<uint32_t>(bindings.size());
+    layoutInfoAttachmentWrite.pBindings = bindings.data();
+
+    if (vkCreateDescriptorSetLayout(vkContext->logicalDevice,
+                                    &layoutInfoAttachmentWrite,
+                                    nullptr,
+                                    &directionalLightSpaceLayout) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("failed to create descriptor set layout!");
+    }
+  }
+
+  // --------------------- Create Shadow Map Layout ---------------------
+  {
+    std::array<VkDescriptorSetLayoutBinding, 1> bindings;
+    bindings[0].binding = 0;
+    bindings[0].descriptorCount = 1;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[0].pImmutableSamplers = nullptr;
+    bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfoAttachmentWrite{};
+    layoutInfoAttachmentWrite.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfoAttachmentWrite.bindingCount =
+      static_cast<uint32_t>(bindings.size());
+    layoutInfoAttachmentWrite.pBindings = bindings.data();
+
+    if (vkCreateDescriptorSetLayout(vkContext->logicalDevice,
+                                    &layoutInfoAttachmentWrite,
+                                    nullptr,
+                                    &directionalShadowMapLayout) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("failed to create descriptor set layout!");
+    }
+  }
+
   // --------------------- Create Descriptorset for Camera ---------------------
   {
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -227,6 +290,8 @@ Scene::createDescriptors()
                            nullptr);
   }
 
+  // --------------------- Create Descriptorset for Light UBOs
+  // ---------------------
   {
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -243,7 +308,8 @@ Scene::createDescriptors()
     VkDescriptorBufferInfo directionalLightBufferInfo{};
     directionalLightBufferInfo.buffer = directionalLightBuffer.buffer;
     directionalLightBufferInfo.offset = 0;
-    directionalLightBufferInfo.range = sizeof(DirectionalLight);
+    directionalLightBufferInfo.range =
+      sizeof(DirectionalLight::DirectionalLightBuffer);
 
     VkDescriptorBufferInfo pointLightBufferInfo{};
     pointLightBufferInfo.buffer = pointLightsBuffer.buffer;
@@ -287,6 +353,62 @@ Scene::createDescriptors()
                            0,
                            nullptr);
   }
+
+  // --------------------- Create Descriptorset for Light Space Matrix
+  // ---------------------
+  {
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = sceneDescriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &directionalLightSpaceLayout;
+
+    if (vkAllocateDescriptorSets(vkContext->logicalDevice,
+                                 &allocInfo,
+                                 &directionalLightSpaceDescriptorSet) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("failed to allocate descriptor sets!");
+    }
+
+    VkDescriptorBufferInfo uniformBufferInfo{};
+    uniformBufferInfo.buffer = directionalLightTransformBuffer.buffer;
+    uniformBufferInfo.offset = 0;
+    uniformBufferInfo.range =
+      sizeof(DirectionalLight::DirectionalLightTransfrom);
+
+    std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
+
+    descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[0].dstSet = directionalLightSpaceDescriptorSet;
+    descriptorWrites[0].dstBinding = 0;
+    descriptorWrites[0].dstArrayElement = 0;
+    descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorWrites[0].descriptorCount = 1;
+    descriptorWrites[0].pBufferInfo = &uniformBufferInfo;
+
+    vkUpdateDescriptorSets(vkContext->logicalDevice,
+                           static_cast<uint32_t>(descriptorWrites.size()),
+                           descriptorWrites.data(),
+                           0,
+                           nullptr);
+  }
+
+  // --------------------- Create Descriptorset for Shadow Map
+  // ---------------------
+  {
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = sceneDescriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &directionalShadowMapLayout;
+
+    if (vkAllocateDescriptorSets(vkContext->logicalDevice,
+                                 &allocInfo,
+                                 &directionalShadowMapDescriptorSet) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("failed to allocate descriptor sets!");
+    }
+  }
 }
 
 void
@@ -303,7 +425,11 @@ Scene::createBuffers()
                             cameraBuffer.allocation);
 
   // --------------------- Light Buffers ---------------------
-  VkDeviceSize directionalLightBufferSize = sizeof(DirectionalLight);
+  VkDeviceSize directionalLightBufferSize =
+    sizeof(DirectionalLight::DirectionalLightBuffer);
+  VkDeviceSize directionalLightTransformBufferSize =
+    sizeof(DirectionalLight::DirectionalLightTransfrom);
+
   VkDeviceSize pointLightBufferSize = sizeof(PointLight) * MAX_POINT_LIGHTS;
   VkDeviceSize spotLightBufferSize = sizeof(SpotLight) * MAX_SPOT_LIGHTS;
 
@@ -313,6 +439,13 @@ Scene::createBuffers()
                             BufferType::STAGING_BUFFER,
                             directionalLightBuffer.buffer,
                             directionalLightBuffer.allocation);
+  directionalLightTransformBuffer.mapped =
+    vkContext->createBuffer(directionalLightTransformBufferSize,
+                            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                            BufferType::STAGING_BUFFER,
+                            directionalLightTransformBuffer.buffer,
+                            directionalLightTransformBuffer.allocation);
+
   pointLightsBuffer.mapped =
     vkContext->createBuffer(pointLightBufferSize,
                             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -328,7 +461,15 @@ Scene::createBuffers()
 
   uint8_t* directionalMapped =
     reinterpret_cast<uint8_t*>(directionalLightBuffer.mapped);
-  memcpy(directionalMapped, &directionalLight, sizeof(directionalLight));
+  memcpy(directionalMapped,
+         &directionalLight->directionalLightBuffer,
+         directionalLightBufferSize);
+
+  uint8_t* directionalTransformMapped =
+    reinterpret_cast<uint8_t*>(directionalLightTransformBuffer.mapped);
+  memcpy(directionalTransformMapped,
+         &directionalLight->directionalLightTransform,
+         directionalLightBufferSize);
 
   uint8_t* pointMapped = reinterpret_cast<uint8_t*>(pointLightsBuffer.mapped);
   memcpy(pointMapped, &pointLights, pointLightBufferSize);

@@ -12,19 +12,19 @@ class BlinnPhongPass : public IPassHelper
 {
 public:
   BlinnPhongPass(VulkanContext* vkContext,
-                 std::array<AttachmentData, 16> attachmentData,
+                 const std::array<AttachmentData, 16>& attachmentData,
                  const Scene& scene,
-                 uint32_t attachmentWidth,
-                 uint32_t attachmentHeight);
+                 const uint32_t attachmentWidth,
+                 const uint32_t attachmentHeight);
   ~BlinnPhongPass();
 
   void draw(VulkanSwapchain* vkSwapchain, const Scene& scene) override;
   void recreateAttachments(
     int width,
     int height,
-    std::array<AttachmentData, 16> attachmentData) override;
+    const std::array<AttachmentData, 16>& attachmentData) override;
   void updateDescriptors(
-    std::array<FramebufferAttachment*, 16> attachments) override {};
+    const std::array<FramebufferAttachment*, 16>& attachments) override;
 
   FramebufferAttachment* hdrAttachment;
 

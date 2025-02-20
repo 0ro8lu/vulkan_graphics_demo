@@ -1,13 +1,12 @@
 #include "Camera3D.h"
 
-#include <iostream>
-
 Camera3D::Camera3D(glm::vec3 cameraPos, glm::vec3 cameraFront)
   : cameraPos(cameraPos)
   , cameraFront(cameraFront)
   , needsUpdating(true)
-  , cameraMatrix(1.0f)
 {
+  cameraMatrix = glm::lookAt(
+    cameraPos, cameraPos + cameraFront, glm::vec3(0.0f, 1.0f, 0.0f));
 }
 
 void

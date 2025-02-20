@@ -3,10 +3,10 @@
 #include <vulkan/vulkan_core.h>
 
 HDRPass::HDRPass(VulkanContext* vkContext,
-                 std::array<AttachmentData, 16> attachmentData,
+                 const std::array<AttachmentData, 16>& attachmentData,
                  const Scene& scene,
-                 uint32_t attachmentWidth,
-                 uint32_t attachmentHeight)
+                 const uint32_t attachmentWidth,
+                 const uint32_t attachmentHeight)
   : IPassHelper(vkContext, scene)
 {
   createAttachments(attachmentWidth, attachmentHeight);
@@ -176,9 +176,10 @@ HDRPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
 }
 
 void
-HDRPass::recreateAttachments(int width,
-                             int height,
-                             std::array<AttachmentData, 16> attachmentData)
+HDRPass::recreateAttachments(
+  int width,
+  int height,
+  const std::array<AttachmentData, 16>& attachmentData)
 {
   brightSpotsAttachment->resize(width, height);
   intermediateBloomAttachment->resize(width, height);
@@ -189,7 +190,8 @@ HDRPass::recreateAttachments(int width,
 }
 
 void
-HDRPass::updateDescriptors(std::array<FramebufferAttachment*, 16> attachments)
+HDRPass::updateDescriptors(
+  const std::array<FramebufferAttachment*, 16>& attachments)
 {
   {
     VkDescriptorImageInfo imageInfo{};

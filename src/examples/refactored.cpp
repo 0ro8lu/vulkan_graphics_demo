@@ -49,12 +49,15 @@ main()
   int width, height;
   glfwGetFramebufferSize(window, &width, &height);
 
+  scene.camera->resizeCamera(width, height);
+
   ShadowMapPass shadowMapPass(vkContext, {}, scene, 1024, 1024); // <- 1024 is the fixed resolution i've chosen for the shadowmaps
   BlinnPhongPass blinnPhongPass(vkContext, {vkSwapchain->depthImageView, vkSwapchain->getDepthImageFormat()}, scene, width, height);
   HDRPass hdrPass(vkContext, {VK_NULL_HANDLE, vkSwapchain->getSwapChainImageFormat()}, scene, width, height);
 
   // update descriptors
   hdrPass.updateDescriptors({blinnPhongPass.hdrAttachment});
+  blinnPhongPass.updateDescriptors({shadowMapPass.directionalShadowMap});
 
   // swapchain create framebuffer with pass associated with rendering the final
   // step
@@ -66,8 +69,6 @@ main()
 
     hdrPass.updateDescriptors({blinnPhongPass.hdrAttachment});
   };
-
-  scene.camera->resizeCamera(width, height);
 
   auto frame_duration = calculateFrameDuration(60.0f);
   frame_duration = std::chrono::microseconds(8333);

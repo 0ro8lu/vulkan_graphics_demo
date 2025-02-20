@@ -1,10 +1,13 @@
 #ifndef _SCENE_H_
 #define _SCENE_H_
 
+#include "engine/Buffers.h"
 #include "engine/Camera3D.h"
 #include "engine/ModelLoading/Model.h"
 #include "engine/Skybox.h"
 #include "engine/VulkanContext.h"
+
+#include "engine/Lights.h"
 
 #include <array>
 
@@ -22,9 +25,13 @@ public:
 
   VkDescriptorSetLayout cameraUBOLayout;
   VkDescriptorSetLayout lightsUBOLayout;
+  VkDescriptorSetLayout directionalLightSpaceLayout;
+  VkDescriptorSetLayout directionalShadowMapLayout;
 
   VkDescriptorSet cameraUBODescriptorset;
   VkDescriptorSet lightsUBODescriptorset;
+  VkDescriptorSet directionalLightSpaceDescriptorSet;
+  VkDescriptorSet directionalShadowMapDescriptorSet;
 
   std::vector<Model> models;
   std::vector<Model> lightCubes;
@@ -32,7 +39,7 @@ public:
   Skybox* skybox;
 
   std::array<PointLight, MAX_POINT_LIGHTS> pointLights;
-  DirectionalLight directionalLight;
+  DirectionalLight* directionalLight;
   std::array<SpotLight, MAX_SPOT_LIGHTS> spotLights;
 
   Camera3D* camera;
@@ -47,6 +54,7 @@ private:
   VulkanBufferDefinition cameraBuffer;
   VulkanBufferDefinition pointLightsBuffer;
   VulkanBufferDefinition directionalLightBuffer;
+  VulkanBufferDefinition directionalLightTransformBuffer;
   VulkanBufferDefinition spotLightsBuffer;
   void createBuffers();
 };

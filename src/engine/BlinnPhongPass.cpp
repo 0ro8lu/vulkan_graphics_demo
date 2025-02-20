@@ -4,11 +4,12 @@
 #include "engine/Vertex.h"
 #include <vulkan/vulkan_core.h>
 
-BlinnPhongPass::BlinnPhongPass(VulkanContext* vkContext,
-                               std::array<AttachmentData, 16> attachmentData,
-                               const Scene& scene,
-                               uint32_t attachmentWidth,
-                               uint32_t attachmentHeight)
+BlinnPhongPass::BlinnPhongPass(
+  VulkanContext* vkContext,
+  const std::array<AttachmentData, 16>& attachmentData,
+  const Scene& scene,
+  const uint32_t attachmentWidth,
+  const uint32_t attachmentHeight)
   : IPassHelper(vkContext, scene)
 {
   createAttachments(attachmentWidth, attachmentHeight);
@@ -96,6 +97,24 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
                           1,
                           1,
                           &scene.lightsUBODescriptorset,
+                          0,
+                          nullptr);
+
+  vkCmdBindDescriptorSets(vkSwapchain->commandBuffer,
+                          VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          blinnPhongPipelineLayout,
+                          3,
+                          1,
+                          &scene.directionalLightSpaceDescriptorSet,
+                          0,
+                          nullptr);
+
+  vkCmdBindDescriptorSets(vkSwapchain->commandBuffer,
+                          VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          blinnPhongPipelineLayout,
+                          4,
+                          1,
+                          &scene.directionalShadowMapDescriptorSet,
                           0,
                           nullptr);
 
@@ -264,11 +283,38 @@ void
 BlinnPhongPass::recreateAttachments(
   int width,
   int height,
-  std::array<AttachmentData, 16> attachmentData)
+  const std::array<AttachmentData, 16>& attachmentData)
 {
   hdrAttachment->resize(width, height);
   vkDestroyFramebuffer(vkContext->logicalDevice, hdrFramebuffer, nullptr);
   createFrameBuffer(attachmentData);
+}
+
+void
+BlinnPhongPass::updateDescriptors(
+  const std::array<FramebufferAttachment*, 16>& attachments)
+{
+  VkDescriptorImageInfo shadowMapImageInfo{};
+  shadowMapImageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+  shadowMapImageInfo.imageView = attachments[0]->view;
+  shadowMapImageInfo.sampler = attachments[0]->sampler;
+
+  std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
+
+  descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  descriptorWrites[0].dstSet = scene.directionalShadowMapDescriptorSet;
+  descriptorWrites[0].dstBinding = 0;
+  descriptorWrites[0].dstArrayElement = 0;
+  descriptorWrites[0].descriptorType =
+    VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  descriptorWrites[0].descriptorCount = 1;
+  descriptorWrites[0].pImageInfo = &shadowMapImageInfo;
+
+  vkUpdateDescriptorSets(vkContext->logicalDevice,
+                         static_cast<uint32_t>(descriptorWrites.size()),
+                         descriptorWrites.data(),
+                         0,
+                         nullptr);
 }
 
 void
@@ -488,10 +534,12 @@ BlinnPhongPass::createMainPipeline(const Scene& scene)
   dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
   dynamicState.pDynamicStates = dynamicStates.data();
 
-  std::array<VkDescriptorSetLayout, 3> descriptorSetLayouts;
+  std::array<VkDescriptorSetLayout, 5> descriptorSetLayouts;
   descriptorSetLayouts[0] = scene.cameraUBOLayout;
   descriptorSetLayouts[1] = scene.lightsUBOLayout;
   descriptorSetLayouts[2] = Model::textureLayout;
+  descriptorSetLayouts[3] = scene.directionalLightSpaceLayout;
+  descriptorSetLayouts[4] = scene.directionalShadowMapLayout;
 
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
   pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;

@@ -47,4 +47,11 @@ private:
   bool needsUpdating;
 };
 
+struct CameraBuffer
+{
+  alignas(16) glm::mat4 view;
+  alignas(16) glm::mat4 proj;
+  alignas(16) glm::vec4 cameraPos;
+};
+
 #endif
