@@ -1,6 +1,7 @@
 #include "engine/ShadowMapPass.h"
 
 #include "engine/Vertex.h"
+#include <vulkan/vulkan_core.h>
 
 ShadowMapPass::ShadowMapPass(
   VulkanContext* vkContext,

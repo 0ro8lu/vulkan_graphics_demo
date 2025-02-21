@@ -9,30 +9,48 @@ Scene::Scene(VulkanContext* vkContext)
   : vkContext(vkContext)
 {
   // --------------------- Init Scene ---------------------
-  directionalLight =
-    new DirectionalLight(glm::vec4(0.0f, -5.0f, 3.0f, 0.0), glm::vec4(10, 0, 0, 1));
+  directionalLight = new DirectionalLight(glm::vec4(-5.0f, 5.0f, -3.0f, 0.0),
+                                          glm::vec4(10, 0, 0, 1));
 
-  pointLights[0] =
-    PointLight{ glm::vec4(0, 1, -10, 0), glm::vec4(5, 0.4, 0.1, 1) };
-  pointLights[1] =
-    PointLight{ glm::vec4(0, -2, -20, 0), glm::vec4(5, 1, 1, 1) };
-  pointLights[2] = PointLight{ glm::vec4(0, -2, -30, 1), glm::vec4(0.5) };
-  pointLights[3] =
-    PointLight{ glm::vec4(0, -2, -30, 1), glm::vec4(5, 2, 3, 1) };
-  pointLights[4] =
-    PointLight{ glm::vec4(0, -2, -40, 1), glm::vec4(10, 0, 0, 1) };
+  pointLights[0] = PointLight{ glm::vec4(5, -5, 3, 0), glm::vec4(5, 5, 5, 1)};
+  // pointLights[0] =
+  //   PointLight{ glm::vec4(0, 1, -10, 0), glm::vec4(5, 0.4, 0.1, 1) };
+  // pointLights[1] =
+  //   PointLight{ glm::vec4(0, -2, -20, 0), glm::vec4(5, 1, 1, 1) };
+  // pointLights[2] = PointLight{ glm::vec4(0, -2, -30, 1), glm::vec4(0.5) };
+  // pointLights[3] =
+  //   PointLight{ glm::vec4(0, -2, -30, 1), glm::vec4(5, 2, 3, 1) };
+  // pointLights[4] =
+  //   PointLight{ glm::vec4(0, -2, -40, 1), glm::vec4(10, 0, 0, 1) };
 
   // create light cubes for the lights
   std::string modelPath = MODEL_PATH;
-  for (auto& pointLight : pointLights) {
-    Model cube = Model(modelPath + "cube.glb",
-                       vkContext,
-                       pointLight.position,
-                       glm::vec3(0.0),
-                       0,
-                       glm::vec3(0.1f));
-    lightCubes.push_back(std::move(cube));
-  }
+  // for (auto& pointLight : pointLights) {
+  //   Model cube = Model(modelPath + "tiny.glb",
+  //                      vkContext,
+  //                      pointLight.position,
+  //                      glm::vec3(0.0),
+  //                      0,
+  //                      glm::vec3(0.1f));
+  //   lightCubes.push_back(std::move(cube));
+  // }
+
+  Model cube1 =
+    Model(modelPath + "tiny.glb",
+          vkContext,
+          pointLights[0].position,
+          glm::vec3(0.0),
+          0,
+          glm::vec3(1.0f));
+  lightCubes.push_back(std::move(cube1));
+  // Model cube1 =
+  //   Model(modelPath + "tiny.glb",
+  //         vkContext,
+  //         glm::vec3(-directionalLight->directionalLightBuffer.direction),
+  //         glm::vec3(0.0),
+  //         0,
+  //         glm::vec3(1.0f));
+  // lightCubes.push_back(std::move(cube1));
 
   camera = new Camera3D(glm::vec3(0.0, 0.0, 3.0), glm::vec3(0.0, 0.0, -1.0));
 
@@ -46,20 +64,26 @@ Scene::Scene(VulkanContext* vkContext)
   skybox = new Skybox(vkContext, files);
 
   // finish initializing models and loading them, setup camera etc.
-  Model plane = Model(modelPath + "for_demo/plane.glb",
+  Model plane = Model(modelPath + "plane.glb",
                       vkContext,
-                      glm::vec3(0.0, 1.0f, 0.0f),
+                      glm::vec3(0.0),
                       glm::vec3(0),
                       0,
-                      glm::vec3(100.0f));
+                      glm::vec3(1.0f));
   models.push_back(std::move(plane));
-  Model desk = Model(modelPath + "for_demo/prova_optimized.glb",
-                     vkContext,
-                     glm::vec3(0.0, 1.0f, -3.0f),
-                     glm::vec3(0.0, 1.0, 0.0),
-                     180.0f,
-                     glm::vec3(1.0f));
-  models.push_back(std::move(desk));
+  Model cube = Model(modelPath + "cube.glb", vkContext, glm::vec3(0, 2, 0));
+  // glm::vec3(0.0, 1.0f, 0.0f),
+  // glm::vec3(0),
+  // 0,
+  // glm::vec3(1.0f));
+  models.push_back(std::move(cube));
+  // Model desk = Model(modelPath + "for_demo/prova_optimized.glb",
+  //                    vkContext,
+  //                    glm::vec3(0.0, 1.0f, -3.0f),
+  //                    glm::vec3(0.0, 1.0, 0.0),
+  //                    180.0f,
+  //                    glm::vec3(1.0f));
+  // models.push_back(std::move(desk));
   //  ModelDO rare = ModelDO(modelPath + "for_demo/rare_logo/rare.glb",
   //                         vkContext,
   //                         glm::vec3(-1.85, -0.7, -19.5f),
@@ -469,7 +493,7 @@ Scene::createBuffers()
     reinterpret_cast<uint8_t*>(directionalLightTransformBuffer.mapped);
   memcpy(directionalTransformMapped,
          &directionalLight->directionalLightTransform,
-         directionalLightBufferSize);
+         directionalLightTransformBufferSize);
 
   uint8_t* pointMapped = reinterpret_cast<uint8_t*>(pointLightsBuffer.mapped);
   memcpy(pointMapped, &pointLights, pointLightBufferSize);
@@ -487,4 +511,6 @@ Scene::update()
   cb.cameraPos = glm::vec4(camera->getCameraPos(), 1);
 
   memcpy(cameraBuffer.mapped, &cb, sizeof(CameraBuffer));
+
+  models[1].rotate(1, glm::vec3(0.1, 0.2, 0.3));
 }

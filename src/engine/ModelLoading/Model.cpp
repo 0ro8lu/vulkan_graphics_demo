@@ -2,6 +2,7 @@
 #include "engine/ModelLoading/Mesh.h"
 #include "engine/Vertex.h"
 
+#include <assimp/postprocess.h>
 #include <iostream>
 
 VkDescriptorSetLayout Model::textureLayout = VK_NULL_HANDLE;
@@ -14,7 +15,6 @@ Model::Model(const std::string& filePath,
              glm::vec3 scale)
   : vkContext(vkContext)
 {
-
   modelMatrix = glm::translate(modelMatrix, pos);
   if (rotationAngle != 0) {
     modelMatrix =
@@ -228,7 +228,7 @@ Model::processMesh(aiMesh* mesh,
     // Normal
     if (mesh->HasNormals()) {
       glm::vec4 normal = glm::vec4(
-        mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z, 0.0f);
+        mesh->mNormals[i].x, -mesh->mNormals[i].y, mesh->mNormals[i].z, 0.0f);
       vertex.normals = glm::normalize(glm::vec3(normal));
     }
 

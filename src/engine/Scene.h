@@ -11,7 +11,7 @@
 
 #include <array>
 
-const uint32_t MAX_POINT_LIGHTS = 5;
+const uint32_t MAX_POINT_LIGHTS = 1;
 const uint32_t MAX_SPOT_LIGHTS = 10;
 
 class Scene
