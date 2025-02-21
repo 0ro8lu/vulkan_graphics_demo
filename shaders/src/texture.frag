@@ -39,45 +39,48 @@ vec3 baseAmbient = vec3(0.2f, 0.2f, 0.2f);
 vec3 baseDiffuse = vec3(0.5f, 0.5f, 0.5f);
 vec3 baseSpecular = vec3(1.0f, 1.0f, 1.0f);
 
-float CalculateShadow(vec4 fragPosLightSpace);
-vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir, float shadow);
-// vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir);
+float CalculateShadow(vec4 fragPosLightSpace, vec3 lightDir); 
+vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir);
 vec3 CalcPointLight(vec3 lightPos, vec3 lightColor, vec3 normal, vec3 fragPos, vec3 viewDir);
 
 void main() {
+ vec3 norm = normalize(normal);
+ vec3 viewDir = normalize(viewPos - fragPos);
 
-    vec3 norm = normalize(normal);
-    vec3 viewDir = normalize(viewPos - fragPos);
+ vec3 result = 0.2 * CalcDirLight(vec3(directionalLight.direction.xyz), norm, viewDir);
+ // vec3 result = 0.2 * CalcDirLight(vec3(directionalLight.direction.xyz), norm, viewDir);
 
-    float shadow = CalculateShadow(fragPosLightSpace);
+ for(int i = 0; i < NR_POINT_LIGHTS; i++) {
+     result += CalcPointLight(vec3(pointLights.pointLights[i].position.xyz), vec3(pointLights.pointLights[i].color.xyz), norm, fragPos, viewDir);
+     // result += CalcPointLight(vec3(pointLights.pointLights[i].position.xyz), vec3(pointLights.pointLights[i].color.xyz), norm, fragPos, viewDir, shadow);
+ }
 
-    vec3 result = 1 * CalcDirLight(vec3(directionalLight.direction.xyz), norm, viewDir, shadow);
-    // vec3 result = 0.2 * CalcDirLight(vec3(directionalLight.direction.xyz), norm, viewDir);
-
-    // for(int i = 0; i < NR_POINT_LIGHTS; i++) {
-    //     result += CalcPointLight(vec3(pointLights.pointLights[i].position.xyz), vec3(pointLights.pointLights[i].color.xyz), norm, fragPos, viewDir);
-    // }
-
-    outColor = vec4(result, 1.0);
+ outColor = vec4(result, 1.0);
 }
 
-float CalculateShadow(vec4 fragPosLightSpace) {
-    // perform perspective divide
+float CalculateShadow(vec4 fragPosLightSpace, vec3 lightDir) {
+
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
-    // transform to [0,1] range
+
     projCoords = projCoords * 0.5 + 0.5;
-    // get closest depth value from light's perspective (using [0,1] range fragPosLight as coords)
+
+    if(projCoords.z > 1.0)
+        return 0.0;
+    
     float closestDepth = texture(directionalShadowMap, projCoords.xy).r; 
-    // get depth of current fragment from light's perspective
+
     float currentDepth = projCoords.z;
-    // check whether current frag pos is in shadow
+
+    // float bias = max(0.005 * (1.0 - dot(normal, lightDir)), 0.005);
+    // float bias = 0.0136;
+    //TODO: figure this out with renderdoc
+   
     float shadow = currentDepth > closestDepth  ? 1.0 : 0.0;
 
     return shadow;
 }
 
-vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir, float shadow)
-// vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir)
+vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir)
 {
     lightDir = normalize(-lightDir);
 
@@ -98,15 +101,18 @@ vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir, float shadow)
     vec3 diffuse = baseDiffuse * diff * vec3(texture(diffuseTexSampler, fragTexCoord));
     vec3 specular = baseSpecular * spec * vec3(texture(specularTexSampler, fragTexCoord));
 
-    return ambient + (1.0 - shadow) * (diffuse + specular); 
+    float shadow = CalculateShadow(fragPosLightSpace, lightDir);
+
+    return ambient + ((1.0 - shadow) * (diffuse + specular));
     // return (ambient + diffuse + specular);
 }
 
+// vec3 CalcPointLight(vec3 lightPos, vec3 lightColor, vec3 normal, vec3 fragPos, vec3 viewDir, float shadow)
 vec3 CalcPointLight(vec3 lightPos, vec3 lightColor, vec3 normal, vec3 fragPos, vec3 viewDir)
 {
     // lightPos = vec3(lightPos.x, -lightPos.y, lightPos.z);
 
-    vec3 lightDir = normalize(vec3(lightPos.x, -lightPos.y, lightPos.z) - fragPos);
+    vec3 lightDir = normalize(vec3(lightPos.x, lightPos.y, lightPos.z) - fragPos);
 
     // diffuse shading
     float diff = max(dot(normal, lightDir), 0.0);
@@ -134,4 +140,5 @@ vec3 CalcPointLight(vec3 lightPos, vec3 lightColor, vec3 normal, vec3 fragPos, v
     resultDiffuse *= attenuation;
     resultSpecular *= attenuation;
     return (resultAmbient + resultDiffuse + resultSpecular);
+    // return resultAmbient + ((1.0 - shadow) * (resultDiffuse + resultSpecular));
 }

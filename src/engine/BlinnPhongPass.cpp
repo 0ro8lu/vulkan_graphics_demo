@@ -193,6 +193,7 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
                          scene.lightCubes[i].indexBuffer,
                          0,
                          VK_INDEX_TYPE_UINT32);
+
     for (const auto& instance : scene.lightCubes[i].meshInstances) {
       PushConstant pc;
       pc.model = instance.transformation;
@@ -295,7 +296,8 @@ BlinnPhongPass::updateDescriptors(
   const std::array<FramebufferAttachment*, 16>& attachments)
 {
   VkDescriptorImageInfo shadowMapImageInfo{};
-  shadowMapImageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+  shadowMapImageInfo.imageLayout =
+    VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
   shadowMapImageInfo.imageView = attachments[0]->view;
   shadowMapImageInfo.sampler = attachments[0]->sampler;
 

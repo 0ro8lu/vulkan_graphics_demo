@@ -24,16 +24,15 @@ layout(location = 2) out vec3 fragPos;
 layout(location = 3) out vec3 viewPos;
 layout(location = 4) out vec4 fragPosLightSpace;
 
-void main() {
-    gl_Position = ubo.proj * ubo.view * model * vec4(inPosition, 1.0);
+void main() {    
+    fragPos = vec3(model * vec4(inPosition, 1.0));
 
     outNormal = mat3(transpose(inverse(model))) * inNormal;  
-
-    // fragPos = inPosition;
-    fragPos = vec3(model * vec4(inPosition, 1.0));
 
     viewPos = vec3(ubo.cameraPos);
     fragTexCoord = inTexCoord;
 
-    // fragPosLightSpace = lightSpace.lightSpaceMatrix * vec4(inPosition, 1.0);
+    fragPosLightSpace = lightSpace.lightSpaceMatrix * model * vec4(inPosition, 1.0);
+
+    gl_Position = ubo.proj * ubo.view * model * vec4(inPosition, 1.0);
 }

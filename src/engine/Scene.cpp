@@ -9,8 +9,8 @@ Scene::Scene(VulkanContext* vkContext)
   : vkContext(vkContext)
 {
   // --------------------- Init Scene ---------------------
-  directionalLight =
-    new DirectionalLight(glm::vec4(0.0f, -5.0f, 3.0f, 0.0), glm::vec4(10, 0, 0, 1));
+  directionalLight = new DirectionalLight(glm::vec4(-5.0f, 5.0f, -3.0f, 0.0),
+                                          glm::vec4(10, 0, 0, 1));
 
   pointLights[0] =
     PointLight{ glm::vec4(0, 1, -10, 0), glm::vec4(5, 0.4, 0.1, 1) };
@@ -48,19 +48,21 @@ Scene::Scene(VulkanContext* vkContext)
   // finish initializing models and loading them, setup camera etc.
   Model plane = Model(modelPath + "for_demo/plane.glb",
                       vkContext,
-                      glm::vec3(0.0, 1.0f, 0.0f),
+                      glm::vec3(0, 1, 0),
                       glm::vec3(0),
                       0,
-                      glm::vec3(100.0f));
+                      glm::vec3(100));
   models.push_back(std::move(plane));
-  Model desk = Model(modelPath + "for_demo/prova_optimized.glb",
-                     vkContext,
-                     glm::vec3(0.0, 1.0f, -3.0f),
-                     glm::vec3(0.0, 1.0, 0.0),
-                     180.0f,
-                     glm::vec3(1.0f));
-  models.push_back(std::move(desk));
-  //  ModelDO rare = ModelDO(modelPath + "for_demo/rare_logo/rare.glb",
+  Model cube = Model(modelPath + "cube.glb", vkContext, glm::vec3(0, 2, 0));
+  models.push_back(std::move(cube));
+  // Model desk = Model(modelPath + "for_demo/prova_optimized.glb",
+  //                    vkContext,
+  //                    glm::vec3(0.0, 1.0f, -3.0f),
+  //                    glm::vec3(0.0, 1.0, 0.0),
+  //                    180.0f,
+  //                    glm::vec3(1.0f));
+  // models.push_back(std::move(desk));
+  // Model rare = Model(modelPath + "for_demo/rare_logo/rare.glb",
   //                         vkContext,
   //                         glm::vec3(-1.85, -0.7, -19.5f),
   //                         glm::vec3(1.0, 0.0, 0.0),
@@ -469,7 +471,7 @@ Scene::createBuffers()
     reinterpret_cast<uint8_t*>(directionalLightTransformBuffer.mapped);
   memcpy(directionalTransformMapped,
          &directionalLight->directionalLightTransform,
-         directionalLightBufferSize);
+         directionalLightTransformBufferSize);
 
   uint8_t* pointMapped = reinterpret_cast<uint8_t*>(pointLightsBuffer.mapped);
   memcpy(pointMapped, &pointLights, pointLightBufferSize);
