@@ -28,7 +28,7 @@ layout(location = 0) in vec2 fragTexCoord;
 layout(location = 1) in vec3 normal;
 layout(location = 2) in vec3 fragPos;
 layout(location = 3) in vec3 viewPos;
-layout(location = 4) in vec4 fragPosLightSpace;
+layout(location = 4) in vec4 inFragPosLightSpace;
 
 layout(location = 0) out vec4 outColor;
 
@@ -39,7 +39,7 @@ vec3 baseAmbient = vec3(0.2f, 0.2f, 0.2f);
 vec3 baseDiffuse = vec3(0.5f, 0.5f, 0.5f);
 vec3 baseSpecular = vec3(1.0f, 1.0f, 1.0f);
 
-float CalculateShadow(vec4 fragPosLightSpace, vec3 lightDir); 
+float CalculateShadow(vec4 fragPosLightSpace); 
 vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir);
 vec3 CalcPointLight(vec3 lightPos, vec3 lightColor, vec3 normal, vec3 fragPos, vec3 viewDir);
 
@@ -48,7 +48,6 @@ void main() {
  vec3 viewDir = normalize(viewPos - fragPos);
 
  vec3 result = 0.2 * CalcDirLight(vec3(directionalLight.direction.xyz), norm, viewDir);
- // vec3 result = 0.2 * CalcDirLight(vec3(directionalLight.direction.xyz), norm, viewDir);
 
  for(int i = 0; i < NR_POINT_LIGHTS; i++) {
      result += CalcPointLight(vec3(pointLights.pointLights[i].position.xyz), vec3(pointLights.pointLights[i].color.xyz), norm, fragPos, viewDir);
@@ -58,27 +57,35 @@ void main() {
  outColor = vec4(result, 1.0);
 }
 
-float CalculateShadow(vec4 fragPosLightSpace, vec3 lightDir) {
-
-    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
-
-    projCoords = projCoords * 0.5 + 0.5;
-
-    if(projCoords.z > 1.0)
-        return 0.0;
-    
-    float closestDepth = texture(directionalShadowMap, projCoords.xy).r; 
-
-    float currentDepth = projCoords.z;
-
-    // float bias = max(0.005 * (1.0 - dot(normal, lightDir)), 0.005);
-    // float bias = 0.0136;
-    //TODO: figure this out with renderdoc
-   
-    float shadow = currentDepth > closestDepth  ? 1.0 : 0.0;
-
-    return shadow;
+float CalculateShadow(vec4 fragPosLightSpace)
+{
+	float shadow = 0.0;
+	if (fragPosLightSpace.z > -1.0 && fragPosLightSpace.z < 1.0) {
+		float dist = texture(directionalShadowMap, fragPosLightSpace.st).r;
+		if (fragPosLightSpace.w > 0.0 && dist < fragPosLightSpace.z) {
+			shadow = 1.0;
+		}
+	}
+	return shadow;
 }
+
+// float CalculateShadow(vec4 fragPosLightSpace, vec3 lightDir) {
+
+//     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+
+//     projCoords = projCoords * 0.5 + 0.5;
+
+//     if(projCoords.z > 1.0)
+//         return 0.0;
+    
+//     float closestDepth = texture(directionalShadowMap, projCoords.xy).r; 
+
+//     float currentDepth = projCoords.z;
+ 
+//     float shadow = currentDepth > closestDepth  ? 1.0 : 0.0;
+
+//     return shadow;
+// }
 
 vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir)
 {
@@ -101,7 +108,7 @@ vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir)
     vec3 diffuse = baseDiffuse * diff * vec3(texture(diffuseTexSampler, fragTexCoord));
     vec3 specular = baseSpecular * spec * vec3(texture(specularTexSampler, fragTexCoord));
 
-    float shadow = CalculateShadow(fragPosLightSpace, lightDir);
+    float shadow = CalculateShadow(inFragPosLightSpace / inFragPosLightSpace.w);
 
     return ambient + ((1.0 - shadow) * (diffuse + specular));
     // return (ambient + diffuse + specular);

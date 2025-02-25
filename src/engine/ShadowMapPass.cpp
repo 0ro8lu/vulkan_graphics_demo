@@ -287,8 +287,6 @@ ShadowMapPass::createDirectionalShadowMapPipeline()
 
   std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT,
                                                 VK_DYNAMIC_STATE_SCISSOR };
-  // VK_DYNAMIC_STATE_DEPTH_BIAS
-  // };
 
   VkPipelineDynamicStateCreateInfo dynamicState{};
   dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;

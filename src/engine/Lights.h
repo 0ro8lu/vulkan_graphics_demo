@@ -1,6 +1,7 @@
 #ifndef _LIGHTS_H_
 #define _LIGHTS_H_
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
 
