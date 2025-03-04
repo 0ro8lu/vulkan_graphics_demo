@@ -19,9 +19,7 @@ public:
   // void present
   VkFormat getSwapChainImageFormat() const { return swapChainImageFormat; }
   VkFormat getDepthImageFormat() const { return depthFormat; }
-  VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
-                               VkImageTiling tiling,
-                               VkFormatFeatureFlags features);
+
   std::function<void(int, int)> onResize;
   void recreateSwapChain();
   void createSwapChainFrameBuffer();

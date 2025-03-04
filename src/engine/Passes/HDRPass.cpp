@@ -1,6 +1,4 @@
-#include "engine/HDRPass.h"
-
-#include <vulkan/vulkan_core.h>
+#include "engine/Passes/HDRPass.h"
 
 HDRPass::HDRPass(VulkanContext* vkContext,
                  const std::array<AttachmentData, 16>& attachmentData,

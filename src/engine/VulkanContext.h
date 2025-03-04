@@ -58,6 +58,10 @@ public:
 
   // destroy vulkan primitives
   void destroyImageView(VkImageView view);
+
+  VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
+                               VkImageTiling tiling,
+                               VkFormatFeatureFlags features);
 };
 
 #endif

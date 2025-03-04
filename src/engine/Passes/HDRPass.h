@@ -1,7 +1,7 @@
 #ifndef _HDR_PASS_H_
 #define _HDR_PASS_H_
 
-#include "IPassHelper.h"
+#include "engine/Passes/IPassHelper.h"
 
 class HDRPass : public IPassHelper
 {

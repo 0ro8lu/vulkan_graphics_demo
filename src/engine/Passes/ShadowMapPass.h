@@ -1,7 +1,7 @@
 #ifndef _SHADOW_MAP_PASS_H_
 #define _SHADOW_MAP_PASS_H_
 
-#include "IPassHelper.h"
+#include "engine/Passes/IPassHelper.h"
 
 class ShadowMapPass : public IPassHelper
 {

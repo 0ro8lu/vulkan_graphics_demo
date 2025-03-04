@@ -53,7 +53,7 @@ Scene::Scene(VulkanContext* vkContext)
                       0,
                       glm::vec3(100));
   models.push_back(std::move(plane));
-  Model cube = Model(modelPath + "cube.glb", vkContext, glm::vec3(0, 3, 0));
+  Model cube = Model(modelPath + "cube.glb", vkContext, glm::vec3(0, 0, 0));
   models.push_back(std::move(cube));
   // Model desk = Model(modelPath + "for_demo/prova_optimized.glb",
   //                    vkContext,

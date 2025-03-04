@@ -1,8 +1,6 @@
-#include "engine/BlinnPhongPass.h"
-#include "engine/IPassHelper.h"
+#include "engine/Passes/BlinnPhongPass.h"
 #include "engine/ModelLoading/Model.h"
 #include "engine/Vertex.h"
-#include <vulkan/vulkan_core.h>
 
 BlinnPhongPass::BlinnPhongPass(
   VulkanContext* vkContext,
@@ -355,7 +353,7 @@ BlinnPhongPass::createAttachments(uint32_t width, uint32_t height)
 void
 BlinnPhongPass::createRenderPass(std::array<AttachmentData, 16> attachmentData)
 {
-  // attachment for HDR attachment
+  // attachment for HDR
   VkAttachmentDescription hdrAttachmentDescription{};
   hdrAttachmentDescription.format = hdrAttachment->format;
   hdrAttachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -407,6 +405,7 @@ BlinnPhongPass::createRenderPass(std::array<AttachmentData, 16> attachmentData)
   std::array<VkAttachmentDescription, 2> attachments = {
     hdrAttachmentDescription, depthAttachment
   };
+
   VkRenderPassCreateInfo renderPassInfo{};
   renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
   renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());

@@ -1,7 +1,6 @@
-#include "engine/ShadowMapPass.h"
+#include "engine/Passes/ShadowMapPass.h"
 
 #include "engine/Vertex.h"
-#include <vulkan/vulkan_core.h>
 
 ShadowMapPass::ShadowMapPass(
   VulkanContext* vkContext,
@@ -38,8 +37,16 @@ ShadowMapPass::~ShadowMapPass()
 void
 ShadowMapPass::createShadowMaps(uint32_t width, uint32_t height)
 {
+  VkFormat depthFormat = vkContext->findSupportedFormat(
+    { VK_FORMAT_D32_SFLOAT,
+      VK_FORMAT_D16_UNORM,
+      VK_FORMAT_D32_SFLOAT_S8_UINT,
+      VK_FORMAT_D24_UNORM_S8_UINT },
+    VK_IMAGE_TILING_OPTIMAL,
+    VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+
   directionalShadowMap = new FramebufferAttachment(
-    VK_FORMAT_D16_UNORM,
+    depthFormat,
     VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
     width,
     height,

@@ -1,22 +1,18 @@
-#ifndef _BLINN_PHONG_PASS_H_
-#define _BLINN_PHONG_PASS_H_
+#ifndef _LIGHT_PASS_H_
+#define _LIGHT_PASS_H_
 
-#include "engine/FramebufferAttachment.h"
-#include "engine/IPassHelper.h"
-#include "engine/Scene.h"
-#include "engine/VulkanSwapchain.h"
-
+#include "engine/Passes/IPassHelper.h"
 #include <vulkan/vulkan_core.h>
 
-class BlinnPhongPass : public IPassHelper
+class LightPass : public IPassHelper
 {
 public:
-  BlinnPhongPass(VulkanContext* vkContext,
-                 const std::array<AttachmentData, 16>& attachmentData,
-                 const Scene& scene,
-                 const uint32_t attachmentWidth,
-                 const uint32_t attachmentHeight);
-  ~BlinnPhongPass();
+  LightPass(VulkanContext* vkContext,
+            const std::array<AttachmentData, 16>& attachmentData,
+            const Scene& scene,
+            const uint32_t attachmentWidth,
+            const uint32_t attachmentHeight);
+  ~LightPass();
 
   void draw(VulkanSwapchain* vkSwapchain, const Scene& scene) override;
   void recreateAttachments(
@@ -35,6 +31,11 @@ private:
   void createFrameBuffer(std::array<AttachmentData, 16> attachmentData);
   void createAttachments(uint32_t width, uint32_t height);
   void createRenderPass(std::array<AttachmentData, 16> attachmentData);
+
+  VkDescriptorPool descriptorPool;
+  VkDescriptorSetLayout gbufferDescriptorLayout;
+  VkDescriptorSet gbufferDescriptorSet;
+  void createDescriptors();
 
   VkPipeline blinnPhongPipeline;
   VkPipelineLayout blinnPhongPipelineLayout;
