@@ -65,6 +65,7 @@ void main() {
 float CalculateShadow(vec4 fragPosLightSpace)
 {
 	float shadow = 0.0;
+    fragPosLightSpace.st = fragPosLightSpace.st * 0.5 + 0.5;
 	if (fragPosLightSpace.z > -1.0 && fragPosLightSpace.z < 1.0) {
 		float dist = texture(directionalShadowMap, fragPosLightSpace.st).r;
 		if (fragPosLightSpace.w > 0.0 && dist < fragPosLightSpace.z) {

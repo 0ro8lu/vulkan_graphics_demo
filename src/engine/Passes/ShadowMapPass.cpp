@@ -94,11 +94,11 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
 
   vkCmdSetScissor(vkSwapchain->commandBuffer, 0, 1, &scissor);
 
-  // vkCmdSetDepthBias(
-  // 			vkSwapchain->commandBuffer,
-  // 			1.25,
-  // 			0.0f,
-  // 			70);
+  vkCmdSetDepthBias(
+  			vkSwapchain->commandBuffer,
+  			1.25f,
+  			0.0f,
+  			1.75f);
 
   struct PushConstant
   {
@@ -293,7 +293,10 @@ ShadowMapPass::createDirectionalShadowMapPipeline()
   colorBlending.logicOpEnable = VK_FALSE;
 
   std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT,
-                                                VK_DYNAMIC_STATE_SCISSOR };
+                                                VK_DYNAMIC_STATE_SCISSOR,
+                                                VK_DYNAMIC_STATE_DEPTH_BIAS };
+  // std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT,
+  //                                               VK_DYNAMIC_STATE_SCISSOR };
 
   VkPipelineDynamicStateCreateInfo dynamicState{};
   dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;

@@ -492,7 +492,7 @@ LightPass::createRenderPass(std::array<AttachmentData, 16> attachmentData)
   subpass.pColorAttachments = &hdrAttachmentRef;
   subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
-    std::array<VkSubpassDependency, 4> dependencies;
+  std::array<VkSubpassDependency, 4> dependencies;
 
   dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
   dependencies[0].dstSubpass = 0;
@@ -675,7 +675,7 @@ LightPass::createMainPipeline(const Scene& scene)
   pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
   pipelineLayoutInfo.pushConstantRangeCount = 1;
   pipelineLayoutInfo.pPushConstantRanges = &modelPCRange;
-  
+
   if (vkCreatePipelineLayout(vkContext->logicalDevice,
                              &pipelineLayoutInfo,
                              nullptr,

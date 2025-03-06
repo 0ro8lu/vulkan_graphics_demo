@@ -60,22 +60,22 @@ main()
   HDRPass hdrPass(vkContext, {VK_NULL_HANDLE, vkSwapchain->getSwapChainImageFormat()}, scene, width, height);
 
   // update descriptors
-  lightPass.updateDescriptors({gbufferPass.positionAttachment, gbufferPass.normalAttachment, gbufferPass.albedoAttachment, shadowMapPass.directionalShadowMap});
-  hdrPass.updateDescriptors({lightPass.hdrAttachment});
-  // hdrPass.updateDescriptors({blinnPhongPass.hdrAttachment});
+  // lightPass.updateDescriptors({gbufferPass.positionAttachment, gbufferPass.normalAttachment, gbufferPass.albedoAttachment, shadowMapPass.directionalShadowMap});
+  // hdrPass.updateDescriptors({lightPass.hdrAttachment});
+  hdrPass.updateDescriptors({blinnPhongPass.hdrAttachment});
   blinnPhongPass.updateDescriptors({shadowMapPass.directionalShadowMap});
 
   vkSwapchain->drawingPass = hdrPass.presentationRenderPass;
   vkSwapchain->createSwapChainFrameBuffer();
   vkSwapchain->onResize = [&gbufferPass, &blinnPhongPass, &hdrPass, &lightPass, &shadowMapPass, vkSwapchain](int width, int height) {
-    gbufferPass.recreateAttachments(width, height, {});
-    lightPass.recreateAttachments(width, height, {gbufferPass.depthAttachment->view, gbufferPass.depthAttachment->format});
+    // gbufferPass.recreateAttachments(width, height, {});
+    // lightPass.recreateAttachments(width, height, {gbufferPass.depthAttachment->view, gbufferPass.depthAttachment->format});
     blinnPhongPass.recreateAttachments(width, height, {vkSwapchain->depthImageView, vkSwapchain->getDepthImageFormat()});
     hdrPass.recreateAttachments(width, height, {VK_NULL_HANDLE, vkSwapchain->getSwapChainImageFormat()});
 
-    // hdrPass.updateDescriptors({blinnPhongPass.hdrAttachment});
-    lightPass.updateDescriptors({gbufferPass.positionAttachment, gbufferPass.normalAttachment, gbufferPass.albedoAttachment, shadowMapPass.directionalShadowMap});
-    hdrPass.updateDescriptors({lightPass.hdrAttachment});
+    // hdrPass.updateDescriptors({lightPass.hdrAttachment});
+    hdrPass.updateDescriptors({blinnPhongPass.hdrAttachment});
+    // lightPass.updateDescriptors({gbufferPass.positionAttachment, gbufferPass.normalAttachment, gbufferPass.albedoAttachment, shadowMapPass.directionalShadowMap});
   };
 
   auto frame_duration = calculateFrameDuration(60.0f);
@@ -97,10 +97,10 @@ main()
     moveCamera(window, deltaTime.count(), scene.camera);
     scene.update();
 
-    gbufferPass.draw(vkSwapchain, scene);
+    // gbufferPass.draw(vkSwapchain, scene);
     shadowMapPass.draw(vkSwapchain, scene);
-    lightPass.draw(vkSwapchain, scene);
-    // blinnPhongPass.draw(vkSwapchain, scene);
+    // lightPass.draw(vkSwapchain, scene);
+    blinnPhongPass.draw(vkSwapchain, scene);
     hdrPass.draw(vkSwapchain, scene);
 
     vkSwapchain->submitFrame();

@@ -18,11 +18,11 @@ layout(push_constant) uniform Model {
     mat4 model;
 };
 
-const mat4 biasMat = mat4( 
-	0.5, 0.0, 0.0, 0.0,
-	0.0, 0.5, 0.0, 0.0,
-	0.0, 0.0, 1.0, 0.0,
-	0.5, 0.5, 0.0, 1.0 );
+// const mat4 biasMat = mat4( 
+// 	0.5, 0.0, 0.0, 0.0,
+// 	0.0, 0.5, 0.0, 0.0,
+// 	0.0, 0.0, 1.0, 0.0,
+// 	0.5, 0.5, 0.0, 1.0 );
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec3 outNormal;
@@ -38,7 +38,8 @@ void main() {
     viewPos = vec3(ubo.cameraPos);
     fragTexCoord = inTexCoord;
 
-    fragPosLightSpace = (biasMat * lightSpace.lightSpaceMatrix * model) * vec4(inPosition, 1.0);
+    fragPosLightSpace = (lightSpace.lightSpaceMatrix * model) * vec4(inPosition, 1.0);
+    // fragPosLightSpace = (biasMat * lightSpace.lightSpaceMatrix * model) * vec4(inPosition, 1.0);
 
     gl_Position = ubo.proj * ubo.view * model * vec4(inPosition, 1.0);
 }

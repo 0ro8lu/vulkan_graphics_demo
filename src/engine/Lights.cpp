@@ -7,7 +7,7 @@ DirectionalLight::DirectionalLight(glm::vec4 direction, glm::vec4 color)
   // glm::mat4 lightProjection =
   //   glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, near_plane, far_plane);
   glm::mat4 lightProjection =
-    glm::perspective(glm::radians(45.0f), 1.0f, 1.0f, 96.0f);
+    glm::perspective(glm::radians(60.0f), 1.0f, 1.0f, 96.0f);
   glm::vec3 lightPos = { -directionalLightBuffer.direction.x,
                          -directionalLightBuffer.direction.y,
                          -directionalLightBuffer.direction.z };

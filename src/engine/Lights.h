@@ -59,9 +59,16 @@ struct DirectionalLight
 
 struct SpotLight
 {
-  alignas(16) glm::vec4 direction;
   alignas(16) glm::vec4 position;
+  alignas(16) glm::vec4 direction;
   alignas(16) glm::vec4 color;
+  alignas(16) glm::vec4 cutoff; // x: inner cutoff, y: outer cutoff, z and w not utilized
 };
+// struct SpotLight
+// {
+//   alignas(16) glm::vec4 position;
+//   alignas(16) glm::vec4 direction;
+//   alignas(16) glm::vec4 color;
+// };
 
 #endif

@@ -5,6 +5,8 @@
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
 
+#include <iostream>
+
 Scene::Scene(VulkanContext* vkContext)
   : vkContext(vkContext)
 {
@@ -21,6 +23,14 @@ Scene::Scene(VulkanContext* vkContext)
     PointLight{ glm::vec4(0, -2, -30, 1), glm::vec4(5, 2, 3, 1) };
   pointLights[4] =
     PointLight{ glm::vec4(0, -2, -40, 1), glm::vec4(10, 0, 0, 1) };
+
+  spotLights[0] = SpotLight{ glm::vec4(-5.0f, 5.0f, -3.0f, 0.0),
+                             glm::vec4(0),
+                             glm::vec4(10.0f, 10.0f, 10.0f, 1.0f),
+                             glm::vec4(glm::cos(glm::radians(8.5f)),
+                                       glm::cos(glm::radians(9.5f)),
+                                       0,
+                                       0) };
 
   // create light cubes for the lights
   std::string modelPath = MODEL_PATH;
@@ -51,7 +61,7 @@ Scene::Scene(VulkanContext* vkContext)
                       glm::vec3(0, 1, 0),
                       glm::vec3(0),
                       0,
-                      glm::vec3(100));
+                      glm::vec3(50));
   models.push_back(std::move(plane));
   Model cube = Model(modelPath + "cube.glb", vkContext, glm::vec3(0, 0, 0));
   models.push_back(std::move(cube));
@@ -475,6 +485,9 @@ Scene::createBuffers()
 
   uint8_t* pointMapped = reinterpret_cast<uint8_t*>(pointLightsBuffer.mapped);
   memcpy(pointMapped, &pointLights, pointLightBufferSize);
+
+  uint8_t* spotMapped = reinterpret_cast<uint8_t*>(spotLightsBuffer.mapped);
+  memcpy(spotMapped, &spotLights, spotLightBufferSize);
 }
 
 void
@@ -488,5 +501,16 @@ Scene::update()
   cb.proj = camera->getCameraProjectionMatrix();
   cb.cameraPos = glm::vec4(camera->getCameraPos(), 1);
 
+  models[1].rotate(1.0, glm::vec3(1.0, 0.5, 0.3));
+
+  spotLights[0].position = glm::vec4(camera->getCameraPos(), 1.0);
+  spotLights[0].direction = glm::vec4(camera->getCameraFront(), 1.0);
+
+  // auto tmp = camera->getCameraFront();
+  // std::cout << tmp.x << " " << tmp.y << " " << tmp.z << std::endl;
+
   memcpy(cameraBuffer.mapped, &cb, sizeof(CameraBuffer));
+
+  uint8_t* spotMapped = reinterpret_cast<uint8_t*>(spotLightsBuffer.mapped);
+  memcpy(spotMapped, &spotLights, sizeof(SpotLight) * MAX_SPOT_LIGHTS);
 }
