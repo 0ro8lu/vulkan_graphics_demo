@@ -117,18 +117,9 @@ LightPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
   vkCmdBindDescriptorSets(vkSwapchain->commandBuffer,
                           VK_PIPELINE_BIND_POINT_GRAPHICS,
                           blinnPhongPipelineLayout,
-                          3,
-                          1,
-                          &scene.directionalLightSpaceDescriptorSet,
-                          0,
-                          nullptr);
-
-  vkCmdBindDescriptorSets(vkSwapchain->commandBuffer,
-                          VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          blinnPhongPipelineLayout,
                           4,
                           1,
-                          &scene.directionalShadowMapDescriptorSet,
+                          &scene.shadowMapDescriptorSet,
                           0,
                           nullptr);
 
@@ -183,7 +174,7 @@ LightPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
                          &pc);
 
       LightColor lightColor;
-      glm::vec3 color = scene.pointLights[i].color;
+      glm::vec3 color = scene.pointLights[i].getColor();
       lightColor.lightColor = glm::vec4(color, 1.0);
       vkCmdPushConstants(vkSwapchain->commandBuffer,
                          lightCubesPipelineLayout,
@@ -334,7 +325,7 @@ LightPass::updateDescriptors(
     std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
 
     descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[0].dstSet = scene.directionalShadowMapDescriptorSet;
+    descriptorWrites[0].dstSet = scene.shadowMapDescriptorSet;
     descriptorWrites[0].dstBinding = 0;
     descriptorWrites[0].dstArrayElement = 0;
     descriptorWrites[0].descriptorType =
@@ -445,6 +436,7 @@ LightPass::createAttachments(uint32_t width, uint32_t height)
 {
   hdrAttachment = new FramebufferAttachment(
     VK_FORMAT_R16G16B16A16_SFLOAT,
+    1,
     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
     width,
     height,
@@ -661,12 +653,11 @@ LightPass::createMainPipeline(const Scene& scene)
   dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
   dynamicState.pDynamicStates = dynamicStates.data();
 
-  std::array<VkDescriptorSetLayout, 5> descriptorSetLayouts;
+  std::array<VkDescriptorSetLayout, 4> descriptorSetLayouts;
   descriptorSetLayouts[0] = scene.cameraUBOLayout;
   descriptorSetLayouts[1] = scene.lightsUBOLayout;
   descriptorSetLayouts[2] = gbufferDescriptorLayout;
-  descriptorSetLayouts[3] = scene.directionalLightSpaceLayout;
-  descriptorSetLayouts[4] = scene.directionalShadowMapLayout;
+  descriptorSetLayouts[3] = scene.directionalShadowMapLayout;
 
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
   pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;

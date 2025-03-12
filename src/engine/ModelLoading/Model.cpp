@@ -8,7 +8,7 @@
 VkDescriptorSetLayout Model::textureLayout = VK_NULL_HANDLE;
 
 Model::Model(const std::string& filePath,
-              VulkanContext* vkContext,
+             VulkanContext* vkContext,
              glm::vec3 pos,
              glm::vec3 rotationAxis,
              float rotationAngle,
@@ -313,7 +313,9 @@ Model::loadTexture(aiMaterial* material,
   }
 }
 
-void Model::setupDescriptors() {
+void
+Model::setupDescriptors()
+{
   // -------------------- DESCRIPTOR POOL --------------------
   VkDescriptorPoolSize poolSize;
 
@@ -375,28 +377,26 @@ void Model::setupDescriptors() {
   }
 }
 
-
 void
 Model::createVertexBuffer(VkDeviceSize bufferSize)
 {
   VkBuffer stagingBuffer;
   VkDeviceMemory stagingBufferMemory;
   VmaAllocation stagingBufferAllocation;
-  void* data =
-    vkContext->createBuffer(bufferSize,
-                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                               BufferType::STAGING_BUFFER,
-                               stagingBuffer,
-                               stagingBufferAllocation);
+  void* data = vkContext->createBuffer(bufferSize,
+                                       VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                       BufferType::STAGING_BUFFER,
+                                       stagingBuffer,
+                                       stagingBufferAllocation);
 
   memcpy(data, vertices.data(), (size_t)bufferSize);
 
   vkContext->createBuffer(bufferSize,
-                             VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                               VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                             BufferType::GPU_BUFFER,
-                             vertexBuffer,
-                             vertexBufferAllocation);
+                          VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                          BufferType::GPU_BUFFER,
+                          vertexBuffer,
+                          vertexBufferAllocation);
 
   vkContext->copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 
@@ -410,21 +410,20 @@ Model::createIndexBuffer(VkDeviceSize bufferSize)
   VkBuffer stagingBuffer;
   VkDeviceMemory stagingBufferMemory;
   VmaAllocation stagingBufferAllocation;
-  void* data =
-    vkContext->createBuffer(bufferSize,
-                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                               BufferType::STAGING_BUFFER,
-                               stagingBuffer,
-                               stagingBufferAllocation);
+  void* data = vkContext->createBuffer(bufferSize,
+                                       VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                       BufferType::STAGING_BUFFER,
+                                       stagingBuffer,
+                                       stagingBufferAllocation);
 
   memcpy(data, indices.data(), (size_t)bufferSize);
 
   vkContext->createBuffer(bufferSize,
-                             VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                               VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                             BufferType::GPU_BUFFER,
-                             indexBuffer,
-                             indexBufferAllocation);
+                          VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                            VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                          BufferType::GPU_BUFFER,
+                          indexBuffer,
+                          indexBufferAllocation);
 
   vkContext->copyBuffer(stagingBuffer, indexBuffer, bufferSize);
 
@@ -435,14 +434,12 @@ Model::createIndexBuffer(VkDeviceSize bufferSize)
 void
 Model::cleanup()
 {
-    if (vertexBuffer != VK_NULL_HANDLE && indexBuffer != VK_NULL_HANDLE &&
+  if (vertexBuffer != VK_NULL_HANDLE && indexBuffer != VK_NULL_HANDLE &&
       descriptorPool != VK_NULL_HANDLE) {
     vmaDestroyBuffer(
       vkContext->allocator, vertexBuffer, vertexBufferAllocation);
-    vmaDestroyBuffer(
-      vkContext->allocator, indexBuffer, indexBufferAllocation);
+    vmaDestroyBuffer(vkContext->allocator, indexBuffer, indexBufferAllocation);
 
-    vkDestroyDescriptorPool(
-      vkContext->logicalDevice, descriptorPool, nullptr);
+    vkDestroyDescriptorPool(vkContext->logicalDevice, descriptorPool, nullptr);
   }
 }

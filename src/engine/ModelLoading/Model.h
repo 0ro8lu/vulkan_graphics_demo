@@ -65,7 +65,7 @@ private:
   inline void applyTransform(const glm::mat4& transform);
 
   VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-  void setupDescriptors(); 
+  void setupDescriptors();
 
   void loadModel(const std::string& filePath);
   void processNode(aiNode* node,

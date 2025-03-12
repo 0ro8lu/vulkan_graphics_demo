@@ -63,7 +63,7 @@ main()
   // lightPass.updateDescriptors({gbufferPass.positionAttachment, gbufferPass.normalAttachment, gbufferPass.albedoAttachment, shadowMapPass.directionalShadowMap});
   // hdrPass.updateDescriptors({lightPass.hdrAttachment});
   hdrPass.updateDescriptors({blinnPhongPass.hdrAttachment});
-  blinnPhongPass.updateDescriptors({shadowMapPass.directionalShadowMap});
+  blinnPhongPass.updateDescriptors({shadowMapPass.directionalShadowMap, shadowMapPass.spotPointShadowAtlas});
 
   vkSwapchain->drawingPass = hdrPass.presentationRenderPass;
   vkSwapchain->createSwapChainFrameBuffer();
@@ -114,6 +114,7 @@ main()
     if (sleep_duration > std::chrono::microseconds::zero()) {
       std::this_thread::sleep_for(sleep_duration);
     }
+    // glfwSetWindowShouldClose(window, true);
   }
   vkDeviceWaitIdle(vkContext->logicalDevice);
 

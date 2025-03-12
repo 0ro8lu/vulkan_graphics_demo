@@ -7,6 +7,7 @@ class FramebufferAttachment
 {
 public:
   FramebufferAttachment(VkFormat format,
+                        uint32_t layerCount,
                         VkImageUsageFlags usage,
                         uint32_t width,
                         uint32_t height,
@@ -26,6 +27,7 @@ public:
 
   uint32_t width;
   uint32_t height;
+  uint32_t layerCount;
 
 private:
   void cleanup();

@@ -4,10 +4,12 @@ layout(set = 2, binding = 0) uniform sampler2D position;
 layout(set = 2, binding = 1) uniform sampler2D normal;
 layout(set = 2, binding = 2) uniform sampler2D albedo;
 
-layout(set = 4, binding = 0) uniform sampler2D directionalShadowMap;
+layout(set = 3, binding = 0) uniform sampler2D directionalShadowMap;
 
 layout(set = 1, binding = 1) uniform DirectionalLight{
     vec4 direction;
+    vec4 color;
+    mat4 transform;
 } directionalLight;
 
 struct PointLight {
@@ -27,7 +29,6 @@ layout(set = 1, binding = 3) uniform SpotLight{
 
 layout(location = 0) in vec2 texCoord;
 layout(location = 1) in vec3 viewPos;
-layout(location = 2) in mat4 lightSpaceMatrix;
 
 layout(location = 0) out vec4 outColor;
 
@@ -39,7 +40,7 @@ vec3 baseDiffuse = vec3(0.5f, 0.5f, 0.5f);
 vec3 baseSpecular = vec3(1.0f, 1.0f, 1.0f);
 
 float CalculateShadow(vec4 fragPosLightSpace); 
-vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir, vec3 diffuseColor, float specularIntensity, float shadow);
+vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir, vec3 diffuseColor, float specularIntensity, vec3 fragPos);
 vec3 CalcPointLight(vec3 lightPos, vec3 lightColor, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 diffuseColor, float specularIntensity);
 
 void main() {
@@ -49,10 +50,7 @@ void main() {
  float specular = texture(albedo, texCoord).a;
  vec3 viewDir = normalize(viewPos - fragPos);
 
- vec4 inFragPosLightSpace = lightSpaceMatrix * vec4(fragPos, 1.0);
- float shadow = CalculateShadow(inFragPosLightSpace / inFragPosLightSpace.w);
-
- vec3 result = 0.2 * CalcDirLight(vec3(directionalLight.direction.xyz), normal, viewDir, diffuse, specular, shadow);
+ vec3 result = 0.2 * CalcDirLight(vec3(directionalLight.direction.xyz), normal, viewDir, diffuse, specular, fragPos);
 
  for(int i = 0; i < NR_POINT_LIGHTS; i++) {
      result += CalcPointLight(vec3(pointLights.pointLights[i].position.xyz), vec3(pointLights.pointLights[i].color.xyz), normal, fragPos, viewDir, diffuse, specular);
@@ -75,7 +73,7 @@ float CalculateShadow(vec4 fragPosLightSpace)
 	return shadow;
 }
 
-vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir, vec3 diffuseColor, float specularIntensity, float shadow)
+vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir, vec3 diffuseColor, float specularIntensity, vec3 fragPos)
 {
     lightDir = normalize(-lightDir);
 
@@ -89,6 +87,9 @@ vec3 CalcDirLight(vec3 lightDir, vec3 normal, vec3 viewDir, vec3 diffuseColor, f
     // blinn-phong 
     // vec3 halfwayDir = normalize(lightDir + viewDir);  
     // float spec = pow(max(dot(normal, halfwayDir), 0.0), 16.0);
+
+    vec4 inFragPosLightSpace = directionalLight.transform * vec4(fragPos, 1.0);
+    float shadow = CalculateShadow(inFragPosLightSpace / inFragPosLightSpace.w);
 
     // combine results
     vec3 ambient = baseAmbient * diffuseColor;

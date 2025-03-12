@@ -3,6 +3,7 @@
 #include <stdexcept>
 
 FramebufferAttachment::FramebufferAttachment(VkFormat format,
+                                             uint32_t layerCount,
                                              VkImageUsageFlags usage,
                                              uint32_t width,
                                              uint32_t height,
@@ -12,6 +13,7 @@ FramebufferAttachment::FramebufferAttachment(VkFormat format,
   , width(width)
   , height(height)
   , usage(usage)
+  , layerCount(layerCount)
 {
   create();
 }
@@ -46,14 +48,14 @@ FramebufferAttachment::create()
   image = vkContext->createImage(width,
                                  height,
                                  format,
+                                 layerCount,
                                  VK_IMAGE_TILING_OPTIMAL,
                                  usage | VK_IMAGE_USAGE_SAMPLED_BIT |
                                    VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-                                 // usage | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
                                  VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
                                  allocation);
 
-  view = vkContext->createImageView(image, format, aspectMask);
+  view = vkContext->createImageView(image, format, layerCount, aspectMask);
 
   // create sampler
   if (sampler == VK_NULL_HANDLE) {

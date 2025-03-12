@@ -181,6 +181,7 @@ GBuffPass::createAttachments(uint32_t width, uint32_t height)
 {
   positionAttachment = new FramebufferAttachment(
     VK_FORMAT_R16G16B16A16_SFLOAT,
+    1,
     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
     width,
     height,
@@ -188,6 +189,7 @@ GBuffPass::createAttachments(uint32_t width, uint32_t height)
 
   normalAttachment = new FramebufferAttachment(
     VK_FORMAT_R16G16B16A16_SFLOAT,
+    1,
     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
     width,
     height,
@@ -195,6 +197,7 @@ GBuffPass::createAttachments(uint32_t width, uint32_t height)
 
   albedoAttachment = new FramebufferAttachment(
     VK_FORMAT_R8G8B8A8_UNORM,
+    1,
     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
     width,
     height,
@@ -209,6 +212,7 @@ GBuffPass::createAttachments(uint32_t width, uint32_t height)
 
   depthAttachment = new FramebufferAttachment(
     depthFormat,
+    1,
     VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
     width,
     height,

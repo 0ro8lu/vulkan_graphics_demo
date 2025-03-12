@@ -33,6 +33,7 @@ public:
   VkImage createImage(uint32_t width,
                       uint32_t height,
                       VkFormat format,
+                      uint32_t layerCount,
                       VkImageTiling tiling,
                       VkImageUsageFlags usage,
                       VmaAllocationCreateFlagBits flags,
@@ -42,6 +43,7 @@ public:
 
   VkImageView createImageView(VkImage image,
                               VkFormat format,
+                              uint32_t layerCount,
                               VkImageAspectFlags aspectFlags);
 
   void* createBuffer(VkDeviceSize size,

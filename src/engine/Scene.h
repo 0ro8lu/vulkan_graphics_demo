@@ -3,16 +3,10 @@
 
 #include "engine/Buffers.h"
 #include "engine/Camera3D.h"
+#include "engine/LightManager.h"
 #include "engine/ModelLoading/Model.h"
 #include "engine/Skybox.h"
 #include "engine/VulkanContext.h"
-
-#include "engine/Lights.h"
-
-#include <array>
-
-const uint32_t MAX_POINT_LIGHTS = 5;
-const uint32_t MAX_SPOT_LIGHTS = 5;
 
 class Scene
 {
@@ -25,22 +19,20 @@ public:
 
   VkDescriptorSetLayout cameraUBOLayout;
   VkDescriptorSetLayout lightsUBOLayout;
-  VkDescriptorSetLayout directionalLightSpaceLayout;
   VkDescriptorSetLayout directionalShadowMapLayout;
 
   VkDescriptorSet cameraUBODescriptorset;
   VkDescriptorSet lightsUBODescriptorset;
-  VkDescriptorSet directionalLightSpaceDescriptorSet;
-  VkDescriptorSet directionalShadowMapDescriptorSet;
+  VkDescriptorSet shadowMapDescriptorSet;
 
   std::vector<Model> models;
   std::vector<Model> lightCubes;
 
   Skybox* skybox;
 
-  std::array<PointLight, MAX_POINT_LIGHTS> pointLights;
+  std::vector<PointLight> pointLights;
   DirectionalLight* directionalLight;
-  std::array<SpotLight, MAX_SPOT_LIGHTS> spotLights;
+  std::vector<SpotLight> spotLights;
 
   Camera3D* camera;
 
@@ -53,8 +45,9 @@ private:
 
   VulkanBufferDefinition cameraBuffer;
   VulkanBufferDefinition pointLightsBuffer;
+
   VulkanBufferDefinition directionalLightBuffer;
-  VulkanBufferDefinition directionalLightTransformBuffer;
+
   VulkanBufferDefinition spotLightsBuffer;
   void createBuffers();
 };

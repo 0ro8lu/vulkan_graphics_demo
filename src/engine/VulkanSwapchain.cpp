@@ -269,7 +269,7 @@ VulkanSwapchain::createSwapChain()
 
   for (size_t i = 0; i < swapChainImages.size(); i++) {
     swapChainImageViews[i] = vkContext->createImageView(
-      swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+      swapChainImages[i], swapChainImageFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT);
   }
 
   // create depth resources
@@ -284,12 +284,13 @@ VulkanSwapchain::createSwapChain()
     vkContext->createImage(swapChainExtent.width,
                            swapChainExtent.height,
                            depthFormat,
+                           1,
                            VK_IMAGE_TILING_OPTIMAL,
                            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
                            depthAllocation);
   depthImageView = vkContext->createImageView(
-    depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+    depthImage, depthFormat, 1, VK_IMAGE_ASPECT_DEPTH_BIT);
 }
 
 void

@@ -34,8 +34,8 @@ public:
   VkDescriptorSet descriptorSet;
   size_t indexCount;
   size_t startIndex;
-private:
 
+private:
   VulkanContext* vkContext;
 };
 

@@ -28,9 +28,8 @@ Mesh::createDescriptorSet(VkDescriptorPool descriptorPool,
   allocInfo.descriptorSetCount = 1;
   allocInfo.pSetLayouts = &descriptorLayout;
 
-  if (vkAllocateDescriptorSets(vkContext->logicalDevice,
-                               &allocInfo,
-                               &descriptorSet) != VK_SUCCESS) {
+  if (vkAllocateDescriptorSets(
+        vkContext->logicalDevice, &allocInfo, &descriptorSet) != VK_SUCCESS) {
     throw std::runtime_error("failed to allocate descriptor sets!");
   }
 

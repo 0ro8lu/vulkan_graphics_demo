@@ -21,19 +21,34 @@ public:
   void updateDescriptors(
     const std::array<FramebufferAttachment*, 16>& attachments) override {};
 
-  FramebufferAttachment* directionalShadowMap;
+  FramebufferAttachment* directionalShadowMap = nullptr;
+  FramebufferAttachment* spotPointShadowAtlas = nullptr;
 
   VkFramebuffer directionalShadowMapFramebuffer;
   VkRenderPass directionalShadowMapRenderPass;
 
+  VkFramebuffer spotShadowMapFramebuffer;
+  VkRenderPass spotShadowMapRenderPass;
+
 private:
   void createShadowMaps(uint32_t width, uint32_t height);
-  void createFrameBuffer(std::array<AttachmentData, 16> attachmentData);
-  void createRenderPass(std::array<AttachmentData, 16> attachmentData);
+
+  void createFrameBuffers(std::array<AttachmentData, 16> attachmentData);
+
+  void createDirectionalRenderPass(
+    std::array<AttachmentData, 16> attachmentData);
+  void createSpotRenderPass(std::array<AttachmentData, 16> attachmentData);
 
   VkPipeline directionalShadowMapPipeline;
   VkPipelineLayout directionalShadowMapPipelineLayout;
   void createDirectionalShadowMapPipeline();
+
+  // VkPipeline spotShadowMapPipeline;
+  // VkPipelineLayout spotShadowMapPipelineLayout;
+  // void createSpotShadowMapPipeline();
+
+  uint32_t shadowMapWidth;
+  uint32_t shadowMapHeight;
 };
 
 #endif

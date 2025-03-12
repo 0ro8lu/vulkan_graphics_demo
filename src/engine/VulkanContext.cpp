@@ -6,6 +6,7 @@ VkImage
 VulkanContext::createImage(uint32_t width,
                            uint32_t height,
                            VkFormat format,
+                           uint32_t layerCount,
                            VkImageTiling tiling,
                            VkImageUsageFlags usage,
                            VmaAllocationCreateFlagBits flags,
@@ -18,7 +19,7 @@ VulkanContext::createImage(uint32_t width,
   imageInfo.extent.height = height;
   imageInfo.extent.depth = 1;
   imageInfo.mipLevels = 1;
-  imageInfo.arrayLayers = 1;
+  imageInfo.arrayLayers = layerCount;
   imageInfo.format = format;
   imageInfo.tiling = tiling;
   imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -64,6 +65,7 @@ VulkanContext::createShaderModule(const std::vector<char>& code)
 VkImageView
 VulkanContext::createImageView(VkImage image,
                                VkFormat format,
+                               uint32_t layerCount,
                                VkImageAspectFlags aspectFlags)
 {
   VkImageViewCreateInfo viewInfo{};
@@ -75,7 +77,7 @@ VulkanContext::createImageView(VkImage image,
   viewInfo.subresourceRange.baseMipLevel = 0;
   viewInfo.subresourceRange.levelCount = 1;
   viewInfo.subresourceRange.baseArrayLayer = 0;
-  viewInfo.subresourceRange.layerCount = 1;
+  viewInfo.subresourceRange.layerCount = layerCount;
 
   VkImageView imageView;
   if (vkCreateImageView(logicalDevice, &viewInfo, nullptr, &imageView) !=

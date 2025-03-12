@@ -77,6 +77,11 @@ foreach(EXAMPLE_FILE ${EXAMPLE_SOURCES})
         target_compile_definitions(${EXAMPLE_NAME} PRIVATE SOUND_PATH="../sounds/")
     endif()
 
+    # these are constants defined for all platforms
+    # TODO: also add maximum number of spotlights and pointlights.
+    target_compile_definitions(${EXAMPLE_NAME} PRIVATE ATLAS_SIZE=4096)
+    target_compile_definitions(${EXAMPLE_NAME} PRIVATE ATLAS_TILES=4)
+
     if(UNIX AND NOT LINUX)
         target_link_libraries(${EXAMPLE_NAME}
             "-framework CoreAudio"

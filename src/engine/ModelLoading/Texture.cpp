@@ -50,7 +50,7 @@ Texture::Texture(VulkanContext* vkContext, std::string filePath)
   stbi_image_free(pixels);
 
   view = vkContext->createImageView(
-    image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+    image, VK_FORMAT_R8G8B8A8_SRGB, 1, VK_IMAGE_ASPECT_COLOR_BIT);
 
   // call this only if the global sampler is null.
   // futureproofing: make a sampler manager, hash the VkSamplerCreateInfo struct
@@ -76,24 +76,24 @@ Texture::createTextureImageFromPixels(stbi_uc* pixels,
   VkBuffer stagingBuffer;
   VmaAllocation stagingBufferAllocation;
 
-  void* data =
-    vkContext->createBuffer(imageSize,
-                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                               BufferType::STAGING_BUFFER,
-                               stagingBuffer,
-                               stagingBufferAllocation);
+  void* data = vkContext->createBuffer(imageSize,
+                                       VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                       BufferType::STAGING_BUFFER,
+                                       stagingBuffer,
+                                       stagingBufferAllocation);
 
   memcpy(data, pixels, static_cast<size_t>(imageSize));
 
   // Create the Vulkan image
   image = vkContext->createImage(texWidth,
-                            texHeight,
-                            VK_FORMAT_R8G8B8A8_SRGB,
-                            VK_IMAGE_TILING_OPTIMAL,
-                            VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                              VK_IMAGE_USAGE_SAMPLED_BIT,
-                            VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
-                            allocation);
+                                 texHeight,
+                                 VK_FORMAT_R8G8B8A8_SRGB,
+                                 1,
+                                 VK_IMAGE_TILING_OPTIMAL,
+                                 VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                                   VK_IMAGE_USAGE_SAMPLED_BIT,
+                                 VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+                                 allocation);
 
   // Copy data from staging buffer to image
   transitionImageLayout(image,
@@ -129,8 +129,8 @@ Texture::createTextureImageView()
   viewInfo.subresourceRange.baseArrayLayer = 0;
   viewInfo.subresourceRange.layerCount = 1;
 
-  if (vkCreateImageView(
-        vkContext->logicalDevice, &viewInfo, nullptr, &view) != VK_SUCCESS) {
+  if (vkCreateImageView(vkContext->logicalDevice, &viewInfo, nullptr, &view) !=
+      VK_SUCCESS) {
     throw std::runtime_error("failed to create texture image view!");
   }
 }

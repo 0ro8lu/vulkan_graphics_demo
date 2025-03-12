@@ -278,6 +278,7 @@ HDRPass::createAttachments(uint32_t width, uint32_t height)
 {
   brightSpotsAttachment = new FramebufferAttachment(
     VK_FORMAT_R16G16B16A16_SFLOAT,
+    1,
     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
     width,
     height,
@@ -285,6 +286,7 @@ HDRPass::createAttachments(uint32_t width, uint32_t height)
 
   intermediateBloomAttachment = new FramebufferAttachment(
     VK_FORMAT_R16G16B16A16_SFLOAT,
+    1,
     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
     width,
     height,
