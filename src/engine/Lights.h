@@ -17,12 +17,8 @@ struct DirectionalLight
 
   bool castsShadow() const { return color.w == 1.0; }
 
-  // DirectionalLight(glm::vec4 direction,
-  //                  glm::vec4 color,
-  //                  bool castsShadow);
-
 private:
-  DirectionalLight(glm::vec4 direction, glm::vec4 color, bool castsShadow);
+  DirectionalLight(glm::vec3 direction, glm::vec3 color, bool castsShadow);
 
   alignas(16) glm::vec4 direction;
   alignas(16) glm::vec4 color;
@@ -40,8 +36,8 @@ struct PointLight
   bool castsShadow() const { return color.w == 1.0; }
 
 private:
-  PointLight(glm::vec4 position,
-             glm::vec4 color,
+  PointLight(glm::vec3 position,
+             glm::vec3 color,
              uint32_t shadowMapIndex,
              bool castsShadow);
 
@@ -67,12 +63,12 @@ struct SpotLight
 
   bool castsShadow() const { return color.w == 1.0; }
 
-  void move(glm::vec4 position, glm::vec4 direction);
+  void move(glm::vec3 position, glm::vec3 direction);
 
 private:
-  SpotLight(glm::vec4 position,
-            glm::vec4 direction,
-            glm::vec4 color,
+  SpotLight(glm::vec3 position,
+            glm::vec3 direction,
+            glm::vec3 color,
             float innerCutoff,
             float outerCutoff,
             uint32_t shadowMapIndex,

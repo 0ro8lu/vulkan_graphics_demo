@@ -11,31 +11,31 @@ Scene::Scene(VulkanContext* vkContext)
 {
   // --------------------- Init Scene ---------------------
   directionalLight = LightManager::createDirectionalLight(
-    glm::vec4(-5.0f, 5.0f, -3.0f, 0.0), glm::vec4(10, 0, 0, 1), true);
+    glm::vec3(-5.0f, 5.0f, -3.0f), glm::vec3(1), false);
 
   pointLights.emplace_back(LightManager::createPointLight(
-    glm::vec4(0, 1, -10, 0), glm::vec4(5, 0.4, 0.1, 1), false));
+    glm::vec3(0, 1, -10), glm::vec3(5, 0.4, 0.1), false));
   pointLights.emplace_back(LightManager::createPointLight(
-    glm::vec4(0, -2, -20, 0), glm::vec4(5, 1, 1, 1), false));
+    glm::vec3(0, -2, -20), glm::vec3(5, 1, 1), false));
   pointLights.emplace_back(LightManager::createPointLight(
-    glm::vec4(0, -2, -30, 1), glm::vec4(0.5), false));
+    glm::vec3(0, -2, -30), glm::vec3(0.5), false));
   pointLights.emplace_back(LightManager::createPointLight(
-    glm::vec4(0, -2, -30, 1), glm::vec4(5, 2, 3, 1), false));
+    glm::vec3(0, -2, -30), glm::vec3(5, 2, 3), false));
   pointLights.emplace_back(LightManager::createPointLight(
-    glm::vec4(0, -2, -40, 1), glm::vec4(10, 0, 0, 1), false));
+    glm::vec3(0, -2, -40), glm::vec3(10, 0, 0), false));
 
-  spotLights.emplace_back(LightManager::createSpotLight(glm::vec4(3, -3, 3, 0),
-                                                        glm::vec4(-1, 1, -1, 1),
-                                                        glm::vec4(10),
+  spotLights.emplace_back(LightManager::createSpotLight(glm::vec3(3, -3, 3),
+                                                        glm::vec3(-1, 1, -1),
+                                                        glm::vec3(10),
                                                         8.5f,
                                                         9.5f,
                                                         true));
-  spotLights.emplace_back(LightManager::createSpotLight(glm::vec4(4, -3, 4, 0),
-                                                        glm::vec4(-2, 1, -2, 1),
-                                                        glm::vec4(0, 10, 0, 1),
-                                                        8.5f,
-                                                        9.5f,
-                                                        false));
+  // spotLights.emplace_back(LightManager::createSpotLight(glm::vec3(3, -3, 3),
+  //                                                       glm::vec3(-1, 1, -1),
+  //                                                       glm::vec3(0, 10, 0),
+  //                                                       8.5f,
+  //                                                       9.5f,
+  //                                                       true));
 
   // create light cubes for the lights
   std::string modelPath = MODEL_PATH;
@@ -70,6 +70,8 @@ Scene::Scene(VulkanContext* vkContext)
   models.push_back(std::move(plane));
   Model cube = Model(modelPath + "cube.glb", vkContext, glm::vec3(0, 0, 0));
   models.push_back(std::move(cube));
+  // Model voyager = Model(modelPath + "voyager.gltf", vkContext, glm::vec3(0, -2, 0));
+  // models.push_back(std::move(voyager));
   // Model desk = Model(modelPath + "for_demo/prova_optimized.glb",
   //                    vkContext,
   //                    glm::vec3(0.0, 1.0f, -3.0f),
@@ -417,8 +419,10 @@ Scene::createBuffers()
   uint8_t* pointMapped = reinterpret_cast<uint8_t*>(pointLightsBuffer.mapped);
   memcpy(pointMapped, pointLights.data(), pointLightBufferSize);
 
-  uint8_t* spotMapped = reinterpret_cast<uint8_t*>(spotLightsBuffer.mapped);
-  memcpy(spotMapped, spotLights.data(), spotLightBufferSize);
+  if (!spotLights.empty()) {
+    uint8_t* spotMapped = reinterpret_cast<uint8_t*>(spotLightsBuffer.mapped);
+    memcpy(spotMapped, spotLights.data(), spotLightBufferSize);
+  }
 
   // for (int i = 0; i < spotLights.size(); i++) {
   //   uint8_t* spotMapped =
@@ -444,12 +448,12 @@ Scene::update()
   cb.proj = camera->getCameraProjectionMatrix();
   cb.cameraPos = glm::vec4(camera->getCameraPos(), 1);
 
-  // models[1].rotate(1.0, glm::vec3(1.0, 0.5, 0.3));
+  models[1].rotate(1.0, glm::vec3(1.0, 0.5, 0.3));
 
-  spotLights[1].move(glm::vec4(camera->getCameraPos(), 1.0),
-                     glm::vec4(camera->getCameraFront(), 1.0));
-  uint8_t* spotMapped = reinterpret_cast<uint8_t*>(spotLightsBuffer.mapped);
-  memcpy(spotMapped, spotLights.data(), sizeof(SpotLight) * MAX_SPOT_LIGHTS);
+  // spotLights[1].move(glm::vec4(camera->getCameraPos(), 1.0),
+  //                    glm::vec4(camera->getCameraFront(), 1.0));
+  // uint8_t* spotMapped = reinterpret_cast<uint8_t*>(spotLightsBuffer.mapped);
+  // memcpy(spotMapped, spotLights.data(), sizeof(SpotLight) * MAX_SPOT_LIGHTS);
 
   memcpy(cameraBuffer.mapped, &cb, sizeof(CameraBuffer));
 }

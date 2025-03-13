@@ -1,7 +1,7 @@
 #include "engine/Lights.h"
 
-DirectionalLight::DirectionalLight(glm::vec4 direction,
-                                   glm::vec4 color,
+DirectionalLight::DirectionalLight(glm::vec3 direction,
+                                   glm::vec3 color,
                                    bool castsShadow)
 {
   // float near_plane = 1.0f, far_plane = 9.5f;
@@ -11,52 +11,45 @@ DirectionalLight::DirectionalLight(glm::vec4 direction,
     glm::perspective(glm::radians(60.0f), 1.0f, 1.0f, 20.0f);
   glm::vec3 lightPos = { -direction.x, -direction.y, -direction.z };
 
-  color.w = 0;
-  if (castsShadow) {
-    color.w = 1.0f;
-  }
+  float shadow = (castsShadow) ? 1.0 : 0.0;
 
   glm::mat4 lightView = glm::lookAt(lightPos, glm::vec3(0), glm::vec3(0, 1, 0));
 
-  this->direction = direction;
-  this->color = color;
+  this->direction = glm::vec4(direction, 1.0);
+  this->color = glm::vec4(color, shadow);
   this->transform = lightProjection * lightView;
 }
 
-PointLight::PointLight(glm::vec4 position,
-                       glm::vec4 color,
+PointLight::PointLight(glm::vec3 position,
+                       glm::vec3 color,
                        uint32_t shadowLightIndex,
                        bool castsShadow)
 {
-
-  color.w = 0;
-  if (castsShadow) {
-    color.w = 1.0f;
-  }
+  float shadow = (castsShadow) ? 1.0 : 0.0;
 
   // glm::mat4 lightView = glm::lookAt(lightPos, glm::vec3(0), glm::vec3(0, 1,
   // 0));
 
-  this->position = position;
-  this->color = color;
+  this->position = glm::vec4(position, 1);
+  this->color = glm::vec4(color, shadow);
   // this->transform = lightProjection * lightView;
 }
 
-SpotLight::SpotLight(glm::vec4 position,
-                     glm::vec4 direction,
-                     glm::vec4 color,
+SpotLight::SpotLight(glm::vec3 position,
+                     glm::vec3 direction,
+                     glm::vec3 color,
                      float innerCutoff,
                      float outerCutoff,
                      uint32_t shadowMapIndex,
                      bool castsShadow)
 {
   glm::mat4 projection =
-    glm::perspective(glm::radians(outerCutoff), 1.0f, 1.0f, 20.0f);
+    glm::perspective(glm::radians(50.0f), 1.0f, 0.1f, 10.0f);
 
   glm::mat4 lightView = glm::lookAt(
-    glm::vec3(position), glm::vec3(position + direction), glm::vec3(0, 1, 0));
+    glm::vec3(position), glm::vec3(direction), glm::vec3(0, 1, 0));
 
-  color.w = 0;
+  float shadow = 0.0;
 
   // if we get to this point we are sure there is space in the shadow atlas
   // (lightmanager has taken care of that, hopefully XD)
@@ -75,27 +68,27 @@ SpotLight::SpotLight(glm::vec4 position,
                 atlasCoordsPixel.z / (float)ATLAS_SIZE,
                 atlasCoordsPixel.w / (float)ATLAS_SIZE);
 
-    color.w = 1.0;
+    shadow = 1.0;
   }
 
-  this->position = position;
-  this->direction = direction;
-  this->color = color;
+  this->position = glm::vec4(position, 1.0);
+  this->direction = glm::vec4(direction, 1.0);
+  this->color = glm::vec4(color, shadow);
   this->cutoff = glm::vec4(innerCutoff, outerCutoff, 1, 1);
   this->transform = projection * lightView;
 }
 
 void
-SpotLight::move(glm::vec4 position, glm::vec4 direction)
+SpotLight::move(glm::vec3 position, glm::vec3 direction)
 {
-  this->position = position;
-  this->direction = direction;
+  this->position = glm::vec4(position, 1.0);
+  this->direction = glm::vec4(direction, 1.0);
 
   glm::mat4 projection =
-    glm::perspective(glm::radians(this->cutoff.y * 2), 1.0f, 1.0f, 20.0f);
+    glm::perspective(glm::radians(50.0f), 1.0f, 1.0f, 20.0f);
 
   glm::mat4 lightView =
-    glm::lookAt(glm::vec3(position), glm::vec3(position + direction), glm::vec3(0, 1, 0));
+    glm::lookAt(glm::vec3(position), glm::vec3(direction), glm::vec3(0, 1, 0));
 
   this->transform = projection * lightView;
 }

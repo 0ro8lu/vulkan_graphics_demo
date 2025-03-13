@@ -25,10 +25,10 @@ public:
   FramebufferAttachment* spotPointShadowAtlas = nullptr;
 
   VkFramebuffer directionalShadowMapFramebuffer;
-  VkRenderPass directionalShadowMapRenderPass;
+  VkRenderPass shadowMapRenderPass;
 
   VkFramebuffer spotShadowMapFramebuffer;
-  VkRenderPass spotShadowMapRenderPass;
+  // VkRenderPass spotShadowMapRenderPass;
 
 private:
   void createShadowMaps(uint32_t width, uint32_t height);
@@ -37,11 +37,11 @@ private:
 
   void createDirectionalRenderPass(
     std::array<AttachmentData, 16> attachmentData);
-  void createSpotRenderPass(std::array<AttachmentData, 16> attachmentData);
+  // void createSpotRenderPass(std::array<AttachmentData, 16> attachmentData);
 
-  VkPipeline directionalShadowMapPipeline;
-  VkPipelineLayout directionalShadowMapPipelineLayout;
-  void createDirectionalShadowMapPipeline();
+  VkPipeline shadowMapPipeline;
+  VkPipelineLayout shadowMapPipelineLayout;
+  void createShadowMapPipeline();
 
   // VkPipeline spotShadowMapPipeline;
   // VkPipelineLayout spotShadowMapPipelineLayout;

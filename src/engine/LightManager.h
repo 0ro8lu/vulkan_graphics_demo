@@ -14,15 +14,15 @@ const uint32_t MAX_SPOT_LIGHTS = 2;
 class LightManager
 {
 public:
-  static DirectionalLight* createDirectionalLight(glm::vec4 direction,
-                                                  glm::vec4 color,
+  static DirectionalLight* createDirectionalLight(glm::vec3 direction,
+                                                  glm::vec3 color,
                                                   bool castsShadow);
-  static PointLight createPointLight(glm::vec4 position,
-                                     glm::vec4 color,
+  static PointLight createPointLight(glm::vec3 position,
+                                     glm::vec3 color,
                                      bool castsShadow);
-  static SpotLight createSpotLight(glm::vec4 position,
-                                   glm::vec4 direction,
-                                   glm::vec4 color,
+  static SpotLight createSpotLight(glm::vec3 position,
+                                   glm::vec3 direction,
+                                   glm::vec3 color,
                                    float innerCutoff,
                                    float outerCutoff,
                                    bool castsShadow);

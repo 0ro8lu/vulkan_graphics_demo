@@ -61,6 +61,30 @@ I feel like the beast that is Vulkan has been somewhat tamed now. The refactorin
 systems that drive this marvelous API. Here are some juicy screenshots i hope you will enjoy, dear reader <3.
 
 <div style="display: flex; gap: 10px;">
-    <img src="./screenshots/bloom.png" width="400" alt="bloom">
+    <img src="./screenshots/bloom_complex.png" width="400" alt="bloom">
+    <img src="./screenshots/bloom_simple.png" width="400" alt="bloom">
     <img src="./screenshots/no_bloom.png" width="400" alt="no bloom">
+</div>
+
+## 13th of March: Shadooows
+Hey there!! I have to admit i kinda forgot to update the README page of my GitHub page. I think from now on updates will only be posted on my webiste, just so i won't have to duplicate anything,
+plus that will allow me to go into more depth and really yap on and on about everything i achieved, not only through code, but also through bugs, which altough annoying, always give you the opportuinity
+to earn valuable experience.
+So i will quickly show everything i did so far (and yes i've been active the last month, i just haven't been posting :P) and for more details head over to jackscoolwebsite.neocities.org for more ^^.
+
+On the list:
+1. Directional Ligths shadow (the easiest, albeit they gave me a fair bit of trouble to implement)
+2. Spotlights shadows via a shadowmap atlas (man its getting cooler every day discovering these techniques 😍)
+3. bonus content: i'll share some cool bugs i've randomly stumbled upon these last months, i think they're extremely interesting to see.
+
+<div style="display: flex; gap: 10px;">
+    <img src="./screenshots/shadowmap_atlas.png" width="200">
+    <img src="./screenshots/directional_shadow.png" width="200">
+    <img src="./screenshots/directional_shadow_spinning_cube.gif" width="200">
+    <img src="./screenshots/spot_shadow_spinning_cube.gif" width="200">
+</div>
+<div style="display: flex; gap: 10px;">
+    <img src="./screenshots/glitch1.gif" width="200">
+    <img src="./screenshots/glitch2.gif" width="200">
+    <img src="./screenshots/glitch3.gif" width="200">
 </div>

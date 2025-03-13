@@ -3,8 +3,6 @@
 #include "engine/Scene.h"
 #include "engine/Vertex.h"
 
-#include <iostream>
-
 ShadowMapPass::ShadowMapPass(
   VulkanContext* vkContext,
   const std::array<AttachmentData, 16>& attachmentData,
@@ -18,11 +16,11 @@ ShadowMapPass::ShadowMapPass(
   createShadowMaps(shadowMapWidth, shadowMapHeight);
 
   createDirectionalRenderPass(attachmentData);
-  createSpotRenderPass(attachmentData);
+  // createSpotRenderPass(attachmentData);
 
   createFrameBuffers(attachmentData);
 
-  createDirectionalShadowMapPipeline();
+  createShadowMapPipeline();
 }
 
 ShadowMapPass::~ShadowMapPass()
@@ -33,14 +31,13 @@ ShadowMapPass::~ShadowMapPass()
     vkContext->logicalDevice, spotShadowMapFramebuffer, nullptr);
 
   vkDestroyRenderPass(
-    vkContext->logicalDevice, directionalShadowMapRenderPass, nullptr);
-  vkDestroyRenderPass(
-    vkContext->logicalDevice, spotShadowMapRenderPass, nullptr);
+    vkContext->logicalDevice, shadowMapRenderPass, nullptr);
+  // vkDestroyRenderPass(
+  //   vkContext->logicalDevice, spotShadowMapRenderPass, nullptr);
 
-  vkDestroyPipeline(
-    vkContext->logicalDevice, directionalShadowMapPipeline, nullptr);
+  vkDestroyPipeline(vkContext->logicalDevice, shadowMapPipeline, nullptr);
   vkDestroyPipelineLayout(
-    vkContext->logicalDevice, directionalShadowMapPipelineLayout, nullptr);
+    vkContext->logicalDevice, shadowMapPipelineLayout, nullptr);
 
   if (directionalShadowMap) {
     delete directionalShadowMap;
@@ -62,16 +59,17 @@ ShadowMapPass::createShadowMaps(uint32_t width, uint32_t height)
     VK_IMAGE_TILING_OPTIMAL,
     VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-  if (scene.directionalLight->castsShadow()) {
-    directionalShadowMap = new FramebufferAttachment(
-      depthFormat,
-      1,
-      VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-      width,
-      height,
-      vkContext);
-  }
+  // if (scene.directionalLight->castsShadow()) {
+  directionalShadowMap = new FramebufferAttachment(
+    depthFormat,
+    1,
+    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+    width,
+    height,
+    vkContext);
+  // }
 
+  // TODO: if not spotligts, nor pointlights cast shadows, don't create it.
   spotPointShadowAtlas = new FramebufferAttachment(
     depthFormat,
     1,
@@ -85,10 +83,10 @@ void
 ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
 {
   // directional shadow
-  {
+  if (scene.directionalLight->castsShadow()) {
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = directionalShadowMapRenderPass;
+    renderPassInfo.renderPass = shadowMapRenderPass;
     renderPassInfo.framebuffer = directionalShadowMapFramebuffer;
     renderPassInfo.renderArea.offset = { 0, 0 };
     renderPassInfo.renderArea.extent.width = directionalShadowMap->width;
@@ -105,7 +103,7 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     // -------------------- bind main pipeline --------------------
     vkCmdBindPipeline(vkSwapchain->commandBuffer,
                       VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      directionalShadowMapPipeline);
+                      shadowMapPipeline);
 
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -124,7 +122,8 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
 
     vkCmdSetScissor(vkSwapchain->commandBuffer, 0, 1, &scissor);
 
-    vkCmdSetDepthBias(vkSwapchain->commandBuffer, 1.25f, 0.0f, 1.75f);
+    // vkCmdSetDepthBias(vkSwapchain->commandBuffer, 1.5f, 0.0f, 2.0f);
+    // vkCmdSetDepthBias(vkSwapchain->commandBuffer, 1.25f, 0.0f, 1.75f);
 
     struct PushConstant
     {
@@ -147,7 +146,7 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
           scene.directionalLight->getTransform() * instance.transformation;
 
         vkCmdPushConstants(vkSwapchain->commandBuffer,
-                           directionalShadowMapPipelineLayout,
+                           shadowMapPipelineLayout,
                            VK_SHADER_STAGE_VERTEX_BIT,
                            0,
                            64,
@@ -162,13 +161,32 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
       }
     }
     vkCmdEndRenderPass(vkSwapchain->commandBuffer);
+  } else {
+    // this is imprtant! we still have to transition the image layout even tho we don't use it later on!
+    // Thanks daddy Vulkan :3 
+    VkRenderPassBeginInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass = shadowMapRenderPass;
+    renderPassInfo.framebuffer = directionalShadowMapFramebuffer;
+    renderPassInfo.renderArea.offset = { 0, 0 };
+    renderPassInfo.renderArea.extent.width = directionalShadowMap->width;
+    renderPassInfo.renderArea.extent.height = directionalShadowMap->height;
+
+    VkClearValue depthClearValue = { 1.0f, 0 };
+
+    renderPassInfo.clearValueCount = 1;
+    renderPassInfo.pClearValues = &depthClearValue;
+
+    vkCmdBeginRenderPass(
+      vkSwapchain->commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdEndRenderPass(vkSwapchain->commandBuffer);
   }
 
   // spotlights shadows
   {
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = spotShadowMapRenderPass;
+    renderPassInfo.renderPass = shadowMapRenderPass;
     renderPassInfo.framebuffer = spotShadowMapFramebuffer;
     renderPassInfo.renderArea.offset = { 0, 0 };
     renderPassInfo.renderArea.extent.width = spotPointShadowAtlas->width;
@@ -180,12 +198,13 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     renderPassInfo.pClearValues = &depthClearValue;
 
     vkCmdBeginRenderPass(
-      vkSwapchain->commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+      vkSwapchain->commandBuffer, &renderPassInfo,
+      VK_SUBPASS_CONTENTS_INLINE);
 
     // -------------------- bind main pipeline --------------------
     vkCmdBindPipeline(vkSwapchain->commandBuffer,
                       VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      directionalShadowMapPipeline);
+                      shadowMapPipeline);
 
     for (const auto& spotlight : scene.spotLights) {
 
@@ -210,7 +229,8 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
 
       vkCmdSetScissor(vkSwapchain->commandBuffer, 0, 1, &scissor);
 
-      vkCmdSetDepthBias(vkSwapchain->commandBuffer, 1.25f, 0.0f, 1.75f);
+      // vkCmdSetDepthBias(vkSwapchain->commandBuffer, 1.5f, 0.0f, 2.0f);
+      // vkCmdSetDepthBias(vkSwapchain->commandBuffer, 1.25f, 0.0f, 1.75f);
 
       struct PushConstant
       {
@@ -233,12 +253,9 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
           PushConstant pc;
           pc.lightSpaceMatrix =
             spotlight.getTransform() * instance.transformation;
-          // pc.lightSpaceMatrix =
-          //   scene.directionalLight->getTransform() *
-          //   instance.transformation;
 
           vkCmdPushConstants(vkSwapchain->commandBuffer,
-                             directionalShadowMapPipelineLayout,
+                             shadowMapPipelineLayout,
                              VK_SHADER_STAGE_VERTEX_BIT,
                              0,
                              64,
@@ -264,7 +281,7 @@ ShadowMapPass::createFrameBuffers(std::array<AttachmentData, 16> attachmentData)
   {
     VkFramebufferCreateInfo framebufferInfo{};
     framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebufferInfo.renderPass = directionalShadowMapRenderPass;
+    framebufferInfo.renderPass = shadowMapRenderPass;
     framebufferInfo.attachmentCount = 1;
     framebufferInfo.pAttachments = &directionalShadowMap->view;
     framebufferInfo.width = shadowMapWidth;
@@ -282,7 +299,8 @@ ShadowMapPass::createFrameBuffers(std::array<AttachmentData, 16> attachmentData)
   {
     VkFramebufferCreateInfo framebufferInfo{};
     framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebufferInfo.renderPass = spotShadowMapRenderPass;
+    framebufferInfo.renderPass = shadowMapRenderPass;
+    // framebufferInfo.renderPass = spotShadowMapRenderPass;
     framebufferInfo.attachmentCount = 1;
     framebufferInfo.pAttachments = &spotPointShadowAtlas->view;
     framebufferInfo.width = ATLAS_SIZE;
@@ -301,65 +319,7 @@ ShadowMapPass::createFrameBuffers(std::array<AttachmentData, 16> attachmentData)
 void
 ShadowMapPass::createDirectionalRenderPass(
   std::array<AttachmentData, 16> attachmentData)
-{
-  VkAttachmentDescription attachmentDescription{};
-  attachmentDescription.format = directionalShadowMap->format;
-  attachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
-  attachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  attachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-  attachmentDescription.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-  attachmentDescription.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  attachmentDescription.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  attachmentDescription.finalLayout =
-    VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
-  VkAttachmentReference depthReference = {};
-  depthReference.attachment = 0;
-  depthReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-  VkSubpassDescription subpass = {};
-  subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-  subpass.colorAttachmentCount = 0;
-  subpass.pDepthStencilAttachment = &depthReference;
-
-  std::array<VkSubpassDependency, 2> dependencies;
-
-  dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-  dependencies[0].dstSubpass = 0;
-  dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-  dependencies[0].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-  dependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-  dependencies[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-  dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-  dependencies[1].srcSubpass = 0;
-  dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-  dependencies[1].srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-  dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-  dependencies[1].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-  dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-  dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-  VkRenderPassCreateInfo renderPassInfo{};
-  renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  renderPassInfo.attachmentCount = 1;
-  renderPassInfo.pAttachments = &attachmentDescription;
-  renderPassInfo.subpassCount = 1;
-  renderPassInfo.pSubpasses = &subpass;
-  renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-  renderPassInfo.pDependencies = dependencies.data();
-
-  if (vkCreateRenderPass(vkContext->logicalDevice,
-                         &renderPassInfo,
-                         nullptr,
-                         &directionalShadowMapRenderPass) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create render pass!");
-  }
-}
-
-void
-ShadowMapPass::createSpotRenderPass(
-  std::array<AttachmentData, 16> attachmentData)
 {
   VkAttachmentDescription attachmentDescription{};
   attachmentDescription.format = spotPointShadowAtlas->format;
@@ -411,13 +371,75 @@ ShadowMapPass::createSpotRenderPass(
   if (vkCreateRenderPass(vkContext->logicalDevice,
                          &renderPassInfo,
                          nullptr,
-                         &spotShadowMapRenderPass) != VK_SUCCESS) {
+                         &shadowMapRenderPass) != VK_SUCCESS) {
     throw std::runtime_error("failed to create render pass!");
   }
 }
 
+// void
+// ShadowMapPass::createSpotRenderPass(
+//   std::array<AttachmentData, 16> attachmentData)
+// {
+//   VkAttachmentDescription attachmentDescription{};
+//   attachmentDescription.format = spotPointShadowAtlas->format;
+//   attachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
+//   attachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+//   attachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+//   attachmentDescription.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+//   attachmentDescription.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+//   attachmentDescription.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+//   attachmentDescription.finalLayout =
+//     VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+
+//   VkAttachmentReference depthReference = {};
+//   depthReference.attachment = 0;
+//   depthReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+//   VkSubpassDescription subpass = {};
+//   subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+//   subpass.colorAttachmentCount = 0;
+//   subpass.pDepthStencilAttachment = &depthReference;
+
+//   std::array<VkSubpassDependency, 2> dependencies;
+
+//   dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+//   dependencies[0].dstSubpass = 0;
+//   dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+//   dependencies[0].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+//   dependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+//   dependencies[0].dstAccessMask =
+//   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+//   dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+//   dependencies[1].srcSubpass = 0;
+//   dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+//   dependencies[1].srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+//   dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+//   dependencies[1].srcAccessMask =
+//   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT; dependencies[1].dstAccessMask
+//   = VK_ACCESS_SHADER_READ_BIT; dependencies[1].dependencyFlags =
+//   VK_DEPENDENCY_BY_REGION_BIT;
+
+//   VkRenderPassCreateInfo renderPassInfo{};
+//   renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+//   renderPassInfo.attachmentCount = 1;
+//   renderPassInfo.pAttachments = &attachmentDescription;
+//   renderPassInfo.subpassCount = 1;
+//   renderPassInfo.pSubpasses = &subpass;
+//   renderPassInfo.dependencyCount =
+//   static_cast<uint32_t>(dependencies.size()); renderPassInfo.pDependencies =
+//   dependencies.data();
+
+//   if (vkCreateRenderPass(vkContext->logicalDevice,
+//                          &renderPassInfo,
+//                          nullptr,
+//                          &spotShadowMapRenderPass) != VK_SUCCESS) {
+//     throw std::runtime_error("failed to create render pass!");
+//   }
+// }
+
 void
-ShadowMapPass::createDirectionalShadowMapPipeline()
+ShadowMapPass::createShadowMapPipeline()
 {
   std::string shaderPath = SHADER_PATH;
   auto vertShaderCode =
@@ -490,11 +512,12 @@ ShadowMapPass::createDirectionalShadowMapPipeline()
     VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
   colorBlending.logicOpEnable = VK_FALSE;
 
-  std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT,
-                                                VK_DYNAMIC_STATE_SCISSOR,
-                                                VK_DYNAMIC_STATE_DEPTH_BIAS };
   // std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT,
-  //                                               VK_DYNAMIC_STATE_SCISSOR };
+  //                                               VK_DYNAMIC_STATE_SCISSOR,
+  //                                               VK_DYNAMIC_STATE_DEPTH_BIAS
+  //                                               };
+  std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT,
+                                                VK_DYNAMIC_STATE_SCISSOR };
 
   VkPipelineDynamicStateCreateInfo dynamicState{};
   dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -510,8 +533,7 @@ ShadowMapPass::createDirectionalShadowMapPipeline()
   if (vkCreatePipelineLayout(vkContext->logicalDevice,
                              &pipelineLayoutInfo,
                              nullptr,
-                             &directionalShadowMapPipelineLayout) !=
-      VK_SUCCESS) {
+                             &shadowMapPipelineLayout) != VK_SUCCESS) {
     throw std::runtime_error("failed to create pipeline layout!");
   }
 
@@ -526,8 +548,8 @@ ShadowMapPass::createDirectionalShadowMapPipeline()
   pipelineInfo.pMultisampleState = &multisampling;
   pipelineInfo.pColorBlendState = &colorBlending;
   pipelineInfo.pDynamicState = &dynamicState;
-  pipelineInfo.layout = directionalShadowMapPipelineLayout;
-  pipelineInfo.renderPass = directionalShadowMapRenderPass;
+  pipelineInfo.layout = shadowMapPipelineLayout;
+  pipelineInfo.renderPass = shadowMapRenderPass;
   pipelineInfo.subpass = 0;
   pipelineInfo.pDepthStencilState = &depthStencil;
   pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
@@ -537,7 +559,7 @@ ShadowMapPass::createDirectionalShadowMapPipeline()
                                 1,
                                 &pipelineInfo,
                                 nullptr,
-                                &directionalShadowMapPipeline) != VK_SUCCESS) {
+                                &shadowMapPipeline) != VK_SUCCESS) {
     throw std::runtime_error("failed to create graphics pipeline!");
   }
 
