@@ -1,19 +1,23 @@
 #include "engine/FramebufferAttachment.h"
 
 #include <stdexcept>
+#include <vulkan/vulkan_core.h>
 
-FramebufferAttachment::FramebufferAttachment(VkFormat format,
-                                             uint32_t layerCount,
-                                             VkImageUsageFlags usage,
-                                             uint32_t width,
-                                             uint32_t height,
-                                             VulkanContext* vkContext)
+FramebufferAttachment::FramebufferAttachment(
+  VkFormat format,
+  uint32_t layerCount,
+  VkImageUsageFlags usage,
+  uint32_t width,
+  uint32_t height,
+  VulkanContext* vkContext,
+  VkSamplerAddressMode samplerAddressMode)
   : vkContext(vkContext)
   , format(format)
   , width(width)
   , height(height)
   , usage(usage)
   , layerCount(layerCount)
+  , samplerAddressMode(samplerAddressMode)
 {
   create();
 }
@@ -63,9 +67,9 @@ FramebufferAttachment::create()
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerInfo.magFilter = VK_FILTER_LINEAR;
     samplerInfo.minFilter = VK_FILTER_LINEAR;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeU = samplerAddressMode;
+    samplerInfo.addressModeU = samplerAddressMode;
+    samplerInfo.addressModeV = samplerAddressMode;
     samplerInfo.anisotropyEnable = VK_TRUE;
     samplerInfo.maxAnisotropy = 1.0;
     samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;

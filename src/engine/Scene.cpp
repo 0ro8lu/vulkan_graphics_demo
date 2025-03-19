@@ -29,13 +29,13 @@ Scene::Scene(VulkanContext* vkContext)
                                                         glm::vec3(10),
                                                         8.5f,
                                                         9.5f,
+                                                        false));
+  spotLights.emplace_back(LightManager::createSpotLight(glm::vec3(-3, -3, 3),
+                                                        glm::vec3(1, 1, -1),
+                                                        glm::vec3(0, 10, 0),
+                                                        8.5f,
+                                                        9.5f,
                                                         true));
-  // spotLights.emplace_back(LightManager::createSpotLight(glm::vec3(3, -3, 3),
-  //                                                       glm::vec3(-1, 1, -1),
-  //                                                       glm::vec3(0, 10, 0),
-  //                                                       8.5f,
-  //                                                       9.5f,
-  //                                                       true));
 
   // create light cubes for the lights
   std::string modelPath = MODEL_PATH;
@@ -70,15 +70,15 @@ Scene::Scene(VulkanContext* vkContext)
   models.push_back(std::move(plane));
   Model cube = Model(modelPath + "cube.glb", vkContext, glm::vec3(0, 0, 0));
   models.push_back(std::move(cube));
-  // Model voyager = Model(modelPath + "voyager.gltf", vkContext, glm::vec3(0, -2, 0));
-  // models.push_back(std::move(voyager));
-  // Model desk = Model(modelPath + "for_demo/prova_optimized.glb",
-  //                    vkContext,
-  //                    glm::vec3(0.0, 1.0f, -3.0f),
-  //                    glm::vec3(0.0, 1.0, 0.0),
-  //                    180.0f,
-  //                    glm::vec3(1.0f));
-  // models.push_back(std::move(desk));
+  // Model voyager = Model(modelPath + "voyager.gltf", vkContext, glm::vec3(0,
+  // -2, 0)); models.push_back(std::move(voyager));
+  Model desk = Model(modelPath + "for_demo/prova_optimized.glb",
+                     vkContext,
+                     glm::vec3(0.0, 1.0f, -3.0f),
+                     glm::vec3(0.0, 1.0, 0.0),
+                     180.0f,
+                     glm::vec3(1.0f));
+  models.push_back(std::move(desk));
   // Model rare = Model(modelPath + "for_demo/rare_logo/rare.glb",
   //                         vkContext,
   //                         glm::vec3(-1.85, -0.7, -19.5f),
@@ -364,8 +364,7 @@ Scene::createDescriptors()
 
     if (vkAllocateDescriptorSets(vkContext->logicalDevice,
                                  &allocInfo,
-                                 &shadowMapDescriptorSet) !=
-        VK_SUCCESS) {
+                                 &shadowMapDescriptorSet) != VK_SUCCESS) {
       throw std::runtime_error("failed to allocate descriptor sets!");
     }
   }
@@ -423,14 +422,6 @@ Scene::createBuffers()
     uint8_t* spotMapped = reinterpret_cast<uint8_t*>(spotLightsBuffer.mapped);
     memcpy(spotMapped, spotLights.data(), spotLightBufferSize);
   }
-
-  // for (int i = 0; i < spotLights.size(); i++) {
-  //   uint8_t* spotMapped =
-  //   reinterpret_cast<uint8_t*>(spotLightsBuffer.mapped); memcpy(spotMapped +
-  //   spotLightBufferSize * i,
-  //          &spotLights[i],
-  //          spotLightBufferSize);
-  // }
 }
 
 void
@@ -449,6 +440,12 @@ Scene::update()
   cb.cameraPos = glm::vec4(camera->getCameraPos(), 1);
 
   models[1].rotate(1.0, glm::vec3(1.0, 0.5, 0.3));
+
+  // directionalLight->follow(camera->getCameraPos() +
+  //                          (-glm::vec3(directionalLight->getDirection())));
+  // uint8_t* directionalMapped =
+  //   reinterpret_cast<uint8_t*>(directionalLightBuffer.mapped);
+  // memcpy(directionalMapped, directionalLight, sizeof(DirectionalLight));
 
   // spotLights[1].move(glm::vec4(camera->getCameraPos(), 1.0),
   //                    glm::vec4(camera->getCameraFront(), 1.0));

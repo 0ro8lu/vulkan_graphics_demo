@@ -81,6 +81,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_SOURCES})
     # TODO: also add maximum number of spotlights and pointlights.
     target_compile_definitions(${EXAMPLE_NAME} PRIVATE ATLAS_SIZE=4096)
     target_compile_definitions(${EXAMPLE_NAME} PRIVATE ATLAS_TILES=4)
+    add_definitions(-DGLM_FORCE_DEPTH_ZERO_TO_ONE)
 
     if(UNIX AND NOT LINUX)
         target_link_libraries(${EXAMPLE_NAME}

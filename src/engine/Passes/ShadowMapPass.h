@@ -1,6 +1,7 @@
 #ifndef _SHADOW_MAP_PASS_H_
 #define _SHADOW_MAP_PASS_H_
 
+#include "engine/FramebufferAttachment.h"
 #include "engine/Passes/IPassHelper.h"
 
 class ShadowMapPass : public IPassHelper
@@ -28,7 +29,6 @@ public:
   VkRenderPass shadowMapRenderPass;
 
   VkFramebuffer spotShadowMapFramebuffer;
-  // VkRenderPass spotShadowMapRenderPass;
 
 private:
   void createShadowMaps(uint32_t width, uint32_t height);

@@ -1,5 +1,6 @@
 #include "engine/Passes/ShadowMapPass.h"
 
+#include "engine/Lights.h"
 #include "engine/Scene.h"
 #include "engine/Vertex.h"
 
@@ -16,7 +17,6 @@ ShadowMapPass::ShadowMapPass(
   createShadowMaps(shadowMapWidth, shadowMapHeight);
 
   createDirectionalRenderPass(attachmentData);
-  // createSpotRenderPass(attachmentData);
 
   createFrameBuffers(attachmentData);
 
@@ -30,10 +30,7 @@ ShadowMapPass::~ShadowMapPass()
   vkDestroyFramebuffer(
     vkContext->logicalDevice, spotShadowMapFramebuffer, nullptr);
 
-  vkDestroyRenderPass(
-    vkContext->logicalDevice, shadowMapRenderPass, nullptr);
-  // vkDestroyRenderPass(
-  //   vkContext->logicalDevice, spotShadowMapRenderPass, nullptr);
+  vkDestroyRenderPass(vkContext->logicalDevice, shadowMapRenderPass, nullptr);
 
   vkDestroyPipeline(vkContext->logicalDevice, shadowMapPipeline, nullptr);
   vkDestroyPipelineLayout(
@@ -59,15 +56,14 @@ ShadowMapPass::createShadowMaps(uint32_t width, uint32_t height)
     VK_IMAGE_TILING_OPTIMAL,
     VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-  // if (scene.directionalLight->castsShadow()) {
   directionalShadowMap = new FramebufferAttachment(
     depthFormat,
     1,
     VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
     width,
     height,
-    vkContext);
-  // }
+    vkContext,
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER);
 
   // TODO: if not spotligts, nor pointlights cast shadows, don't create it.
   spotPointShadowAtlas = new FramebufferAttachment(
@@ -162,8 +158,8 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     }
     vkCmdEndRenderPass(vkSwapchain->commandBuffer);
   } else {
-    // this is imprtant! we still have to transition the image layout even tho we don't use it later on!
-    // Thanks daddy Vulkan :3 
+    // this is imprtant! we still have to transition the image layout even tho
+    // we don't use it later on! Thanks daddy Vulkan :3
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassInfo.renderPass = shadowMapRenderPass;
@@ -182,7 +178,7 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     vkCmdEndRenderPass(vkSwapchain->commandBuffer);
   }
 
-  // spotlights shadows
+  // spotlight and pointlight shadows
   {
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -198,8 +194,7 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     renderPassInfo.pClearValues = &depthClearValue;
 
     vkCmdBeginRenderPass(
-      vkSwapchain->commandBuffer, &renderPassInfo,
-      VK_SUBPASS_CONTENTS_INLINE);
+      vkSwapchain->commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     // -------------------- bind main pipeline --------------------
     vkCmdBindPipeline(vkSwapchain->commandBuffer,
@@ -270,6 +265,74 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
         }
       }
     }
+    for (const auto& pointlight : scene.pointLights) {
+      if (!pointlight.castsShadow()) {
+        continue;
+      }
+
+      for (int i = 0; i <= PointLight::BACK; i++) {
+        PointLight::Side side = static_cast<PointLight::Side>(i);
+
+        VkViewport viewport{};
+        viewport.x = pointlight.getAtlasCoordinatesPixel(side).x;
+        viewport.y = pointlight.getAtlasCoordinatesPixel(side).y;
+        viewport.width = pointlight.getAtlasCoordinatesPixel(side).z;
+        viewport.height = pointlight.getAtlasCoordinatesPixel(side).w;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(vkSwapchain->commandBuffer, 0, 1, &viewport);
+
+        VkRect2D scissor{};
+        scissor.offset.x = pointlight.getAtlasCoordinatesPixel(side).x;
+        scissor.offset.y = pointlight.getAtlasCoordinatesPixel(side).y;
+        scissor.extent.width = pointlight.getAtlasCoordinatesPixel(side).z;
+        scissor.extent.height = pointlight.getAtlasCoordinatesPixel(side).w;
+
+        vkCmdSetScissor(vkSwapchain->commandBuffer, 0, 1, &scissor);
+
+        // vkCmdSetDepthBias(vkSwapchain->commandBuffer, 1.5f, 0.0f, 2.0f);
+        // vkCmdSetDepthBias(vkSwapchain->commandBuffer, 1.25f, 0.0f, 1.75f);
+
+        struct PushConstant
+        {
+          glm::mat4 lightSpaceMatrix;
+        };
+
+        for (auto& model : scene.models) {
+
+          VkBuffer vertexBuffers[] = { model.vertexBuffer };
+          VkDeviceSize offsets[] = { 0 };
+          vkCmdBindVertexBuffers(
+            vkSwapchain->commandBuffer, 0, 1, vertexBuffers, offsets);
+
+          vkCmdBindIndexBuffer(vkSwapchain->commandBuffer,
+                               model.indexBuffer,
+                               0,
+                               VK_INDEX_TYPE_UINT32);
+
+          for (const auto& instance : model.meshInstances) {
+            PushConstant pc;
+            pc.lightSpaceMatrix =
+              pointlight.getTransform(side) * instance.transformation;
+
+            vkCmdPushConstants(vkSwapchain->commandBuffer,
+                               shadowMapPipelineLayout,
+                               VK_SHADER_STAGE_VERTEX_BIT,
+                               0,
+                               64,
+                               &pc);
+
+            vkCmdDrawIndexed(vkSwapchain->commandBuffer,
+                             instance.mesh->indexCount,
+                             1,
+                             instance.mesh->startIndex,
+                             0,
+                             0);
+          }
+        }
+      }
+    }
+
     vkCmdEndRenderPass(vkSwapchain->commandBuffer);
   }
 }

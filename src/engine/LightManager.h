@@ -3,7 +3,6 @@
 
 #include "engine/Lights.h"
 
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
 

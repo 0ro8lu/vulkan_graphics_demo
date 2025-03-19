@@ -55,7 +55,7 @@ main()
   // plus it'd make this section of code a little clearer. 
   GBuffPass gbufferPass(vkContext, {}, scene, width, height);
   LightPass lightPass(vkContext, {gbufferPass.depthAttachment->view, gbufferPass.depthAttachment->format}, scene, width, height);
-  ShadowMapPass shadowMapPass(vkContext, {}, scene, 1024, 1024); // <- 1024 is the fixed resolution i've chosen for the shadowmaps
+  ShadowMapPass shadowMapPass(vkContext, {}, scene, 4096, 4096); // <- 1024 is the fixed resolution i've chosen for the shadowmaps
   BlinnPhongPass blinnPhongPass(vkContext, {vkSwapchain->depthImageView, vkSwapchain->getDepthImageFormat()}, scene, width, height);
   HDRPass hdrPass(vkContext, {VK_NULL_HANDLE, vkSwapchain->getSwapChainImageFormat()}, scene, width, height);
 
