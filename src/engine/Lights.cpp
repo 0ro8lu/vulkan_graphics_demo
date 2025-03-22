@@ -55,24 +55,48 @@ PointLight::PointLight(glm::vec3 position,
   // calculate 6 transform matrices.
   glm::mat4 projection =
     glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
-  
-  // this->transform[0] = projection * glm::lookAt(position, position + glm::vec3( 1.0, 0.0, 0.0), glm::vec3(0.0, 1.0, 0.0));
-  // this->transform[1] = projection * glm::lookAt(position, position + glm::vec3(-1.0, 0.0, 0.0), glm::vec3(0.0, 1.0, 0.0));
-  // this->transform[2] = projection * glm::lookAt(position, position + glm::vec3( 0.0, 1.0, 0.0), glm::vec3(0.0, 1.0, 0.0));
-  // this->transform[3] = projection * glm::lookAt(position, position + glm::vec3( 0.0,-1.0, 0.0), glm::vec3(0.0, 1.0, 0.0));
-  // this->transform[4] = projection * glm::lookAt(position, position + glm::vec3( 0.0, 0.0, 1.0), glm::vec3(0.0, 1.0, 0.0));
-  // this->transform[5] = projection * glm::lookAt(position, position + glm::vec3( 0.0, 0.0,-1.0), glm::vec3(0.0, 1.0, 0.0));
 
-  this->transform[0] = projection * glm::lookAt(position, position + glm::vec3( 0.0, 1.0, 0.0), glm::vec3(0.0, 0.0, -1.0)); // UP
-  this->transform[1] = projection * glm::lookAt(position, position + glm::vec3( 0.0,-1.0, 0.0), glm::vec3(0.0, 0.0,1.0)); // DOWN
-  this->transform[2] = projection * glm::lookAt(position, position + glm::vec3(-1.0, 0.0, 0.0), glm::vec3(0.0, 1.0, 0.0)); // LEFT
-  this->transform[3] = projection * glm::lookAt(position, position + glm::vec3( 1.0, 0.0, 0.0), glm::vec3(0.0, 1.0, 0.0)); // RIGHT
-  this->transform[4] = projection * glm::lookAt(position, position + glm::vec3( 0.0, 0.0, 1.0), glm::vec3(0.0, 1.0, 0.0)); // FORWARD
-  this->transform[5] = projection * glm::lookAt(position, position + glm::vec3( 0.0, 0.0,-1.0), glm::vec3(0.0, 1.0, 0.0)); // BACK
+  // this->transform[0] = projection * glm::lookAt(position, position +
+  // glm::vec3( 1.0, 0.0, 0.0), glm::vec3(0.0, 1.0, 0.0)); this->transform[1] =
+  // projection * glm::lookAt(position, position + glm::vec3(-1.0, 0.0, 0.0),
+  // glm::vec3(0.0, 1.0, 0.0)); this->transform[2] = projection *
+  // glm::lookAt(position, position + glm::vec3( 0.0, 1.0, 0.0),
+  // glm::vec3(0.0, 1.0, 0.0)); this->transform[3] = projection *
+  // glm::lookAt(position, position + glm::vec3( 0.0,-1.0, 0.0),
+  // glm::vec3(0.0, 1.0, 0.0)); this->transform[4] = projection *
+  // glm::lookAt(position, position + glm::vec3( 0.0, 0.0, 1.0),
+  // glm::vec3(0.0, 1.0, 0.0)); this->transform[5] = projection *
+  // glm::lookAt(position, position + glm::vec3( 0.0, 0.0,-1.0),
+  // glm::vec3(0.0, 1.0, 0.0));
+
+  this->transform[0] =
+    projection * glm::lookAt(position,
+                             position + glm::vec3(0.0, 1.0, 0.0),
+                             glm::vec3(0.0, 0.0, -1.0)); // UP
+  this->transform[1] =
+    projection * glm::lookAt(position,
+                             position + glm::vec3(0.0, -1.0, 0.0),
+                             glm::vec3(0.0, 0.0, 1.0)); // DOWN
+  this->transform[2] =
+    projection * glm::lookAt(position,
+                             position + glm::vec3(-1.0, 0.0, 0.0),
+                             glm::vec3(0.0, 1.0, 0.0)); // LEFT
+  this->transform[3] =
+    projection * glm::lookAt(position,
+                             position + glm::vec3(1.0, 0.0, 0.0),
+                             glm::vec3(0.0, 1.0, 0.0)); // RIGHT
+  this->transform[4] =
+    projection * glm::lookAt(position,
+                             position + glm::vec3(0.0, 0.0, 1.0),
+                             glm::vec3(0.0, 1.0, 0.0)); // FORWARD
+  this->transform[5] =
+    projection * glm::lookAt(position,
+                             position + glm::vec3(0.0, 0.0, -1.0),
+                             glm::vec3(0.0, 1.0, 0.0)); // BACK
 
   // calculate 6 coordinates.
   if (castsShadow) {
-    for(int i = 0; i < 6; i++) {
+    for (int i = 0; i < 6; i++) {
       uint32_t tileX = (shadowMapIndex + i) % ATLAS_TILES;
       uint32_t tileY = (shadowMapIndex + i) / ATLAS_TILES;
 

@@ -18,6 +18,7 @@ struct VulkanBufferDefinition
   VkBuffer buffer;
   VmaAllocation allocation;
   void* mapped;
+  size_t size;
 };
 
 #endif

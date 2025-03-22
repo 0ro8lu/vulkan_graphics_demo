@@ -58,6 +58,7 @@ float CalculateShadow(vec4 fragPosLightSpace);
 float CalculateShadow(vec4 fragPosLightSpavce, vec4 atlasCoords);
 vec3 CalcDirLight(vec3 lightDir, vec4 color, vec3 normal, vec3 viewDir);
 vec3 CalcPointLight(PointLight pointLight, vec3 normal, vec3 fragPos, vec3 viewDir);
+// vec3 CalcSpotLights(SpotLight spotlight, vec3 normal, vec3 fragPos, vec3 viewDir);
 vec3 CalcSpotLights(vec3 lightPos, vec3 lightDirection, vec4 lightColor, vec2 cutoff, vec3 normal, vec3 fragPos, vec3 viewDir, vec4 altasCoords, mat4 lightTransform);
 
 void main() {
@@ -71,6 +72,7 @@ void main() {
  }
 
  for(int i = 0; i < NR_SPOT_LIGHTS; i++) {
+    // result += CalcSpotLights(spotLights.spotLights[i], norm, fragPos, viewDir);
     result += CalcSpotLights(vec3(spotLights.spotLights[i].position.xyz), vec3(spotLights.spotLights[i].direction.xyz), spotLights.spotLights[i].color, /*vec3(spotLights.spotLights[i].color.xyz),*/ vec2(spotLights.spotLights[i].cutoff.xy), norm, fragPos, viewDir, spotLights.spotLights[i].atlasCoordsNormalized, spotLights.spotLights[i].transform);
  }
 
@@ -166,25 +168,60 @@ vec3 CalcPointLight(PointLight pointLight, vec3 normal, vec3 fragPos, vec3 viewD
     // float attenuation = 1.0 / (1.0 + linear * distance + quadratic * (distance * distance));    
     float attenuation = 1.0 / (distance * distance);
 
-    vec3 fragToLight = fragPos - pointLight.position.xyz;
-    vec3 absFragToLight = abs(fragToLight);
-    
-    float maxComponent = max(absFragToLight.x, max(absFragToLight.y, absFragToLight.z));
-
-    int faceIndex = 0;
-    if (maxComponent == absFragToLight.x) {
-        faceIndex = (fragToLight.x > 0.0) ? 3 : 2; // RIGHT=3, LEFT=2
-    } else if (maxComponent == absFragToLight.y) {
-        faceIndex = (fragToLight.y > 0.0) ? 0 : 1; // UP=0, DOWN=1
-    } else {
-        faceIndex = (fragToLight.z > 0.0) ? 4 : 5; // FORWARD=4, BACK=5
-    }
-
-    vec4 fragPosLightSpace = pointLight.transform[faceIndex] * vec4(fragPos, 1.0);
-
     float shadow = 0;
     if(pointLight.color.w == 1.0) {
-        shadow = CalculateShadow(fragPosLightSpace / fragPosLightSpace.w, pointLight.atlasCoordsNormalized[faceIndex]);
+        vec3 fragToLight = fragPos - pointLight.position.xyz;
+        vec3 absFragToLight = abs(fragToLight);
+        
+        float maxComponent = max(absFragToLight.x, max(absFragToLight.y, absFragToLight.z));
+
+        int faceIndex = 0;
+        if (maxComponent == absFragToLight.x) {
+            faceIndex = (fragToLight.x > 0.0) ? 3 : 2; // RIGHT=3, LEFT=2
+        } else if (maxComponent == absFragToLight.y) {
+            faceIndex = (fragToLight.y > 0.0) ? 0 : 1; // UP=0, DOWN=1
+        } else {
+            faceIndex = (fragToLight.z > 0.0) ? 4 : 5; // FORWARD=4, BACK=5
+        }
+
+        // vec3 isMax = step(absFragToLight.yxx, absFragToLight) * step(absFragToLight.zzy, absFragToLight);
+        // vec3 faceSign = sign(fragToLight);
+        // int faceIndex = int(dot(isMax, vec3(3, 2, 4)) + dot(faceSign * isMax, vec3(1, 1, 1)));
+
+        mat4 transformMatrix;
+        vec4 atlasCoords;
+        switch(faceIndex) {
+        case 0: 
+            transformMatrix = pointLight.transform[0];
+            atlasCoords = pointLight.atlasCoordsNormalized[0];
+            break;
+        case 1:
+            transformMatrix = pointLight.transform[1];
+            atlasCoords = pointLight.atlasCoordsNormalized[1];
+            break;
+        case 2:
+            transformMatrix = pointLight.transform[2];
+            atlasCoords = pointLight.atlasCoordsNormalized[2];
+            break;
+        case 3:
+            transformMatrix = pointLight.transform[3];
+            atlasCoords = pointLight.atlasCoordsNormalized[3];
+            break;
+        case 4:
+            transformMatrix = pointLight.transform[4];
+            atlasCoords = pointLight.atlasCoordsNormalized[4];
+            break;
+        case 5:
+            transformMatrix = pointLight.transform[5];
+            atlasCoords = pointLight.atlasCoordsNormalized[5];
+            break;
+        }
+
+        // vec4 fragPosLightSpace = pointLight.transform[faceIndex]* vec4(fragPos, 1.0);
+        vec4 fragPosLightSpace = transformMatrix * vec4(fragPos, 1.0);
+
+        shadow = CalculateShadow(fragPosLightSpace / fragPosLightSpace.w, atlasCoords);
+        // shadow = CalculateShadow(fragPosLightSpace / fragPosLightSpace.w, pointLight.atlasCoordsNormalized[faceIndex]);
     }
 
     // combine results
@@ -199,8 +236,10 @@ vec3 CalcPointLight(PointLight pointLight, vec3 normal, vec3 fragPos, vec3 viewD
     return resultAmbient + ((1.0 - shadow) * (resultDiffuse + resultSpecular));
 }
 
+// vec3 CalcSpotLights(SpotLight spotLight, vec3 normal, vec3 fragPos, vec3 viewDir)
 vec3 CalcSpotLights(vec3 lightPos, vec3 lightDirection, vec4 lightColor, vec2 cutoff, vec3 normal, vec3 fragPos, vec3 viewDir, vec4 atlasCoords, mat4 lightTransform)
 {
+    // vec3 lightDir = normalize(spotLight.position.xyz - fragPos);
     vec3 lightDir = normalize(lightPos - fragPos);
 
     // diffuse shading
@@ -215,11 +254,15 @@ vec3 CalcSpotLights(vec3 lightPos, vec3 lightDirection, vec4 lightColor, vec2 cu
     // float spec = pow(max(dot(normal, halfwayDir), 0.0), 16.0);
 
     // attenuation
+    // float distance = length(fragPos - spotLight.position.xyz);
     float distance = length(fragPos - lightPos);
 
+    // float innerCutoff = cos(radians(spotLight.cutoff.x));
+    // float outerCutoff = cos(radians(spotLight.cutoff.x));
     float innerCutoff = cos(radians(cutoff.x));
     float outerCutoff = cos(radians(cutoff.y));
 
+    // float theta = dot(lightDir, normalize(-spotLight.direction.xyz));
     float theta = dot(lightDir, normalize(-lightDirection));
     float epsilon = (innerCutoff - outerCutoff);
     float intensity = clamp((theta - outerCutoff) / epsilon, 0.0, 1.0);
@@ -229,16 +272,19 @@ vec3 CalcSpotLights(vec3 lightPos, vec3 lightDirection, vec4 lightColor, vec2 cu
     // float attenuation = 1.0 / (1.0 + linear * distance + quadratic * (distance * distance));    
     float attenuation = 1.0 / (distance * distance);
 
+    // vec4 fragPosLightSpace = spotLight.transform * vec4(fragPos, 1.0);
     vec4 fragPosLightSpace = lightTransform * vec4(fragPos, 1.0);
 
     float shadow = 0;
+    // if(spotLight.color.w == 1.0) {
     if(lightColor.w == 1.0) {
+        // shadow = CalculateShadow(fragPosLightSpace / fragPosLightSpace.w, spotLight.atlasCoordsNormalized);
         shadow = CalculateShadow(fragPosLightSpace / fragPosLightSpace.w, atlasCoords);
     }
 
     // combine results
     vec3 resultAmbient = vec3(0);
-    // vec3 resultAmbient = baseAmbient * lightColor.xyz * vec3(texture(diffuseTexSampler, fragTexCoord));
+    // vec3 resultAmbient = baseAmbient * spotLight.color.xyz * vec3(texture(diffuseTexSampler, fragTexCoord));
     vec3 resultDiffuse = baseDiffuse * lightColor.xyz * diff * vec3(texture(diffuseTexSampler, fragTexCoord));
     vec3 resultSpecular = baseSpecular * lightColor.xyz * spec * vec3(texture(specularTexSampler, fragTexCoord));
     // resultAmbient *= attenuation;

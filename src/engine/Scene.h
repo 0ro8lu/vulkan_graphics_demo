@@ -45,9 +45,7 @@ private:
 
   VulkanBufferDefinition cameraBuffer;
   VulkanBufferDefinition pointLightsBuffer;
-
   VulkanBufferDefinition directionalLightBuffer;
-
   VulkanBufferDefinition spotLightsBuffer;
   void createBuffers();
 };

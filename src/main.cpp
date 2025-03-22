@@ -1,22 +1,11 @@
 #include "GLFW/glfw3.h"
 
-#include "engine/Passes/GBuffPass.h"
-#include "engine/Passes/LightPass.h"
-#include "engine/Passes/ShadowMapPass.h"
-#include "engine/Passes/BlinnPhongPass.h"
-#include "engine/Passes/HDRPass.h"
+#include "engine/Renderer.h"
 
 #include "engine/VulkanInitializer.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
-
-// #ifndef VMA_DEBUG_LOG_FORMAT
-//    #define VMA_DEBUG_LOG_FORMAT(format, ...) do { \
-//        printf((format), __VA_ARGS__); \
-//        printf("\n"); \
-//    } while(false)
-// #endif
 
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
@@ -42,7 +31,6 @@ main()
   VulkanInitializer vkInitializer(window);
 
   VulkanContext* vkContext = vkInitializer.vkContext;
-  VulkanSwapchain* vkSwapchain = vkInitializer.vkSwapchain;
 
   Scene scene(vkContext);
 
@@ -51,32 +39,7 @@ main()
 
   scene.camera->resizeCamera(width, height);
 
-  //TODO: move all of this inside a Renderer class, so we can experimetn with different graphics settings ^^
-  // plus it'd make this section of code a little clearer. 
-  GBuffPass gbufferPass(vkContext, {}, scene, width, height);
-  LightPass lightPass(vkContext, {gbufferPass.depthAttachment->view, gbufferPass.depthAttachment->format}, scene, width, height);
-  ShadowMapPass shadowMapPass(vkContext, {}, scene, 4096, 4096); // <- 1024 is the fixed resolution i've chosen for the shadowmaps
-  BlinnPhongPass blinnPhongPass(vkContext, {vkSwapchain->depthImageView, vkSwapchain->getDepthImageFormat()}, scene, width, height);
-  HDRPass hdrPass(vkContext, {VK_NULL_HANDLE, vkSwapchain->getSwapChainImageFormat()}, scene, width, height);
-
-  // update descriptors
-  // lightPass.updateDescriptors({gbufferPass.positionAttachment, gbufferPass.normalAttachment, gbufferPass.albedoAttachment, shadowMapPass.directionalShadowMap});
-  // hdrPass.updateDescriptors({lightPass.hdrAttachment});
-  hdrPass.updateDescriptors({blinnPhongPass.hdrAttachment});
-  blinnPhongPass.updateDescriptors({shadowMapPass.directionalShadowMap, shadowMapPass.spotPointShadowAtlas});
-
-  vkSwapchain->drawingPass = hdrPass.presentationRenderPass;
-  vkSwapchain->createSwapChainFrameBuffer();
-  vkSwapchain->onResize = [&gbufferPass, &blinnPhongPass, &hdrPass, &lightPass, &shadowMapPass, vkSwapchain](int width, int height) {
-    // gbufferPass.recreateAttachments(width, height, {});
-    // lightPass.recreateAttachments(width, height, {gbufferPass.depthAttachment->view, gbufferPass.depthAttachment->format});
-    blinnPhongPass.recreateAttachments(width, height, {vkSwapchain->depthImageView, vkSwapchain->getDepthImageFormat()});
-    hdrPass.recreateAttachments(width, height, {VK_NULL_HANDLE, vkSwapchain->getSwapChainImageFormat()});
-
-    // hdrPass.updateDescriptors({lightPass.hdrAttachment});
-    hdrPass.updateDescriptors({blinnPhongPass.hdrAttachment});
-    // lightPass.updateDescriptors({gbufferPass.positionAttachment, gbufferPass.normalAttachment, gbufferPass.albedoAttachment, shadowMapPass.directionalShadowMap});
-  };
+  Renderer renderer(vkContext, vkInitializer.vkSwapchain, scene);
 
   auto frame_duration = calculateFrameDuration(60.0f);
   frame_duration = std::chrono::microseconds(8333);
@@ -93,17 +56,10 @@ main()
       glfwSetWindowShouldClose(window, true);
     }
 
-    vkSwapchain->prepareFrame();
     moveCamera(window, deltaTime.count(), scene.camera);
     scene.update();
 
-    // gbufferPass.draw(vkSwapchain, scene);
-    shadowMapPass.draw(vkSwapchain, scene);
-    // lightPass.draw(vkSwapchain, scene);
-    blinnPhongPass.draw(vkSwapchain, scene);
-    hdrPass.draw(vkSwapchain, scene);
-
-    vkSwapchain->submitFrame();
+    renderer.draw(scene);
 
     auto frame_end = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(

@@ -21,6 +21,8 @@ struct AttachmentData
 class IPassHelper
 {
 public:
+  // IPassHelper(VulkanContext* vkContext, Renderer renderer)
+  //   : vkContext(vkContext), renderer(renderer) {};
   IPassHelper(VulkanContext* vkContext, const Scene& scene)
     : vkContext(vkContext)
     , scene(scene) {};
@@ -56,6 +58,7 @@ public:
 
 protected:
   const Scene& scene;
+  // const Renderer& renderer;
   VulkanContext* vkContext;
 };
 

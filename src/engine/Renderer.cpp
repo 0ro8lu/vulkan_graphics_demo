@@ -1,113 +1,41 @@
-#include "Scene.h"
-#include "engine/Buffers.h"
-#include "engine/LightManager.h"
-#include "engine/Lights.h"
+#include "engine/Renderer.h"
 
-#include <stdexcept>
-#include <vulkan/vulkan_core.h>
-
-Scene::Scene(VulkanContext* vkContext)
-  : vkContext(vkContext)
+Renderer::Renderer(VulkanContext* vkContext, VulkanSwapchain* vkSwapchain,  const Scene& scene) : vkContext(vkContext), vkSwapchain(vkSwapchain)
 {
-  // --------------------- Init Scene ---------------------
-  directionalLight = LightManager::createDirectionalLight(
-    glm::vec3(-5.0f, 5.0f, -3.0f), glm::vec3(1), true);
+  // create buffers
+  // createBuffers();
+  // create descriptors
+  // createDescriptors();
 
-  pointLights.emplace_back(LightManager::createPointLight(
-    glm::vec3(0, 0.95, -10), glm::vec3(5, 0.4, 0.1), true));
-  pointLights.emplace_back(LightManager::createPointLight(
-    glm::vec3(0, -2, -20), glm::vec3(5, 1, 1), false));
-  pointLights.emplace_back(LightManager::createPointLight(
-    glm::vec3(0, -2, -30), glm::vec3(0.5), false));
-  pointLights.emplace_back(LightManager::createPointLight(
-    glm::vec3(0, -2, -30), glm::vec3(5, 2, 3), false));
-  pointLights.emplace_back(LightManager::createPointLight(
-    glm::vec3(0, -2, -40), glm::vec3(10, 0, 0), false));
+  // create render passes
+  gBufferPass = new GBuffPass(vkContext, {}, scene, vkSwapchain->width, vkSwapchain->height);
+  lightPass = new LightPass(vkContext, {gBufferPass->depthAttachment->view, gBufferPass->depthAttachment->format}, scene, vkSwapchain->width, vkSwapchain->height);
+  shadowMapPass = new ShadowMapPass(vkContext, {}, scene, 4096, 4096); // <- 1024 is the fixed resolution i've chosen for the shadowmaps
+  blinnPhongPass = new BlinnPhongPass(vkContext, {vkSwapchain->depthImageView, vkSwapchain->getDepthImageFormat()}, scene, vkSwapchain->width, vkSwapchain->height);
+  hdrPass = new HDRPass(vkContext, {VK_NULL_HANDLE, vkSwapchain->getSwapChainImageFormat()}, scene, vkSwapchain->width, vkSwapchain->height);
 
-  spotLights.emplace_back(LightManager::createSpotLight(glm::vec3(3, -3, 3),
-                                                        glm::vec3(-1, 1, -1),
-                                                        glm::vec3(10),
-                                                        8.5f,
-                                                        9.5f,
-                                                        true));
-  spotLights.emplace_back(LightManager::createSpotLight(glm::vec3(-3, -3, 3),
-                                                        glm::vec3(1, 1, -1),
-                                                        glm::vec3(0, 10, 0),
-                                                        8.5f,
-                                                        9.5f,
-                                                        true));
+  // update descriptors
+  // lightPass.updateDescriptors({gbufferPass.positionAttachment, gbufferPass.normalAttachment, gbufferPass.albedoAttachment, shadowMapPass.directionalShadowMap});
+  // hdrPass.updateDescriptors({lightPass.hdrAttachment});
+  hdrPass->updateDescriptors({blinnPhongPass->hdrAttachment});
+  blinnPhongPass->updateDescriptors({shadowMapPass->directionalShadowMap, shadowMapPass->spotPointShadowAtlas});
 
-  // create light cubes for the lights
-  std::string modelPath = MODEL_PATH;
-  for (auto& pointLight : pointLights) {
-    Model cube = Model(modelPath + "cube.glb",
-                       vkContext,
-                       pointLight.getPosition(),
-                       glm::vec3(0.0),
-                       0,
-                       glm::vec3(0.1f));
-    lightCubes.push_back(std::move(cube));
-  }
+  vkSwapchain->drawingPass = hdrPass->presentationRenderPass;
+  vkSwapchain->createSwapChainFrameBuffer();
+  vkSwapchain->onResize = [this, vkSwapchain](int width, int height) {
+    // gbufferPass.recreateAttachments(width, height, {});
+    // lightPass.recreateAttachments(width, height, {gbufferPass.depthAttachment->view, gbufferPass.depthAttachment->format});
+    blinnPhongPass->recreateAttachments(width, height, {vkSwapchain->depthImageView, vkSwapchain->getDepthImageFormat()});
+    hdrPass->recreateAttachments(width, height, {VK_NULL_HANDLE, vkSwapchain->getSwapChainImageFormat()});
 
-  camera = new Camera3D(glm::vec3(0.0, 0.0, 3.0), glm::vec3(0.0, 0.0, -1.0));
-
-  // create new skybox
-  std::string texturePath = TEXTURE_PATH;
-  std::array<std::string, 6> files = {
-    texturePath + "skybox/right.jpg", texturePath + "skybox/left.jpg",
-    texturePath + "skybox/top.jpg",   texturePath + "skybox/bottom.jpg",
-    texturePath + "skybox/front.jpg", texturePath + "skybox/back.jpg"
+    // hdrPass.updateDescriptors({lightPass.hdrAttachment});
+    hdrPass->updateDescriptors({blinnPhongPass->hdrAttachment});
+    // lightPass.updateDescriptors({gbufferPass.positionAttachment, gbufferPass.normalAttachment, gbufferPass.albedoAttachment, shadowMapPass.directionalShadowMap});
   };
-  skybox = new Skybox(vkContext, files);
-
-  // finish initializing models and loading them, setup camera etc.
-  Model plane = Model(modelPath + "for_demo/plane.glb",
-                      vkContext,
-                      glm::vec3(0, 1, 0),
-                      glm::vec3(0),
-                      0,
-                      glm::vec3(50));
-  models.push_back(std::move(plane));
-  Model cube = Model(modelPath + "cube.glb", vkContext, glm::vec3(0, 0, 0));
-  models.push_back(std::move(cube));
-  // Model voyager = Model(modelPath + "voyager.gltf", vkContext, glm::vec3(0,
-  // -2, 0)); models.push_back(std::move(voyager));
-  // Model desk = Model(modelPath + "for_demo/prova_optimized.glb",
-  //                    vkContext,
-  //                    glm::vec3(0.0, 1.0f, -3.0f),
-  //                    glm::vec3(0.0, 1.0, 0.0),
-  //                    180.0f,
-  //                    glm::vec3(1.0f));
-  // models.push_back(std::move(desk));
-  // Model rare = Model(modelPath + "for_demo/rare_logo/rare.glb",
-  //                         vkContext,
-  //                         glm::vec3(-1.85, -0.7, -19.5f),
-  //                         glm::vec3(1.0, 0.0, 0.0),
-  //                         -90.0f,
-  //                         glm::vec3(0.1f));
-  //  models.push_back(std::move(rare));
-
-  // --------------------- Create Buffers ---------------------
-  // TODO: move inside light manager
-  createBuffers();
-
-  // TODO: move inside of renderer class
-  createDescriptors();
 }
 
-Scene::~Scene()
-{
-  // destroy camera
-  delete camera;
-  delete skybox;
-
-  // destroy models
-  models.clear();
-  vkDestroyDescriptorSetLayout(
-    vkContext->logicalDevice, Model::textureLayout, nullptr);
-
-  // destroy layout
-  vkDestroyDescriptorSetLayout(
+Renderer::~Renderer() {
+    vkDestroyDescriptorSetLayout(
     vkContext->logicalDevice, cameraUBOLayout, nullptr);
   vkDestroyDescriptorSetLayout(
     vkContext->logicalDevice, lightsUBOLayout, nullptr);
@@ -132,10 +60,89 @@ Scene::~Scene()
 
   vmaDestroyBuffer(
     vkContext->allocator, spotLightsBuffer.buffer, spotLightsBuffer.allocation);
+
+  delete gBufferPass;
+  delete lightPass;
+
+  delete shadowMapPass;
+  delete blinnPhongPass;
+  delete hdrPass;
 }
 
 void
-Scene::createDescriptors()
+Renderer::update(const Scene& scene)
+{
+  // update the buffers
+  if(scene.directionalLight) {
+    uint8_t* directionalMapped =
+    reinterpret_cast<uint8_t*>(directionalLightBuffer.mapped);
+    memcpy(directionalMapped, scene.directionalLight, directionalLightBuffer.size);
+  }
+
+  if(!scene.pointLights.empty()) {
+    uint8_t* pointMapped = reinterpret_cast<uint8_t*>(pointLightsBuffer.mapped);
+    memcpy(pointMapped, scene.pointLights.data(), pointLightsBuffer.size);
+  }
+
+  if (!scene.spotLights.empty()) {
+    uint8_t* spotMapped = reinterpret_cast<uint8_t*>(spotLightsBuffer.mapped);
+    memcpy(spotMapped, scene.spotLights.data(), spotLightsBuffer.size);
+  }
+}
+
+void
+Renderer::draw(const Scene& scene)
+{
+  vkSwapchain->prepareFrame();
+
+  // gBufferPass->draw(vkSwapchain, scene);
+  shadowMapPass->draw(vkSwapchain, scene);
+  // lightPass->draw(vkSwapchain, scene);
+  blinnPhongPass->draw(vkSwapchain, scene);
+  hdrPass->draw(vkSwapchain, scene);
+
+  vkSwapchain->submitFrame();
+}
+
+void Renderer::createBuffers() {
+  cameraBuffer.size = sizeof(CameraBuffer);
+
+  cameraBuffer.mapped =
+    vkContext->createBuffer(cameraBuffer.size,
+                            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                            BufferType::STAGING_BUFFER,
+                            cameraBuffer.buffer,
+                            cameraBuffer.allocation);
+
+  // --------------------- Light Buffers ---------------------
+  
+  directionalLightBuffer.size = sizeof(DirectionalLight);
+  pointLightsBuffer.size = sizeof(PointLight) * MAX_POINT_LIGHTS;
+  spotLightsBuffer.size = sizeof(SpotLight) * MAX_SPOT_LIGHTS;
+
+  directionalLightBuffer.mapped =
+    vkContext->createBuffer(directionalLightBuffer.size,
+                            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                            BufferType::STAGING_BUFFER,
+                            directionalLightBuffer.buffer,
+                            directionalLightBuffer.allocation);
+
+  pointLightsBuffer.mapped =
+    vkContext->createBuffer(pointLightsBuffer.size,
+                            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                            BufferType::STAGING_BUFFER,
+                            pointLightsBuffer.buffer,
+                            pointLightsBuffer.allocation);
+
+  spotLightsBuffer.mapped =
+    vkContext->createBuffer(spotLightsBuffer.size,
+                            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                            BufferType::STAGING_BUFFER,
+                            spotLightsBuffer.buffer,
+                            spotLightsBuffer.allocation);
+}
+
+void Renderer::createDescriptors()
 {
   // --------------------- Create Pool ---------------------
   std::array<VkDescriptorPoolSize, 2> poolSizes;
@@ -368,89 +375,4 @@ Scene::createDescriptors()
       throw std::runtime_error("failed to allocate descriptor sets!");
     }
   }
-}
-
-void
-Scene::createBuffers()
-{
-  // --------------------- Camera Buffer ---------------------
-  VkDeviceSize uboBufferSize = sizeof(CameraBuffer);
-
-  cameraBuffer.mapped =
-    vkContext->createBuffer(uboBufferSize,
-                            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                            BufferType::STAGING_BUFFER,
-                            cameraBuffer.buffer,
-                            cameraBuffer.allocation);
-
-  // --------------------- Light Buffers ---------------------
-  VkDeviceSize directionalLightBufferSize = sizeof(DirectionalLight);
-
-  VkDeviceSize pointLightBufferSize = sizeof(PointLight) * MAX_POINT_LIGHTS;
-
-  VkDeviceSize spotLightBufferSize = sizeof(SpotLight) * MAX_SPOT_LIGHTS;
-
-  directionalLightBuffer.mapped =
-    vkContext->createBuffer(directionalLightBufferSize,
-                            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                            BufferType::STAGING_BUFFER,
-                            directionalLightBuffer.buffer,
-                            directionalLightBuffer.allocation);
-
-  pointLightsBuffer.mapped =
-    vkContext->createBuffer(pointLightBufferSize,
-                            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                            BufferType::STAGING_BUFFER,
-                            pointLightsBuffer.buffer,
-                            pointLightsBuffer.allocation);
-
-  spotLightsBuffer.mapped =
-    vkContext->createBuffer(spotLightBufferSize,
-                            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                            BufferType::STAGING_BUFFER,
-                            spotLightsBuffer.buffer,
-                            spotLightsBuffer.allocation);
-
-  uint8_t* directionalMapped =
-    reinterpret_cast<uint8_t*>(directionalLightBuffer.mapped);
-  memcpy(directionalMapped, directionalLight, directionalLightBufferSize);
-
-  uint8_t* pointMapped = reinterpret_cast<uint8_t*>(pointLightsBuffer.mapped);
-  memcpy(pointMapped, pointLights.data(), pointLightBufferSize);
-
-  if (!spotLights.empty()) {
-    uint8_t* spotMapped = reinterpret_cast<uint8_t*>(spotLightsBuffer.mapped);
-    memcpy(spotMapped, spotLights.data(), spotLightBufferSize);
-  }
-}
-
-void
-Scene::update()
-{
-  // update camera data
-  CameraBuffer cb;
-
-  if (spotLights.size() > MAX_SPOT_LIGHTS) {
-    throw std::runtime_error("spotLights > MAX_SPOT_LIGHTS");
-  }
-
-  // position, target, up
-  cb.view = camera->getCameraMatrix();
-  cb.proj = camera->getCameraProjectionMatrix();
-  cb.cameraPos = glm::vec4(camera->getCameraPos(), 1);
-
-  models[1].rotate(1.0, glm::vec3(1.0, 0.5, 0.3));
-
-  // directionalLight->follow(camera->getCameraPos() +
-  //                          (-glm::vec3(directionalLight->getDirection())));
-  // uint8_t* directionalMapped =
-  //   reinterpret_cast<uint8_t*>(directionalLightBuffer.mapped);
-  // memcpy(directionalMapped, directionalLight, sizeof(DirectionalLight));
-
-  // spotLights[1].move(glm::vec4(camera->getCameraPos(), 1.0),
-  //                    glm::vec4(camera->getCameraFront(), 1.0));
-  // uint8_t* spotMapped = reinterpret_cast<uint8_t*>(spotLightsBuffer.mapped);
-  // memcpy(spotMapped, spotLights.data(), sizeof(SpotLight) * MAX_SPOT_LIGHTS);
-
-  memcpy(cameraBuffer.mapped, &cb, sizeof(CameraBuffer));
 }
