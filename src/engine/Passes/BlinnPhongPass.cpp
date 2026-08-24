@@ -1,24 +1,19 @@
 #include "engine/Passes/BlinnPhongPass.h"
-#include "engine/ModelLoading/Model.h"
-#include "engine/Vertex.h"
 
-BlinnPhongPass::BlinnPhongPass(
-  VulkanContext* vkContext,
-  const std::array<AttachmentData, 16>& attachmentData,
-  const Scene& scene,
-  const uint32_t attachmentWidth,
-  const uint32_t attachmentHeight)
-  : IPassHelper(vkContext, scene)
+BlinnPhongPass::BlinnPhongPass(VulkanContext* vkContext,
+                               const AttachmentConfig& attachmentConfig,
+                               const LayoutConfig& layoutConfig)
+  : vkContext(vkContext)
 {
-  createAttachments(attachmentWidth, attachmentHeight);
+  createAttachments(attachmentConfig.width, attachmentConfig.height);
 
-  createRenderPass(attachmentData);
+  createRenderPass(attachmentConfig.depthFormat);
 
-  createFrameBuffer(attachmentData);
+  createFrameBuffer(attachmentConfig.depthImageView);
 
-  createMainPipeline(scene);
-  createSkyboxPipeline(scene);
-  createLightCubesPipeline(scene);
+  createPipelines(layoutConfig.camera,
+                  layoutConfig.lights,
+                  layoutConfig.directionalShadowmap);
 }
 
 BlinnPhongPass::~BlinnPhongPass()
@@ -37,12 +32,15 @@ BlinnPhongPass::~BlinnPhongPass()
   vkDestroyPipelineLayout(
     vkContext->logicalDevice, lightCubesPipelineLayout, nullptr);
 
-  delete hdrAttachment;
   vkDestroyFramebuffer(vkContext->logicalDevice, hdrFramebuffer, nullptr);
 }
 
 void
-BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
+BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain,
+                     const Scene& scene,
+                     VkDescriptorSet cameraUBODescriptorset,
+                     VkDescriptorSet lightsUBODescriptorset,
+                     VkDescriptorSet shadowMapDescriptorSet)
 {
   VkRenderPassBeginInfo renderPassInfo{};
   renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -85,7 +83,7 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
                           blinnPhongPipelineLayout,
                           0,
                           1,
-                          &scene.cameraUBODescriptorset,
+                          &cameraUBODescriptorset,
                           0,
                           nullptr);
 
@@ -94,7 +92,7 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
                           blinnPhongPipelineLayout,
                           1,
                           1,
-                          &scene.lightsUBODescriptorset,
+                          &lightsUBODescriptorset,
                           0,
                           nullptr);
 
@@ -103,7 +101,7 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
                           blinnPhongPipelineLayout,
                           3,
                           1,
-                          &scene.shadowMapDescriptorSet,
+                          &shadowMapDescriptorSet,
                           0,
                           nullptr);
 
@@ -129,7 +127,7 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
                          blinnPhongPipelineLayout,
                          VK_SHADER_STAGE_VERTEX_BIT,
                          0,
-                         64,
+                         sizeof(PushConstant),
                          &pc);
 
       vkCmdBindDescriptorSets(vkSwapchain->commandBuffer,
@@ -163,7 +161,7 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
                           lightCubesPipelineLayout,
                           0,
                           1,
-                          &scene.cameraUBODescriptorset,
+                          &cameraUBODescriptorset,
                           0,
                           nullptr);
 
@@ -187,7 +185,7 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
       PushConstant pc;
       pc.model = instance.transformation;
       vkCmdPushConstants(vkSwapchain->commandBuffer,
-                         blinnPhongPipelineLayout,
+                         lightCubesPipelineLayout,
                          VK_SHADER_STAGE_VERTEX_BIT,
                          0,
                          64,
@@ -199,8 +197,8 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
       vkCmdPushConstants(vkSwapchain->commandBuffer,
                          lightCubesPipelineLayout,
                          VK_SHADER_STAGE_FRAGMENT_BIT,
-                         64,
-                         16,
+                         sizeof(PushConstant),
+                         sizeof(LightColor),
                          &lightColor);
 
       vkCmdDrawIndexed(vkSwapchain->commandBuffer,
@@ -225,7 +223,7 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
                           skyboxPipelineLayout,
                           0,
                           1,
-                          &scene.cameraUBODescriptorset,
+                          &cameraUBODescriptorset,
                           0,
                           nullptr);
 
@@ -255,7 +253,7 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
                        skyboxPipelineLayout,
                        VK_SHADER_STAGE_VERTEX_BIT,
                        0,
-                       64,
+                       sizeof(PushConstant),
                        &pc);
 
     vkCmdDrawIndexed(vkSwapchain->commandBuffer,
@@ -270,31 +268,33 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
 }
 
 void
-BlinnPhongPass::recreateAttachments(
-  int width,
-  int height,
-  const std::array<AttachmentData, 16>& attachmentData)
+BlinnPhongPass::recreateAttachments(int width,
+                                    int height,
+                                    VkImageView depthImageView)
 {
   hdrAttachment->resize(width, height);
   vkDestroyFramebuffer(vkContext->logicalDevice, hdrFramebuffer, nullptr);
-  createFrameBuffer(attachmentData);
+  createFrameBuffer(depthImageView);
 }
 
+// TODO: this should be in Shadowmap Pass?
 void
 BlinnPhongPass::updateDescriptors(
-  const std::array<FramebufferAttachment*, 16>& attachments)
+  const std::unique_ptr<FramebufferAttachment>& directionalShadowmap,
+  const std::unique_ptr<FramebufferAttachment>& spotPointShadowAtlas,
+  VkDescriptorSet shadowMapDescriptorSet)
 {
   {
     VkDescriptorImageInfo shadowMapImageInfo{};
     shadowMapImageInfo.imageLayout =
       VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-    shadowMapImageInfo.imageView = attachments[0]->view;
-    shadowMapImageInfo.sampler = attachments[0]->sampler;
+    shadowMapImageInfo.imageView = directionalShadowmap->view;
+    shadowMapImageInfo.sampler = directionalShadowmap->sampler;
 
     std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
 
     descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[0].dstSet = scene.shadowMapDescriptorSet;
+    descriptorWrites[0].dstSet = shadowMapDescriptorSet;
     descriptorWrites[0].dstBinding = 0;
     descriptorWrites[0].dstArrayElement = 0;
     descriptorWrites[0].descriptorType =
@@ -313,13 +313,13 @@ BlinnPhongPass::updateDescriptors(
     VkDescriptorImageInfo shadowAtlasImageInfo{};
     shadowAtlasImageInfo.imageLayout =
       VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-    shadowAtlasImageInfo.imageView = attachments[1]->view;
-    shadowAtlasImageInfo.sampler = attachments[1]->sampler;
+    shadowAtlasImageInfo.imageView = spotPointShadowAtlas->view;
+    shadowAtlasImageInfo.sampler = spotPointShadowAtlas->sampler;
 
     std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
 
     descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[0].dstSet = scene.shadowMapDescriptorSet;
+    descriptorWrites[0].dstSet = shadowMapDescriptorSet;
     descriptorWrites[0].dstBinding = 1;
     descriptorWrites[0].dstArrayElement = 0;
     descriptorWrites[0].descriptorType =
@@ -336,10 +336,10 @@ BlinnPhongPass::updateDescriptors(
 }
 
 void
-BlinnPhongPass::createFrameBuffer(std::array<AttachmentData, 16> attachmentData)
+BlinnPhongPass::createFrameBuffer(VkImageView depthImageView)
 {
   std::array<VkImageView, 2> attachments = { hdrAttachment->view,
-                                             attachmentData[0].view };
+                                             depthImageView };
 
   VkFramebufferCreateInfo framebufferInfo{};
   framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -360,7 +360,7 @@ BlinnPhongPass::createFrameBuffer(std::array<AttachmentData, 16> attachmentData)
 void
 BlinnPhongPass::createAttachments(uint32_t width, uint32_t height)
 {
-  hdrAttachment = new FramebufferAttachment(
+  hdrAttachment = std::make_unique<FramebufferAttachment>(
     VK_FORMAT_R16G16B16A16_SFLOAT,
     1,
     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -370,7 +370,7 @@ BlinnPhongPass::createAttachments(uint32_t width, uint32_t height)
 }
 
 void
-BlinnPhongPass::createRenderPass(std::array<AttachmentData, 16> attachmentData)
+BlinnPhongPass::createRenderPass(VkFormat depthFormat)
 {
   // attachment for HDR
   VkAttachmentDescription hdrAttachmentDescription{};
@@ -386,10 +386,10 @@ BlinnPhongPass::createRenderPass(std::array<AttachmentData, 16> attachmentData)
 
   // attachment for depth
   VkAttachmentDescription depthAttachment{};
-  depthAttachment.format = attachmentData[0].format;
+  depthAttachment.format = depthFormat;
   depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
   depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
   depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
   depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
   depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -442,493 +442,69 @@ BlinnPhongPass::createRenderPass(std::array<AttachmentData, 16> attachmentData)
 }
 
 void
-BlinnPhongPass::createMainPipeline(const Scene& scene)
+BlinnPhongPass::createPipelines(
+  VkDescriptorSetLayout cameraLayout,
+  VkDescriptorSetLayout lightsLayout,
+  VkDescriptorSetLayout directionalShadowmapLayout)
 {
-  std::string shaderPath = SHADER_PATH;
-  auto vertShaderCode = readFile(shaderPath + "texture_vert.spv");
-  auto fragShaderCode = readFile(shaderPath + "texture_frag.spv");
+  VkPushConstantRange modelPC{};
+  modelPC.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+  modelPC.offset = 0;
+  modelPC.size = 64;
 
-  VkShaderModule vertShaderModule =
-    vkContext->createShaderModule(vertShaderCode);
-  VkShaderModule fragShaderModule =
-    vkContext->createShaderModule(fragShaderCode);
+  // Main Blinn-Phong pipeline
+  {
+    GraphicsPipelineConfig config{};
+    config.vertShaderName = "texture_vert.spv";
+    config.fragShaderName = "texture_frag.spv";
+    config.descriptorSetLayouts = { cameraLayout,
+                                    lightsLayout,
+                                    Model::textureLayout,
+                                    directionalShadowmapLayout };
+    config.pushConstantRanges = { modelPC };
+    config.renderPass = renderPass;
 
-  VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-  vertShaderStageInfo.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-  vertShaderStageInfo.module = vertShaderModule;
-  vertShaderStageInfo.pName = "main";
-
-  VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-  fragShaderStageInfo.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-  fragShaderStageInfo.module = fragShaderModule;
-  fragShaderStageInfo.pName = "main";
-
-  VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo,
-                                                     fragShaderStageInfo };
-
-  VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-  vertexInputInfo.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
-  auto bindingDescription = Vertex::getBindingDescription();
-  auto attributeDescriptions = Vertex::getAttributeDescriptions();
-
-  vertexInputInfo.vertexBindingDescriptionCount = 1;
-  vertexInputInfo.vertexAttributeDescriptionCount =
-    static_cast<uint32_t>(attributeDescriptions.size());
-  vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-  vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
-
-  VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-  inputAssembly.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-  inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-  VkPushConstantRange modelPCRange{};
-  modelPCRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-  modelPCRange.offset = 0;
-  modelPCRange.size = 64;
-
-  VkPipelineViewportStateCreateInfo viewportState{};
-  viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-  viewportState.viewportCount = 1;
-  viewportState.scissorCount = 1;
-
-  VkPipelineRasterizationStateCreateInfo rasterizer{};
-  rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-  rasterizer.depthClampEnable = VK_FALSE;
-  rasterizer.rasterizerDiscardEnable = VK_FALSE;
-  rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-  rasterizer.lineWidth = 1.0f;
-  rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-  rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-  rasterizer.depthBiasEnable = VK_FALSE;
-
-  VkPipelineMultisampleStateCreateInfo multisampling{};
-  multisampling.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-  multisampling.sampleShadingEnable = VK_FALSE;
-  multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-  VkPipelineDepthStencilStateCreateInfo depthStencil{};
-  depthStencil.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-  depthStencil.depthTestEnable = VK_TRUE;
-  depthStencil.depthWriteEnable = VK_TRUE;
-  depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-  depthStencil.depthBoundsTestEnable = VK_FALSE;
-  depthStencil.minDepthBounds = 0.0f; // Optional
-  depthStencil.maxDepthBounds = 1.0f; // Optional
-  depthStencil.stencilTestEnable = VK_FALSE;
-  depthStencil.front = {}; // Optional
-  depthStencil.back = {};  // Optional
-
-  VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-  colorBlendAttachment.colorWriteMask =
-    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-    VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-  colorBlendAttachment.blendEnable = VK_FALSE;
-
-  VkPipelineColorBlendStateCreateInfo colorBlending{};
-  colorBlending.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-  colorBlending.logicOpEnable = VK_FALSE;
-  colorBlending.logicOp = VK_LOGIC_OP_COPY;
-  colorBlending.attachmentCount = 1;
-  colorBlending.pAttachments = &colorBlendAttachment;
-  colorBlending.blendConstants[0] = 0.0f;
-  colorBlending.blendConstants[1] = 0.0f;
-  colorBlending.blendConstants[2] = 0.0f;
-  colorBlending.blendConstants[3] = 0.0f;
-
-  std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT,
-                                                VK_DYNAMIC_STATE_SCISSOR };
-
-  VkPipelineDynamicStateCreateInfo dynamicState{};
-  dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-  dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-  dynamicState.pDynamicStates = dynamicStates.data();
-
-  std::array<VkDescriptorSetLayout, 4> descriptorSetLayouts;
-  descriptorSetLayouts[0] = scene.cameraUBOLayout;
-  descriptorSetLayouts[1] = scene.lightsUBOLayout;
-  descriptorSetLayouts[2] = Model::textureLayout;
-  descriptorSetLayouts[3] = scene.directionalShadowMapLayout;
-
-  VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-  pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipelineLayoutInfo.setLayoutCount =
-    static_cast<uint32_t>(descriptorSetLayouts.size());
-  pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
-  pipelineLayoutInfo.pushConstantRangeCount = 1;
-  pipelineLayoutInfo.pPushConstantRanges = &modelPCRange;
-
-  if (vkCreatePipelineLayout(vkContext->logicalDevice,
-                             &pipelineLayoutInfo,
-                             nullptr,
-                             &blinnPhongPipelineLayout) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create pipeline layout!");
+    auto result = createPipeline(vkContext, config);
+    blinnPhongPipeline = result.pipeline;
+    blinnPhongPipelineLayout = result.layout;
   }
 
-  VkGraphicsPipelineCreateInfo pipelineInfo{};
-  pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-  pipelineInfo.stageCount = 2;
-  pipelineInfo.pStages = shaderStages;
-  pipelineInfo.pVertexInputState = &vertexInputInfo;
-  pipelineInfo.pInputAssemblyState = &inputAssembly;
-  pipelineInfo.pViewportState = &viewportState;
-  pipelineInfo.pRasterizationState = &rasterizer;
-  pipelineInfo.pMultisampleState = &multisampling;
-  pipelineInfo.pColorBlendState = &colorBlending;
-  pipelineInfo.pDynamicState = &dynamicState;
-  pipelineInfo.layout = blinnPhongPipelineLayout;
-  pipelineInfo.renderPass = renderPass;
-  pipelineInfo.subpass = 0;
-  pipelineInfo.pDepthStencilState = &depthStencil;
-  pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+  // Skybox pipeline
+  {
+    GraphicsPipelineConfig config{};
+    config.vertShaderName = "skybox_vert.spv";
+    config.fragShaderName = "skybox_frag.spv";
 
-  if (vkCreateGraphicsPipelines(vkContext->logicalDevice,
-                                VK_NULL_HANDLE,
-                                1,
-                                &pipelineInfo,
-                                nullptr,
-                                &blinnPhongPipeline) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create graphics pipeline!");
+    config.cullMode = VK_CULL_MODE_FRONT_BIT;
+
+    config.descriptorSetLayouts = { cameraLayout, Skybox::skyboxLayout };
+    config.pushConstantRanges = { modelPC };
+    config.renderPass = renderPass;
+    config.subpass = 0;
+
+    auto result = createPipeline(vkContext, config);
+    skyboxPipeline = result.pipeline;
+    skyboxPipelineLayout = result.layout;
   }
 
-  vkDestroyShaderModule(vkContext->logicalDevice, fragShaderModule, nullptr);
-  vkDestroyShaderModule(vkContext->logicalDevice, vertShaderModule, nullptr);
-}
+  // Light cubes pipeline
+  {
+    VkPushConstantRange colorPC{};
+    colorPC.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    colorPC.offset = 64;
+    colorPC.size = 16;
 
-void
-BlinnPhongPass::createSkyboxPipeline(const Scene& scene)
-{
-  std::string shaderPath = SHADER_PATH;
-  auto vertShaderCode = readFile(shaderPath + "skybox_vert.spv");
-  auto fragShaderCode = readFile(shaderPath + "skybox_frag.spv");
+    GraphicsPipelineConfig config{};
+    config.vertShaderName = "light_cube_vert.spv";
+    config.fragShaderName = "light_cube_frag.spv";
 
-  VkShaderModule vertShaderModule =
-    vkContext->createShaderModule(vertShaderCode);
-  VkShaderModule fragShaderModule =
-    vkContext->createShaderModule(fragShaderCode);
+    config.descriptorSetLayouts = { cameraLayout };
+    config.pushConstantRanges = { modelPC, colorPC };
+    config.renderPass = renderPass;
+    config.subpass = 0;
 
-  VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-  vertShaderStageInfo.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-  vertShaderStageInfo.module = vertShaderModule;
-  vertShaderStageInfo.pName = "main";
-
-  VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-  fragShaderStageInfo.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-  fragShaderStageInfo.module = fragShaderModule;
-  fragShaderStageInfo.pName = "main";
-
-  VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo,
-                                                     fragShaderStageInfo };
-
-  VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-  vertexInputInfo.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
-  auto bindingDescription = Vertex::getBindingDescription();
-  auto attributeDescriptions = Vertex::getAttributeDescriptions();
-
-  vertexInputInfo.vertexBindingDescriptionCount = 1;
-  vertexInputInfo.vertexAttributeDescriptionCount =
-    static_cast<uint32_t>(attributeDescriptions.size());
-  vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-  vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
-
-  VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-  inputAssembly.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-  inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-  VkPushConstantRange modelPCRange{};
-  modelPCRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-  modelPCRange.offset = 0;
-  modelPCRange.size = 64;
-
-  VkPipelineViewportStateCreateInfo viewportState{};
-  viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-  viewportState.viewportCount = 1;
-  viewportState.scissorCount = 1;
-
-  VkPipelineRasterizationStateCreateInfo rasterizer{};
-  rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-  rasterizer.depthClampEnable = VK_FALSE;
-  rasterizer.rasterizerDiscardEnable = VK_FALSE;
-  rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-  rasterizer.lineWidth = 1.0f;
-  rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
-  rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-  rasterizer.depthBiasEnable = VK_FALSE;
-
-  VkPipelineMultisampleStateCreateInfo multisampling{};
-  multisampling.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-  multisampling.sampleShadingEnable = VK_FALSE;
-  multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-  VkPipelineDepthStencilStateCreateInfo depthStencil{};
-  depthStencil.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-  depthStencil.depthTestEnable = VK_TRUE;
-  depthStencil.depthWriteEnable = VK_TRUE;
-  depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-  depthStencil.depthBoundsTestEnable = VK_FALSE;
-  depthStencil.minDepthBounds = 0.0f; // Optional
-  depthStencil.maxDepthBounds = 1.0f; // Optional
-  depthStencil.stencilTestEnable = VK_FALSE;
-  depthStencil.front = {}; // Optional
-  depthStencil.back = {};  // Optional
-
-  VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-  colorBlendAttachment.colorWriteMask =
-    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-    VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-  colorBlendAttachment.blendEnable = VK_FALSE;
-
-  VkPipelineColorBlendStateCreateInfo colorBlending{};
-  colorBlending.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-  colorBlending.logicOpEnable = VK_FALSE;
-  colorBlending.logicOp = VK_LOGIC_OP_COPY;
-  colorBlending.attachmentCount = 1;
-  colorBlending.pAttachments = &colorBlendAttachment;
-  colorBlending.blendConstants[0] = 0.0f;
-  colorBlending.blendConstants[1] = 0.0f;
-  colorBlending.blendConstants[2] = 0.0f;
-  colorBlending.blendConstants[3] = 0.0f;
-
-  std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT,
-                                                VK_DYNAMIC_STATE_SCISSOR };
-
-  VkPipelineDynamicStateCreateInfo dynamicState{};
-  dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-  dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-  dynamicState.pDynamicStates = dynamicStates.data();
-
-  std::array<VkDescriptorSetLayout, 2> descriptorSetLayouts;
-  descriptorSetLayouts[0] = scene.cameraUBOLayout;
-  descriptorSetLayouts[1] = scene.skybox->skyboxLayout;
-
-  VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-  pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipelineLayoutInfo.setLayoutCount =
-    static_cast<uint32_t>(descriptorSetLayouts.size());
-  pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
-  pipelineLayoutInfo.pushConstantRangeCount = 1;
-  pipelineLayoutInfo.pPushConstantRanges = &modelPCRange;
-
-  if (vkCreatePipelineLayout(vkContext->logicalDevice,
-                             &pipelineLayoutInfo,
-                             nullptr,
-                             &skyboxPipelineLayout) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create pipeline layout!");
+    auto result = createPipeline(vkContext, config);
+    lightCubesPipeline = result.pipeline;
+    lightCubesPipelineLayout = result.layout;
   }
-
-  VkGraphicsPipelineCreateInfo pipelineInfo{};
-  pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-  pipelineInfo.stageCount = 2;
-  pipelineInfo.pStages = shaderStages;
-  pipelineInfo.pVertexInputState = &vertexInputInfo;
-  pipelineInfo.pInputAssemblyState = &inputAssembly;
-  pipelineInfo.pViewportState = &viewportState;
-  pipelineInfo.pRasterizationState = &rasterizer;
-  pipelineInfo.pMultisampleState = &multisampling;
-  pipelineInfo.pColorBlendState = &colorBlending;
-  pipelineInfo.pDynamicState = &dynamicState;
-  pipelineInfo.layout = skyboxPipelineLayout;
-  pipelineInfo.renderPass = renderPass;
-  pipelineInfo.subpass = 0;
-  pipelineInfo.pDepthStencilState = &depthStencil;
-  pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-
-  if (vkCreateGraphicsPipelines(vkContext->logicalDevice,
-                                VK_NULL_HANDLE,
-                                1,
-                                &pipelineInfo,
-                                nullptr,
-                                &skyboxPipeline) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create graphics pipeline!");
-  }
-
-  vkDestroyShaderModule(vkContext->logicalDevice, fragShaderModule, nullptr);
-  vkDestroyShaderModule(vkContext->logicalDevice, vertShaderModule, nullptr);
-}
-
-void
-BlinnPhongPass::createLightCubesPipeline(const Scene& scene)
-{
-  std::string shaderPath = SHADER_PATH;
-  auto vertShaderCode = readFile(shaderPath + "light_cube_vert.spv");
-  auto fragShaderCode = readFile(shaderPath + "light_cube_frag.spv");
-
-  VkShaderModule vertShaderModule =
-    vkContext->createShaderModule(vertShaderCode);
-  VkShaderModule fragShaderModule =
-    vkContext->createShaderModule(fragShaderCode);
-
-  VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-  vertShaderStageInfo.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-  vertShaderStageInfo.module = vertShaderModule;
-  vertShaderStageInfo.pName = "main";
-
-  VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-  fragShaderStageInfo.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-  fragShaderStageInfo.module = fragShaderModule;
-  fragShaderStageInfo.pName = "main";
-
-  VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo,
-                                                     fragShaderStageInfo };
-
-  VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-  vertexInputInfo.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
-  auto bindingDescription = Vertex::getBindingDescription();
-  auto attributeDescriptions = Vertex::getAttributeDescriptions();
-
-  vertexInputInfo.vertexBindingDescriptionCount = 1;
-  vertexInputInfo.vertexAttributeDescriptionCount =
-    static_cast<uint32_t>(attributeDescriptions.size());
-  vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-  vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
-
-  VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-  inputAssembly.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-  inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-  std::array<VkPushConstantRange, 2> pcRanges;
-  pcRanges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-  pcRanges[0].offset = 0;
-  pcRanges[0].size = 64;
-
-  pcRanges[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-  pcRanges[1].offset = 64;
-  pcRanges[1].size = 16;
-
-  VkPipelineViewportStateCreateInfo viewportState{};
-  viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-  viewportState.viewportCount = 1;
-  viewportState.scissorCount = 1;
-
-  VkPipelineRasterizationStateCreateInfo rasterizer{};
-  rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-  rasterizer.depthClampEnable = VK_FALSE;
-  rasterizer.rasterizerDiscardEnable = VK_FALSE;
-  rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-  rasterizer.lineWidth = 1.0f;
-  rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-  rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-  rasterizer.depthBiasEnable = VK_FALSE;
-
-  VkPipelineMultisampleStateCreateInfo multisampling{};
-  multisampling.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-  multisampling.sampleShadingEnable = VK_FALSE;
-  multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-  VkPipelineDepthStencilStateCreateInfo depthStencil{};
-  depthStencil.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-  depthStencil.depthTestEnable = VK_TRUE;
-  depthStencil.depthWriteEnable = VK_TRUE;
-  depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-  depthStencil.depthBoundsTestEnable = VK_FALSE;
-  depthStencil.minDepthBounds = 0.0f; // Optional
-  depthStencil.maxDepthBounds = 1.0f; // Optional
-  depthStencil.stencilTestEnable = VK_FALSE;
-  depthStencil.front = {}; // Optional
-  depthStencil.back = {};  // Optional
-
-  VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-  colorBlendAttachment.colorWriteMask =
-    VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-    VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-  colorBlendAttachment.blendEnable = VK_FALSE;
-
-  VkPipelineColorBlendStateCreateInfo colorBlending{};
-  colorBlending.sType =
-    VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-  colorBlending.logicOpEnable = VK_FALSE;
-  colorBlending.logicOp = VK_LOGIC_OP_COPY;
-  colorBlending.attachmentCount = 1;
-  colorBlending.pAttachments = &colorBlendAttachment;
-  colorBlending.blendConstants[0] = 0.0f;
-  colorBlending.blendConstants[1] = 0.0f;
-  colorBlending.blendConstants[2] = 0.0f;
-  colorBlending.blendConstants[3] = 0.0f;
-
-  std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT,
-                                                VK_DYNAMIC_STATE_SCISSOR };
-
-  VkPipelineDynamicStateCreateInfo dynamicState{};
-  dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-  dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-  dynamicState.pDynamicStates = dynamicStates.data();
-
-  std::array<VkDescriptorSetLayout, 1> descriptorSetLayouts;
-  descriptorSetLayouts[0] = scene.cameraUBOLayout;
-
-  VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-  pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipelineLayoutInfo.setLayoutCount =
-    static_cast<uint32_t>(descriptorSetLayouts.size());
-  pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
-  pipelineLayoutInfo.pushConstantRangeCount =
-    static_cast<uint32_t>(pcRanges.size());
-  pipelineLayoutInfo.pPushConstantRanges = pcRanges.data();
-
-  if (vkCreatePipelineLayout(vkContext->logicalDevice,
-                             &pipelineLayoutInfo,
-                             nullptr,
-                             &lightCubesPipelineLayout) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create pipeline layout!");
-  }
-
-  VkGraphicsPipelineCreateInfo pipelineInfo{};
-  pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-  pipelineInfo.stageCount = 2;
-  pipelineInfo.pStages = shaderStages;
-  pipelineInfo.pVertexInputState = &vertexInputInfo;
-  pipelineInfo.pInputAssemblyState = &inputAssembly;
-  pipelineInfo.pViewportState = &viewportState;
-  pipelineInfo.pRasterizationState = &rasterizer;
-  pipelineInfo.pMultisampleState = &multisampling;
-  pipelineInfo.pColorBlendState = &colorBlending;
-  pipelineInfo.pDynamicState = &dynamicState;
-  pipelineInfo.layout = lightCubesPipelineLayout;
-  pipelineInfo.renderPass = renderPass;
-  pipelineInfo.subpass = 0;
-  pipelineInfo.pDepthStencilState = &depthStencil;
-  pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-
-  if (vkCreateGraphicsPipelines(vkContext->logicalDevice,
-                                VK_NULL_HANDLE,
-                                1,
-                                &pipelineInfo,
-                                nullptr,
-                                &lightCubesPipeline) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create graphics pipeline!");
-  }
-
-  vkDestroyShaderModule(vkContext->logicalDevice, fragShaderModule, nullptr);
-  vkDestroyShaderModule(vkContext->logicalDevice, vertShaderModule, nullptr);
 }

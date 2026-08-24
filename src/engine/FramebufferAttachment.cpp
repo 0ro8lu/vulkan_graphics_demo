@@ -1,7 +1,6 @@
 #include "engine/FramebufferAttachment.h"
 
 #include <stdexcept>
-#include <vulkan/vulkan_core.h>
 
 FramebufferAttachment::FramebufferAttachment(
   VkFormat format,

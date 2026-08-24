@@ -29,7 +29,21 @@ set(ASSIMP_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
 set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_SOURCE_DIR}/deps/assimp SYSTEM)
 
-find_package(Vulkan REQUIRED)
+option(VULKAN_STEALTH "Use the local Vulkan SDK bundled in deps/" OFF)
+
+if(VULKAN_STEALTH)
+    set(VULKAN_LOCAL_DIR "${CMAKE_SOURCE_DIR}/deps/vulkan")
+
+    add_library(vulkan-local SHARED IMPORTED)
+    set_target_properties(vulkan-local PROPERTIES
+        IMPORTED_LOCATION "${VULKAN_LOCAL_DIR}/lib/libvulkan.1.dylib"
+        INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_LOCAL_DIR}/include"
+    )
+    set(VULKAN_TARGET vulkan-local)
+else()
+    find_package(Vulkan REQUIRED)
+    set(VULKAN_TARGET Vulkan::Vulkan)
+endif()
 
 # Get the filename without extension to use as the target name
 # get_filename_component(PROJECT_NAME ${EXAMPLE_FILE} NAME_WE)
@@ -44,7 +58,7 @@ add_executable(${PROJECT_NAME}
 )
 
 # Set C++17 standard
-set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17)
+set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 23)
 
 # Include directories
 target_include_directories(${PROJECT_NAME} PRIVATE
@@ -81,11 +95,25 @@ endif()
 
 # these are constants defined for all platforms
 # TODO: also add maximum number of spotlights and pointlights.
-target_compile_definitions(${PROJECT_NAME} PRIVATE ATLAS_SIZE=4096)
-target_compile_definitions(${PROJECT_NAME} PRIVATE ATLAS_TILES=4)
+target_compile_definitions(${PROJECT_NAME} PRIVATE SPOT_POINT_ATLAS_SIZE=4096)
+target_compile_definitions(${PROJECT_NAME} PRIVATE DIRECTIONAL_ATLAS_SIZE=4096)
+target_compile_definitions(${PROJECT_NAME} PRIVATE SPOT_POINT_ATLAS_TILES=4)
 add_definitions(-DGLM_FORCE_DEPTH_ZERO_TO_ONE)
 
-if(UNIX AND NOT LINUX)
+if(VULKAN_STEALTH)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE
+        VULKAN_STEALTH
+        VULKAN_ICD_FILEPATH="${VULKAN_LOCAL_DIR}/icd.d/MoltenVK_icd.json"
+        VULKAN_LAYER_PATH="${VULKAN_LOCAL_DIR}/explicit_layer.d"
+    )
+
+    # Embed the rpath so the executable finds libvulkan.1.dylib at runtime
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        BUILD_RPATH "${VULKAN_LOCAL_DIR}/lib"
+    )
+endif()
+
+if(APPLE)
     target_link_libraries(${PROJECT_NAME}
         "-framework CoreAudio"
         "-framework AudioToolbox"
@@ -101,7 +129,7 @@ endif()
 # Link libraries
 target_link_libraries(${PROJECT_NAME}
     glfw
-    Vulkan::Vulkan
+    ${VULKAN_TARGET}
     GPUOpen::VulkanMemoryAllocator
     assimp
 )

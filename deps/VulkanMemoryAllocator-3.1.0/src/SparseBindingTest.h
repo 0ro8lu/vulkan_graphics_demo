@@ -24,6 +24,7 @@
 
 #ifdef _WIN32
 
-void TestSparseBinding();
+void
+TestSparseBinding();
 
 #endif // #ifdef _WIN32

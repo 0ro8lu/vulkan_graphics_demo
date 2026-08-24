@@ -4,14 +4,15 @@
 #include <iostream>
 
 uint32_t LightManager::currentShadowIndex = 0;
-const uint32_t LightManager::maximumAtlasTiles = ATLAS_TILES * ATLAS_TILES;
+const uint32_t LightManager::maximumAtlasTiles =
+  SPOT_POINT_ATLAS_TILES * SPOT_POINT_ATLAS_TILES;
 
-DirectionalLight*
+DirectionalLight
 LightManager::createDirectionalLight(glm::vec3 direction,
                                      glm::vec3 color,
                                      bool castsShadow)
 {
-  return new DirectionalLight(direction, color, castsShadow);
+  return DirectionalLight(direction, color, castsShadow);
 }
 
 PointLight

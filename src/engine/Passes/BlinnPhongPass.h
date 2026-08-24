@@ -1,47 +1,81 @@
-#ifndef _BLINN_PHONG_PASS_H_
-#define _BLINN_PHONG_PASS_H_
+#ifndef BLINN_PHONG_PASS_H
+#define BLINN_PHONG_PASS_H
 
-#include "engine/Passes/IPassHelper.h"
+#include "engine/FramebufferAttachment.h"
+#include "engine/RenderUtils.h"
+#include "engine/Scene.h"
+#include "engine/VulkanSwapchain.h"
 
-class BlinnPhongPass : public IPassHelper
+#include <memory>
+
+class BlinnPhongPass
 {
 public:
+  struct AttachmentConfig;
+  struct LayoutConfig;
+
   BlinnPhongPass(VulkanContext* vkContext,
-                 const std::array<AttachmentData, 16>& attachmentData,
-                 const Scene& scene,
-                 const uint32_t attachmentWidth,
-                 const uint32_t attachmentHeight);
+                 const AttachmentConfig& attachmentConfig,
+                 const LayoutConfig& layoutConfig);
   ~BlinnPhongPass();
 
-  void draw(VulkanSwapchain* vkSwapchain, const Scene& scene) override;
-  void recreateAttachments(
-    int width,
-    int height,
-    const std::array<AttachmentData, 16>& attachmentData) override;
-  void updateDescriptors(
-    const std::array<FramebufferAttachment*, 16>& attachments) override;
+  BlinnPhongPass(const BlinnPhongPass&) = delete;
+  BlinnPhongPass(BlinnPhongPass&& other) = delete;
+  BlinnPhongPass& operator=(const BlinnPhongPass&) = delete;
+  BlinnPhongPass& operator=(BlinnPhongPass&&) = delete;
 
-  FramebufferAttachment* hdrAttachment;
+  void draw(VulkanSwapchain* vkSwapchain,
+            const Scene& scene,
+            VkDescriptorSet cameraUBODescriptorset,
+            VkDescriptorSet lightsUBODescriptorset,
+            VkDescriptorSet shadowMapDescriptorSet);
+  void recreateAttachments(int attachmentWidth,
+                           int attachmentHeight,
+                           VkImageView depthImageView);
+  void updateDescriptors(
+    const std::unique_ptr<FramebufferAttachment>& directionalShadowmap,
+    const std::unique_ptr<FramebufferAttachment>& spotPointShadowAtlas,
+    VkDescriptorSet shadowMapDescriptorSet);
+
+  std::unique_ptr<FramebufferAttachment> hdrAttachment;
 
   VkFramebuffer hdrFramebuffer;
   VkRenderPass renderPass;
 
+  struct AttachmentConfig
+  {
+    VkFormat depthFormat;
+    VkImageView depthImageView;
+    uint32_t width;
+    uint32_t height;
+  };
+
+  struct LayoutConfig
+  {
+    VkDescriptorSetLayout camera;
+    VkDescriptorSetLayout lights;
+    VkDescriptorSetLayout directionalShadowmap;
+  };
+
 private:
-  void createFrameBuffer(std::array<AttachmentData, 16> attachmentData);
-  void createAttachments(uint32_t width, uint32_t height);
-  void createRenderPass(std::array<AttachmentData, 16> attachmentData);
+  void createFrameBuffer(VkImageView depthImageView);
+  void createAttachments(uint32_t attachmentWidth, uint32_t attachmentHeight);
+  void createRenderPass(VkFormat depthImageFormat);
 
   VkPipeline blinnPhongPipeline;
   VkPipelineLayout blinnPhongPipelineLayout;
-  void createMainPipeline(const Scene& scene);
 
   VkPipeline skyboxPipeline;
   VkPipelineLayout skyboxPipelineLayout;
-  void createSkyboxPipeline(const Scene& scene);
 
   VkPipeline lightCubesPipeline;
   VkPipelineLayout lightCubesPipelineLayout;
-  void createLightCubesPipeline(const Scene& scene);
+
+  void createPipelines(VkDescriptorSetLayout cameraLayout,
+                       VkDescriptorSetLayout lightsLayout,
+                       VkDescriptorSetLayout directionalShadowmapLayout);
+
+  VulkanContext* vkContext;
 };
 
 #endif

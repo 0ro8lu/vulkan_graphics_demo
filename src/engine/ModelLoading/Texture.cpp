@@ -1,7 +1,4 @@
 #include "engine/ModelLoading/Texture.h"
-#include "engine/VulkanContext.h"
-
-#include <stdexcept>
 
 Texture::Texture()
   : vkContext(nullptr)
@@ -76,11 +73,12 @@ Texture::createTextureImageFromPixels(stbi_uc* pixels,
   VkBuffer stagingBuffer;
   VmaAllocation stagingBufferAllocation;
 
-  void* data = vkContext->createBuffer(imageSize,
-                                       VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                       BufferType::STAGING_BUFFER,
-                                       stagingBuffer,
-                                       stagingBufferAllocation);
+  void* data =
+    vkContext->createBuffer(imageSize,
+                            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                            VulkanContext::BufferType::STAGING_BUFFER,
+                            stagingBuffer,
+                            stagingBufferAllocation);
 
   memcpy(data, pixels, static_cast<size_t>(imageSize));
 

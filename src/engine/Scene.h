@@ -1,12 +1,15 @@
 #ifndef _SCENE_H_
 #define _SCENE_H_
 
-#include "engine/Buffers.h"
 #include "engine/Camera3D.h"
+#include "engine/Input.h"
 #include "engine/LightManager.h"
 #include "engine/ModelLoading/Model.h"
 #include "engine/Skybox.h"
 #include "engine/VulkanContext.h"
+
+#include <memory>
+#include <optional>
 
 class Scene
 {
@@ -14,40 +17,25 @@ public:
   Scene(VulkanContext* vkContext);
   ~Scene();
 
-  void update(); // used for sending data to GPU in case camera or lights have
-                 // changed.
-
-  VkDescriptorSetLayout cameraUBOLayout;
-  VkDescriptorSetLayout lightsUBOLayout;
-  VkDescriptorSetLayout directionalShadowMapLayout;
-
-  VkDescriptorSet cameraUBODescriptorset;
-  VkDescriptorSet lightsUBODescriptorset;
-  VkDescriptorSet shadowMapDescriptorSet;
+  void update(float deltaTime, GameEvent events);
 
   std::vector<Model> models;
   std::vector<Model> lightCubes;
 
-  Skybox* skybox;
+  std::unique_ptr<Skybox> skybox;
+  std::unique_ptr<Camera3D> camera;
 
   std::vector<PointLight> pointLights;
-  DirectionalLight* directionalLight;
+  std::optional<DirectionalLight> directionalLight;
   std::vector<SpotLight> spotLights;
 
-  Camera3D* camera;
+  Scene(Scene&&) = delete;
+  Scene& operator=(Scene&&) = delete;
+  Scene(const Scene&) = delete;
+  Scene& operator=(const Scene&) = delete;
 
 private:
   VulkanContext* vkContext;
-
-  VkDescriptorPool sceneDescriptorPool;
-
-  void createDescriptors();
-
-  VulkanBufferDefinition cameraBuffer;
-  VulkanBufferDefinition pointLightsBuffer;
-  VulkanBufferDefinition directionalLightBuffer;
-  VulkanBufferDefinition spotLightsBuffer;
-  void createBuffers();
 };
 
 #endif

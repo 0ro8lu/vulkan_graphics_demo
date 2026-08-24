@@ -383,18 +383,19 @@ Model::createVertexBuffer(VkDeviceSize bufferSize)
   VkBuffer stagingBuffer;
   VkDeviceMemory stagingBufferMemory;
   VmaAllocation stagingBufferAllocation;
-  void* data = vkContext->createBuffer(bufferSize,
-                                       VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                       BufferType::STAGING_BUFFER,
-                                       stagingBuffer,
-                                       stagingBufferAllocation);
+  void* data =
+    vkContext->createBuffer(bufferSize,
+                            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                            VulkanContext::BufferType::STAGING_BUFFER,
+                            stagingBuffer,
+                            stagingBufferAllocation);
 
   memcpy(data, vertices.data(), (size_t)bufferSize);
 
   vkContext->createBuffer(bufferSize,
                           VK_BUFFER_USAGE_TRANSFER_DST_BIT |
                             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                          BufferType::GPU_BUFFER,
+                          VulkanContext::BufferType::GPU_BUFFER,
                           vertexBuffer,
                           vertexBufferAllocation);
 
@@ -410,18 +411,19 @@ Model::createIndexBuffer(VkDeviceSize bufferSize)
   VkBuffer stagingBuffer;
   VkDeviceMemory stagingBufferMemory;
   VmaAllocation stagingBufferAllocation;
-  void* data = vkContext->createBuffer(bufferSize,
-                                       VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                       BufferType::STAGING_BUFFER,
-                                       stagingBuffer,
-                                       stagingBufferAllocation);
+  void* data =
+    vkContext->createBuffer(bufferSize,
+                            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                            VulkanContext::BufferType::STAGING_BUFFER,
+                            stagingBuffer,
+                            stagingBufferAllocation);
 
   memcpy(data, indices.data(), (size_t)bufferSize);
 
   vkContext->createBuffer(bufferSize,
                           VK_BUFFER_USAGE_TRANSFER_DST_BIT |
                             VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                          BufferType::GPU_BUFFER,
+                          VulkanContext::BufferType::GPU_BUFFER,
                           indexBuffer,
                           indexBufferAllocation);
 

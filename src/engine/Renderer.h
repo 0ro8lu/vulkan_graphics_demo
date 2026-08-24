@@ -1,53 +1,43 @@
-#ifndef _RENDERER_H_
-#define _RENDERER_H_
+#ifndef RENDERER_H
+#define RENDERER_H
 
 #include "engine/Passes/BlinnPhongPass.h"
-#include "engine/Passes/GBuffPass.h"
-#include "engine/Passes/LightPass.h"
-#include "engine/Passes/ShadowMapPass.h"
 #include "engine/Passes/HDRPass.h"
-
+#include "engine/Passes/ShadowMapPass.h"
 #include "engine/Scene.h"
-#include "engine/VulkanContext.h"
-#include "engine/VulkanSwapchain.h"
+#include "engine/VulkanInitializer.h"
+
+#include "engine/RenderUtils.h"
+#include <memory>
 
 class Renderer
 {
 public:
-  Renderer(VulkanContext* vkContext, VulkanSwapchain* vkSwapchain, const Scene& scene);
+  Renderer(GLFWwindow* window);
+
   ~Renderer();
 
   void update(const Scene& scene);
+  void draw(const Scene& scene, GLFWwindow* window);
 
-  GBuffPass* gBufferPass;
-  LightPass* lightPass;
-  ShadowMapPass* shadowMapPass;
-  BlinnPhongPass* blinnPhongPass;
-  HDRPass* hdrPass;
-  void draw(const Scene& scene);
+  // TODO: re-make this private one day, after having built the asset manager
+  // that will take care of the rest of the descriptor sets
+  void buildRenderGraph();
+
+  Renderer(Renderer&&) = delete;
+  Renderer& operator=(Renderer&&) = delete;
+  Renderer(const Renderer&) = delete;
+  Renderer& operator=(const Renderer&) = delete;
+  VulkanContext* m_vkContext;
 
 private:
+  VulkanSwapchain* m_vkSwapchain;
+  std::unique_ptr<VulkanInitializer> m_vkInitializer;
+  CamLightShadowBundle m_camLightShadowBundle;
 
-  VulkanContext* vkContext;
-  VulkanSwapchain* vkSwapchain;
-
-  VulkanBufferDefinition cameraBuffer;
-  VulkanBufferDefinition pointLightsBuffer;
-  VulkanBufferDefinition directionalLightBuffer;
-  VulkanBufferDefinition spotLightsBuffer;
-  void createBuffers();
-
-  // descriptors
-  VkDescriptorSetLayout cameraUBOLayout;
-  VkDescriptorSetLayout lightsUBOLayout;
-  VkDescriptorSetLayout directionalShadowMapLayout;
-  
-  VkDescriptorPool sceneDescriptorPool;
-
-  VkDescriptorSet cameraUBODescriptorset;
-  VkDescriptorSet lightsUBODescriptorset;
-  VkDescriptorSet shadowMapDescriptorSet;
-  void createDescriptors();
+  std::unique_ptr<ShadowMapPass> m_shadowMapPass;
+  std::unique_ptr<BlinnPhongPass> m_blinnPhongPass;
+  std::unique_ptr<HDRPass> m_hdrPass;
 };
 
 #endif

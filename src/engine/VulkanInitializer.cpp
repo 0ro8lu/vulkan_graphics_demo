@@ -14,7 +14,7 @@ VulkanInitializer::VulkanInitializer(GLFWwindow* window)
   vkSwapchain = new VulkanSwapchain(vkContext, window);
 
   createInstance();
-  vkSwapchain->createSurface();
+  vkSwapchain->createSurface(window);
 
   setupDebugMessenger();
 
@@ -25,7 +25,7 @@ VulkanInitializer::VulkanInitializer(GLFWwindow* window)
 
   createVMAAllocator();
 
-  vkSwapchain->createSwapChain();
+  vkSwapchain->createVulkanSwapChain(window);
   vkSwapchain->createSyncObjects();
   vkSwapchain->createCommandBuffer();
 }

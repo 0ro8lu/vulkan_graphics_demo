@@ -97,19 +97,20 @@ PointLight::PointLight(glm::vec3 position,
   // calculate 6 coordinates.
   if (castsShadow) {
     for (int i = 0; i < 6; i++) {
-      uint32_t tileX = (shadowMapIndex + i) % ATLAS_TILES;
-      uint32_t tileY = (shadowMapIndex + i) / ATLAS_TILES;
+      uint32_t tileX = (shadowMapIndex + i) % SPOT_POINT_ATLAS_TILES;
+      uint32_t tileY = (shadowMapIndex + i) / SPOT_POINT_ATLAS_TILES;
 
-      float tileSize = (float)ATLAS_SIZE / (float)ATLAS_TILES;
+      float tileSize =
+        (float)SPOT_POINT_ATLAS_SIZE / (float)SPOT_POINT_ATLAS_TILES;
 
       this->atlasCoordsPixel[i] =
         glm::vec4(tileX * tileSize, tileY * tileSize, tileSize, tileSize);
 
       this->atlasCoordsNormalized[i] =
-        glm::vec4(atlasCoordsPixel[i].x / (float)ATLAS_SIZE,
-                  atlasCoordsPixel[i].y / (float)ATLAS_SIZE,
-                  atlasCoordsPixel[i].z / (float)ATLAS_SIZE,
-                  atlasCoordsPixel[i].w / (float)ATLAS_SIZE);
+        glm::vec4(atlasCoordsPixel[i].x / (float)SPOT_POINT_ATLAS_SIZE,
+                  atlasCoordsPixel[i].y / (float)SPOT_POINT_ATLAS_SIZE,
+                  atlasCoordsPixel[i].z / (float)SPOT_POINT_ATLAS_SIZE,
+                  atlasCoordsPixel[i].w / (float)SPOT_POINT_ATLAS_SIZE);
 
       shadow = 1.0;
     }
@@ -138,19 +139,20 @@ SpotLight::SpotLight(glm::vec3 position,
   // if we get to this point we are sure there is space in the shadow atlas
   // (lightmanager has taken care of that, hopefully XD)
   if (castsShadow) {
-    uint32_t tileX = shadowMapIndex % ATLAS_TILES;
-    uint32_t tileY = shadowMapIndex / ATLAS_TILES;
+    uint32_t tileX = shadowMapIndex % SPOT_POINT_ATLAS_TILES;
+    uint32_t tileY = shadowMapIndex / SPOT_POINT_ATLAS_TILES;
 
-    float tileSize = (float)ATLAS_SIZE / (float)ATLAS_TILES;
+    float tileSize =
+      (float)SPOT_POINT_ATLAS_SIZE / (float)SPOT_POINT_ATLAS_TILES;
 
     this->atlasCoordsPixel =
       glm::vec4(tileX * tileSize, tileY * tileSize, tileSize, tileSize);
 
     this->atlasCoordsNormalized =
-      glm::vec4(atlasCoordsPixel.x / (float)ATLAS_SIZE,
-                atlasCoordsPixel.y / (float)ATLAS_SIZE,
-                atlasCoordsPixel.z / (float)ATLAS_SIZE,
-                atlasCoordsPixel.w / (float)ATLAS_SIZE);
+      glm::vec4(atlasCoordsPixel.x / (float)SPOT_POINT_ATLAS_SIZE,
+                atlasCoordsPixel.y / (float)SPOT_POINT_ATLAS_SIZE,
+                atlasCoordsPixel.z / (float)SPOT_POINT_ATLAS_SIZE,
+                atlasCoordsPixel.w / (float)SPOT_POINT_ATLAS_SIZE);
 
     shadow = 1.0;
   }

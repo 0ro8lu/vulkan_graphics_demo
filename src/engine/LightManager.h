@@ -13,9 +13,9 @@ const uint32_t MAX_SPOT_LIGHTS = 2;
 class LightManager
 {
 public:
-  static DirectionalLight* createDirectionalLight(glm::vec3 direction,
-                                                  glm::vec3 color,
-                                                  bool castsShadow);
+  static DirectionalLight createDirectionalLight(glm::vec3 direction,
+                                                 glm::vec3 color,
+                                                 bool castsShadow);
   static PointLight createPointLight(glm::vec3 position,
                                      glm::vec3 color,
                                      bool castsShadow);

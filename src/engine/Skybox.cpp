@@ -1,8 +1,6 @@
 #include "engine/Skybox.h"
 
 #include <stb_image.h>
-#include <stdexcept>
-#include <vector>
 
 VkDescriptorSetLayout Skybox::skyboxLayout = VK_NULL_HANDLE;
 
@@ -38,12 +36,12 @@ Skybox::Skybox(VulkanContext* vkContext, std::array<std::string, 6> filePaths)
   VkBuffer stagingBuffer;
   VmaAllocation stagingBufferAllocation;
 
-  char* data =
-    static_cast<char*>(vkContext->createBuffer(imageSize * filePaths.size(),
-                                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                               BufferType::STAGING_BUFFER,
-                                               stagingBuffer,
-                                               stagingBufferAllocation));
+  char* data = static_cast<char*>(
+    vkContext->createBuffer(imageSize * filePaths.size(),
+                            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                            VulkanContext::BufferType::STAGING_BUFFER,
+                            stagingBuffer,
+                            stagingBufferAllocation));
 
   size_t byteOffset = 0;
   std::vector<size_t> byteOffsets;

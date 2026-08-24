@@ -14,6 +14,7 @@ class VulkanInitializer
 {
 public:
   VulkanInitializer(GLFWwindow* window);
+  VulkanInitializer();
 
   VulkanContext* vkContext;
   VulkanSwapchain* vkSwapchain;

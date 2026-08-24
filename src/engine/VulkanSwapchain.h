@@ -11,24 +11,21 @@
 #include "engine/VulkanContext.h"
 
 class VulkanInitializer;
+class Renderer;
 struct SwapChainSupportDetails;
 
 class VulkanSwapchain
 {
 public:
-  // void present
-  VkFormat getSwapChainImageFormat() const { return swapChainImageFormat; }
-  VkFormat getDepthImageFormat() const { return depthFormat; }
-
   std::function<void(int, int)> onResize;
-  void recreateSwapChain();
+  void recreateSwapChain(GLFWwindow* window);
   void createSwapChainFrameBuffer();
 
   VkCommandBuffer commandBuffer;
   void createCommandBuffer();
 
-  void prepareFrame();
-  void submitFrame();
+  void prepareFrame(GLFWwindow* window);
+  void submitFrame(GLFWwindow* window);
 
   bool resized;
   int width;
@@ -44,6 +41,7 @@ public:
 
 private:
   friend VulkanInitializer;
+  friend Renderer;
 
   VulkanSwapchain(VulkanContext* vkContext, GLFWwindow* window);
   ~VulkanSwapchain();
@@ -51,11 +49,10 @@ private:
   static void framebufferResizeCallback(GLFWwindow* window,
                                         int width,
                                         int height);
-  GLFWwindow* window;
   VulkanContext* vkContext;
 
   VkSurfaceKHR surface;
-  void createSurface();
+  void createSurface(GLFWwindow* window);
 
   SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
 
@@ -67,7 +64,7 @@ private:
   std::vector<VkImage> swapChainImages;
   std::vector<VkImageView> swapChainImageViews;
   VkFormat swapChainImageFormat;
-  void createSwapChain();
+  void createVulkanSwapChain(GLFWwindow* window);
   void cleanSwapChain();
 
   VkSurfaceFormatKHR chooseSwapSurfaceFormat(
@@ -76,6 +73,10 @@ private:
     const std::vector<VkPresentModeKHR>& availablePresentModes);
   VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities,
                               GLFWwindow* window);
+
+  VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
+                               VkImageTiling tiling,
+                               VkFormatFeatureFlags features);
 
   VkSemaphore imageAvailableSemaphore;
   VkSemaphore renderFinishedSemaphore;

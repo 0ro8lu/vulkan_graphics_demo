@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <iostream>
 #include <stdexcept>
 
 #include "GLFW/glfw3.h"
@@ -18,8 +17,7 @@ VulkanSwapchain::framebufferResizeCallback(GLFWwindow* window,
 }
 
 VulkanSwapchain::VulkanSwapchain(VulkanContext* vkContext, GLFWwindow* window)
-  : window(window)
-  , vkContext(vkContext)
+  : vkContext(vkContext)
 {
   glfwGetFramebufferSize(window, &width, &height);
   glfwSetWindowUserPointer(window, this);
@@ -40,7 +38,7 @@ VulkanSwapchain::~VulkanSwapchain()
 }
 
 void
-VulkanSwapchain::createSurface()
+VulkanSwapchain::createSurface(GLFWwindow* window)
 {
   if (glfwCreateWindowSurface(vkContext->instance, window, nullptr, &surface) !=
       VK_SUCCESS) {
@@ -120,7 +118,7 @@ VulkanSwapchain::createCommandBuffer()
 }
 
 void
-VulkanSwapchain::prepareFrame()
+VulkanSwapchain::prepareFrame(GLFWwindow* window)
 {
   vkWaitForFences(
     vkContext->logicalDevice, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
@@ -133,7 +131,7 @@ VulkanSwapchain::prepareFrame()
                                           &imageIndex);
 
   if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-    recreateSwapChain();
+    recreateSwapChain(window);
     return;
   } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
     throw std::runtime_error("failed to acquire swap chain image!");
@@ -150,7 +148,7 @@ VulkanSwapchain::prepareFrame()
 }
 
 void
-VulkanSwapchain::submitFrame()
+VulkanSwapchain::submitFrame(GLFWwindow* window)
 {
   if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
     throw std::runtime_error("failed to record command buffer!");
@@ -196,14 +194,14 @@ VulkanSwapchain::submitFrame()
   if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
       resized == true) {
     resized = false;
-    recreateSwapChain();
+    recreateSwapChain(window);
   } else if (result != VK_SUCCESS) {
     throw std::runtime_error("failed to present swap chain image!");
   }
 }
 
 void
-VulkanSwapchain::createSwapChain()
+VulkanSwapchain::createVulkanSwapChain(GLFWwindow* window)
 {
   SwapChainSupportDetails swapChainSupport =
     querySwapChainSupport(vkContext->physicalDevice);
@@ -273,12 +271,12 @@ VulkanSwapchain::createSwapChain()
   }
 
   // create depth resources
-  depthFormat = vkContext->findSupportedFormat(
-    { VK_FORMAT_D32_SFLOAT,
-      VK_FORMAT_D32_SFLOAT_S8_UINT,
-      VK_FORMAT_D24_UNORM_S8_UINT },
-    VK_IMAGE_TILING_OPTIMAL,
-    VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+  depthFormat =
+    findSupportedFormat({ VK_FORMAT_D32_SFLOAT,
+                          VK_FORMAT_D32_SFLOAT_S8_UINT,
+                          VK_FORMAT_D24_UNORM_S8_UINT },
+                        VK_IMAGE_TILING_OPTIMAL,
+                        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
   depthImage =
     vkContext->createImage(swapChainExtent.width,
@@ -294,7 +292,7 @@ VulkanSwapchain::createSwapChain()
 }
 
 void
-VulkanSwapchain::recreateSwapChain()
+VulkanSwapchain::recreateSwapChain(GLFWwindow* window)
 {
   int width = 0, height = 0;
   glfwGetFramebufferSize(window, &width, &height);
@@ -305,7 +303,7 @@ VulkanSwapchain::recreateSwapChain()
 
   vkDeviceWaitIdle(vkContext->logicalDevice);
   cleanSwapChain();
-  createSwapChain();
+  createVulkanSwapChain(window);
   createSwapChainFrameBuffer();
 
   onResize(swapChainExtent.width, swapChainExtent.height);
@@ -379,6 +377,27 @@ VulkanSwapchain::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities,
 
     return actualExtent;
   }
+}
+
+VkFormat
+VulkanSwapchain::findSupportedFormat(const std::vector<VkFormat>& candidates,
+                                     VkImageTiling tiling,
+                                     VkFormatFeatureFlags features)
+{
+  for (VkFormat format : candidates) {
+    VkFormatProperties props;
+    vkGetPhysicalDeviceFormatProperties(
+      vkContext->physicalDevice, format, &props);
+
+    if (tiling == VK_IMAGE_TILING_LINEAR &&
+        (props.linearTilingFeatures & features) == features) {
+      return format;
+    } else if (tiling == VK_IMAGE_TILING_OPTIMAL &&
+               (props.optimalTilingFeatures & features) == features) {
+      return format;
+    }
+  }
+  throw std::runtime_error("failed to find supported format!");
 }
 
 void

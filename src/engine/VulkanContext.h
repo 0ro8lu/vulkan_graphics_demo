@@ -6,8 +6,6 @@
 
 #include <vector>
 
-#include "engine/Buffers.h"
-
 class VulkanInitializer;
 
 class VulkanContext
@@ -46,6 +44,11 @@ public:
                               uint32_t layerCount,
                               VkImageAspectFlags aspectFlags);
 
+  enum BufferType
+  {
+    STAGING_BUFFER,
+    GPU_BUFFER,
+  };
   void* createBuffer(VkDeviceSize size,
                      VkBufferUsageFlags usage,
                      BufferType bufferType,
@@ -61,9 +64,7 @@ public:
   // destroy vulkan primitives
   void destroyImageView(VkImageView view);
 
-  VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
-                               VkImageTiling tiling,
-                               VkFormatFeatureFlags features);
+  std::vector<char> readShader(const std::string& filename);
 };
 
 #endif
