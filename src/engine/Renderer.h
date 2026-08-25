@@ -5,7 +5,8 @@
 #include "engine/Passes/HDRPass.h"
 #include "engine/Passes/ShadowMapPass.h"
 #include "engine/Scene.h"
-#include "engine/VulkanInitializer.h"
+#include "engine/VulkanContext.h"
+#include "engine/VulkanSwapchain.h"
 
 #include "engine/RenderUtils.h"
 #include <memory>
@@ -28,11 +29,11 @@ public:
   Renderer& operator=(Renderer&&) = delete;
   Renderer(const Renderer&) = delete;
   Renderer& operator=(const Renderer&) = delete;
-  VulkanContext* m_vkContext;
+  VulkanContext* m_vkContext{ nullptr };
 
 private:
-  VulkanSwapchain* m_vkSwapchain;
-  std::unique_ptr<VulkanInitializer> m_vkInitializer;
+  std::unique_ptr<VulkanContext> m_contextOwner;
+  std::unique_ptr<VulkanSwapchain> m_vkSwapchain;
   CamLightShadowBundle m_camLightShadowBundle;
 
   std::unique_ptr<ShadowMapPass> m_shadowMapPass;

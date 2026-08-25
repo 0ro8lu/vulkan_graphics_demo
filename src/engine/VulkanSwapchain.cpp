@@ -16,12 +16,19 @@ VulkanSwapchain::framebufferResizeCallback(GLFWwindow* window,
   vulkanSwapchainPtr->resized = true;
 }
 
-VulkanSwapchain::VulkanSwapchain(VulkanContext* vkContext, GLFWwindow* window)
+VulkanSwapchain::VulkanSwapchain(Key,
+                                 VulkanContext* vkContext,
+                                 GLFWwindow* window)
   : vkContext(vkContext)
 {
   glfwGetFramebufferSize(window, &width, &height);
   glfwSetWindowUserPointer(window, this);
   glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+
+  createSurface(window);
+  createVulkanSwapChain(window);
+  createSyncObjects();
+  createCommandBuffer();
 }
 
 VulkanSwapchain::~VulkanSwapchain()

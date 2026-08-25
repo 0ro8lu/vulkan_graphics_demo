@@ -1,7 +1,5 @@
 #include "engine/Passes/ShadowMapPass.h"
 
-#include "engine/Vertex.h"
-
 ShadowMapPass::ShadowMapPass(VulkanContext* vkContext,
                              const AttachmentConfig& attachmentConfig)
   : directionalShadowmapSize(attachmentConfig.directionalAtlasSize)
@@ -95,9 +93,6 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     scissor.offset.y = 0;
 
     vkCmdSetScissor(vkSwapchain->commandBuffer, 0, 1, &scissor);
-
-    // vkCmdSetDepthBias(vkSwapchain->commandBuffer, 1.5f, 0.0f, 2.0f);
-    // vkCmdSetDepthBias(vkSwapchain->commandBuffer, 1.25f, 0.0f, 1.75f);
 
     struct PushConstant
     {

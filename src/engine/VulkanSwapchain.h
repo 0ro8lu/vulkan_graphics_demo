@@ -10,13 +10,26 @@
 
 #include "engine/VulkanContext.h"
 
-class VulkanInitializer;
 class Renderer;
 struct SwapChainSupportDetails;
 
 class VulkanSwapchain
 {
 public:
+  class Key
+  {
+    friend class Renderer;
+    Key() = default;
+  };
+
+  explicit VulkanSwapchain(Key, VulkanContext* vkContext, GLFWwindow* window);
+  ~VulkanSwapchain();
+
+  VulkanSwapchain(const VulkanSwapchain&) = delete;
+  VulkanSwapchain& operator=(const VulkanSwapchain&) = delete;
+  VulkanSwapchain(VulkanSwapchain&&) = delete;
+  VulkanSwapchain& operator=(VulkanSwapchain&&) = delete;
+
   std::function<void(int, int)> onResize;
   void recreateSwapChain(GLFWwindow* window);
   void createSwapChainFrameBuffer();
@@ -38,13 +51,10 @@ public:
   uint32_t imageIndex;
   std::vector<VkFramebuffer> swapChainFramebuffers;
   VkExtent2D swapChainExtent;
+  VkFormat depthFormat;
+  VkFormat swapChainImageFormat;
 
 private:
-  friend VulkanInitializer;
-  friend Renderer;
-
-  VulkanSwapchain(VulkanContext* vkContext, GLFWwindow* window);
-  ~VulkanSwapchain();
 
   static void framebufferResizeCallback(GLFWwindow* window,
                                         int width,
@@ -58,12 +68,10 @@ private:
 
   VkImage depthImage;
   VmaAllocation depthAllocation;
-  VkFormat depthFormat;
 
   VkSwapchainKHR swapChain;
   std::vector<VkImage> swapChainImages;
   std::vector<VkImageView> swapChainImageViews;
-  VkFormat swapChainImageFormat;
   void createVulkanSwapChain(GLFWwindow* window);
   void cleanSwapChain();
 

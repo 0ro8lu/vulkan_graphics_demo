@@ -2,9 +2,11 @@
 
 Renderer::Renderer(GLFWwindow* window)
 {
-  m_vkInitializer = std::make_unique<VulkanInitializer>(window);
-  m_vkContext = m_vkInitializer->vkContext;
-  m_vkSwapchain = m_vkInitializer->vkSwapchain;
+  m_contextOwner =
+    std::make_unique<VulkanContext>(VulkanContext::Key{}, window);
+  m_vkContext = m_contextOwner.get();
+  m_vkSwapchain = std::make_unique<VulkanSwapchain>(
+    VulkanSwapchain::Key{}, m_vkContext, window);
 
   m_camLightShadowBundle = createBaselineDescriptorsAndBuffers(m_vkContext);
 }
@@ -88,13 +90,13 @@ Renderer::draw(const Scene& scene, GLFWwindow* window)
 {
   m_vkSwapchain->prepareFrame(window);
 
-  m_shadowMapPass->draw(m_vkSwapchain, scene);
-  m_blinnPhongPass->draw(m_vkSwapchain,
+  m_shadowMapPass->draw(m_vkSwapchain.get(), scene);
+  m_blinnPhongPass->draw(m_vkSwapchain.get(),
                          scene,
                          m_camLightShadowBundle.cameraUBODescriptorset,
                          m_camLightShadowBundle.lightsUBODescriptorset,
                          m_camLightShadowBundle.shadowMapDescriptorSet);
-  m_hdrPass->draw(m_vkSwapchain, scene);
+  m_hdrPass->draw(m_vkSwapchain.get(), scene);
 
   m_vkSwapchain->submitFrame(window);
 }

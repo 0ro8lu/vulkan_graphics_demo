@@ -4,28 +4,40 @@
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan_core.h>
 
+#include <string>
 #include <vector>
 
-class VulkanInitializer;
+struct GLFWwindow;
+class Renderer;
 
 class VulkanContext
 {
-  friend class VulkanInitializer;
-
-  VulkanContext() {};
-
 public:
-  VkInstance instance;
+  class Key
+  {
+    friend class Renderer;
+    Key() = default;
+  };
 
-  VkPhysicalDevice physicalDevice;
-  VkDevice logicalDevice;
+  explicit VulkanContext(Key, GLFWwindow* window);
+  ~VulkanContext();
 
-  VmaAllocator allocator;
+  VulkanContext(const VulkanContext&) = delete;
+  VulkanContext& operator=(const VulkanContext&) = delete;
+  VulkanContext(VulkanContext&&) = delete;
+  VulkanContext& operator=(VulkanContext&&) = delete;
 
-  VkQueue graphicsQueue;
-  VkQueue presentQueue;
+  VkInstance instance{ VK_NULL_HANDLE };
 
-  VkCommandPool commandPool;
+  VkPhysicalDevice physicalDevice{ VK_NULL_HANDLE };
+  VkDevice logicalDevice{ VK_NULL_HANDLE };
+
+  VmaAllocator allocator{ VK_NULL_HANDLE };
+
+  VkQueue graphicsQueue{ VK_NULL_HANDLE };
+  VkQueue presentQueue{ VK_NULL_HANDLE };
+
+  VkCommandPool commandPool{ VK_NULL_HANDLE };
 
   // create vulkan primitives
   VkImage createImage(uint32_t width,
@@ -65,6 +77,56 @@ public:
   void destroyImageView(VkImageView view);
 
   std::vector<char> readShader(const std::string& filename);
+
+private:
+  VkDebugUtilsMessengerEXT debugMessenger{ VK_NULL_HANDLE };
+  void setupDebugMessenger();
+
+  VkResult CreateDebugUtilsMessengerEXT(
+    VkInstance instance,
+    const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator,
+    VkDebugUtilsMessengerEXT* pDebugMessenger);
+
+  void createInstance();
+  void selectPhysicalDevice(VkSurfaceKHR surface);
+  bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface);
+
+#ifdef __APPLE__
+  const std::vector<const char*> deviceExtensions = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    "VK_KHR_portability_subset"
+  };
+#else
+  const std::vector<const char*> deviceExtensions = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME
+  };
+#endif
+  bool checkDeviceExtensionSupport(VkPhysicalDevice device);
+
+  VkPhysicalDeviceProperties deviceProperties{};
+  VkPhysicalDeviceFeatures deviceFeatures{};
+  VkPhysicalDeviceMemoryProperties deviceMemoryProperties{};
+
+  void createLogicalDevice(VkSurfaceKHR surface);
+  void createCommandPool(VkSurfaceKHR surface);
+  void createVMAAllocator();
+
+  const std::vector<const char*> validationLayers = {
+    "VK_LAYER_KHRONOS_validation"
+  };
+
+#ifdef NDEBUG
+  const bool enableValidationLayers = false;
+#else
+  const bool enableValidationLayers = true;
+#endif
+  bool checkValidationLayerSupport();
+
+  void populateDebugMessengerCreateInfo(
+    VkDebugUtilsMessengerCreateInfoEXT& createInfo);
+
+  std::vector<const char*> getRequiredExtensions();
 };
 
 #endif
