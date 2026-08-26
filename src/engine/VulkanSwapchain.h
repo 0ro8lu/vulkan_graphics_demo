@@ -49,13 +49,13 @@ public:
   VkImageView depthImageView;
 
   uint32_t imageIndex;
+  uint32_t currentFrame = 0;
   std::vector<VkFramebuffer> swapChainFramebuffers;
   VkExtent2D swapChainExtent;
   VkFormat depthFormat;
   VkFormat swapChainImageFormat;
 
 private:
-
   static void framebufferResizeCallback(GLFWwindow* window,
                                         int width,
                                         int height);
@@ -86,8 +86,8 @@ private:
                                VkImageTiling tiling,
                                VkFormatFeatureFlags features);
 
-  VkSemaphore imageAvailableSemaphore;
-  VkSemaphore renderFinishedSemaphore;
+  std::vector<VkSemaphore> m_imageAvailableSemaphores;
+  std::vector<VkSemaphore> m_renderFinishedSemaphores;
   VkFence inFlightFence;
   void createSyncObjects();
 };
