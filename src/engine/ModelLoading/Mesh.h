@@ -1,5 +1,4 @@
-#ifndef _MESH_H_
-#define _MESH_H_
+#pragma once
 
 #include "engine/ModelLoading/Texture.h"
 #include "engine/VulkanContext.h"
@@ -39,4 +38,3 @@ private:
   VulkanContext* vkContext;
 };
 
-#endif

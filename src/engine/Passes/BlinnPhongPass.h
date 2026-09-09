@@ -1,10 +1,9 @@
-#ifndef BLINN_PHONG_PASS_H
-#define BLINN_PHONG_PASS_H
+#pragma once
 
 #include "engine/FramebufferAttachment.h"
-#include "engine/RenderUtils.h"
-#include "engine/Scene.h"
 #include "engine/VulkanSwapchain.h"
+
+class Scene;
 
 #include <memory>
 
@@ -78,4 +77,3 @@ private:
   VulkanContext* vkContext;
 };
 
-#endif

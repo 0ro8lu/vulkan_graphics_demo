@@ -1,5 +1,8 @@
 #include "engine/Passes/ShadowMapPass.h"
 
+#include "engine/RenderUtils.h"
+#include "engine/Scene.h"
+
 ShadowMapPass::ShadowMapPass(VulkanContext* vkContext,
                              const AttachmentConfig& attachmentConfig)
   : directionalShadowmapSize(attachmentConfig.directionalAtlasSize)
@@ -32,23 +35,25 @@ ShadowMapPass::~ShadowMapPass()
 void
 ShadowMapPass::createShadowMaps(VkFormat depthImageFormat)
 {
-  directionalShadowMap = std::make_unique<FramebufferAttachment>(
-    depthImageFormat,
-    1,
-    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-    directionalShadowmapSize,
-    directionalShadowmapSize,
-    vkContext,
-    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER);
+  FramebufferAttachment::CreateInfo dirInfo{};
+  dirInfo.width = directionalShadowmapSize;
+  dirInfo.height = directionalShadowmapSize;
+  dirInfo.format = depthImageFormat;
+  dirInfo.layerCount = 1;
+  dirInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  dirInfo.vkContext = vkContext;
+  dirInfo.samplerAddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+  directionalShadowMap = FramebufferAttachment::create(dirInfo);
 
   // TODO: if not spotligts, nor pointlights cast shadows, don't create it.
-  spotPointShadowAtlas = std::make_unique<FramebufferAttachment>(
-    depthImageFormat,
-    1,
-    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-    spotPointShadowmapSize,
-    spotPointShadowmapSize,
-    vkContext);
+  FramebufferAttachment::CreateInfo spotInfo{};
+  spotInfo.width = spotPointShadowmapSize;
+  spotInfo.height = spotPointShadowmapSize;
+  spotInfo.format = depthImageFormat;
+  spotInfo.layerCount = 1;
+  spotInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  spotInfo.vkContext = vkContext;
+  spotPointShadowAtlas = FramebufferAttachment::create(spotInfo);
 }
 
 void
@@ -61,8 +66,8 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     renderPassInfo.renderPass = shadowMapRenderPass;
     renderPassInfo.framebuffer = directionalShadowMapFramebuffer;
     renderPassInfo.renderArea.offset = { 0, 0 };
-    renderPassInfo.renderArea.extent.width = directionalShadowMap->width;
-    renderPassInfo.renderArea.extent.height = directionalShadowMap->height;
+    renderPassInfo.renderArea.extent.width = directionalShadowMap->getWidth();
+    renderPassInfo.renderArea.extent.height = directionalShadowMap->getHeight();
 
     VkClearValue depthClearValue = { 1.0f, 0 };
 
@@ -80,15 +85,15 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = directionalShadowMap->width;
-    viewport.height = directionalShadowMap->width;
+    viewport.width = directionalShadowMap->getWidth();
+    viewport.height = directionalShadowMap->getHeight();
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(vkSwapchain->commandBuffer, 0, 1, &viewport);
 
     VkRect2D scissor{};
-    scissor.extent.width = directionalShadowMap->width;
-    scissor.extent.height = directionalShadowMap->height;
+    scissor.extent.width = directionalShadowMap->getWidth();
+    scissor.extent.height = directionalShadowMap->getHeight();
     scissor.offset.x = 0;
     scissor.offset.y = 0;
 
@@ -138,8 +143,8 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     renderPassInfo.renderPass = shadowMapRenderPass;
     renderPassInfo.framebuffer = directionalShadowMapFramebuffer;
     renderPassInfo.renderArea.offset = { 0, 0 };
-    renderPassInfo.renderArea.extent.width = directionalShadowMap->width;
-    renderPassInfo.renderArea.extent.height = directionalShadowMap->height;
+    renderPassInfo.renderArea.extent.width = directionalShadowMap->getWidth();
+    renderPassInfo.renderArea.extent.height = directionalShadowMap->getHeight();
 
     VkClearValue depthClearValue = { 1.0f, 0 };
 
@@ -158,8 +163,8 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     renderPassInfo.renderPass = shadowMapRenderPass;
     renderPassInfo.framebuffer = spotShadowMapFramebuffer;
     renderPassInfo.renderArea.offset = { 0, 0 };
-    renderPassInfo.renderArea.extent.width = spotPointShadowAtlas->width;
-    renderPassInfo.renderArea.extent.height = spotPointShadowAtlas->height;
+    renderPassInfo.renderArea.extent.width = spotPointShadowAtlas->getWidth();
+    renderPassInfo.renderArea.extent.height = spotPointShadowAtlas->getHeight();
 
     VkClearValue depthClearValue = { 1.0f, 0 };
 
@@ -318,7 +323,8 @@ ShadowMapPass::createFrameBuffers()
     framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     framebufferInfo.renderPass = shadowMapRenderPass;
     framebufferInfo.attachmentCount = 1;
-    framebufferInfo.pAttachments = &directionalShadowMap->view;
+    VkImageView dirView = directionalShadowMap->getView();
+    framebufferInfo.pAttachments = &dirView;
     framebufferInfo.width = directionalShadowmapSize;
     framebufferInfo.height = directionalShadowmapSize;
     framebufferInfo.layers = 1;
@@ -336,7 +342,8 @@ ShadowMapPass::createFrameBuffers()
     framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     framebufferInfo.renderPass = shadowMapRenderPass;
     framebufferInfo.attachmentCount = 1;
-    framebufferInfo.pAttachments = &spotPointShadowAtlas->view;
+    VkImageView spotView = spotPointShadowAtlas->getView();
+    framebufferInfo.pAttachments = &spotView;
     framebufferInfo.width = spotPointShadowmapSize;
     framebufferInfo.height = spotPointShadowmapSize;
     framebufferInfo.layers = 1;
@@ -354,7 +361,7 @@ void
 ShadowMapPass::createDirectionalRenderPass()
 {
   VkAttachmentDescription attachmentDescription{};
-  attachmentDescription.format = spotPointShadowAtlas->format;
+  attachmentDescription.format = spotPointShadowAtlas->getFormat();
   attachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
   attachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
   attachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;

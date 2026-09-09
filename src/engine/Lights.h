@@ -1,8 +1,6 @@
-#ifndef _LIGHTS_H_
-#define _LIGHTS_H_
+#pragma once
 
 #include <glm.hpp>
-#include <gtc/matrix_transform.hpp>
 
 class LightManager;
 
@@ -133,4 +131,3 @@ private:
   alignas(16) glm::vec4 atlasCoordsNormalized;
 };
 
-#endif

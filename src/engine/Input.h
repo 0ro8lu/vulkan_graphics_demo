@@ -1,5 +1,4 @@
-#ifndef INPUT_H
-#define INPUT_H
+#pragma once
 
 struct GameEvent
 {
@@ -13,4 +12,3 @@ struct GameEvent
   bool lookRight = false;
 };
 
-#endif

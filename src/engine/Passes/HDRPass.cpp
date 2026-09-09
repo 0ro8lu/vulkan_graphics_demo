@@ -1,5 +1,8 @@
 #include "engine/Passes/HDRPass.h"
 
+#include "engine/RenderUtils.h"
+#include "engine/Scene.h"
+
 HDRPass::HDRPass(VulkanContext* vkContext,
                  const AttachmentConfig& attachmentConfig)
   : vkContext(vkContext)
@@ -185,8 +188,8 @@ HDRPass::updateDescriptors(
     VkDescriptorImageInfo imageInfo{};
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     imageInfo.imageView =
-      blinnPhongAttachment->view; // <= hdr attachment from blin-phong
-    imageInfo.sampler = blinnPhongAttachment->sampler;
+      blinnPhongAttachment->getView(); // <= hdr attachment from blin-phong
+    imageInfo.sampler = blinnPhongAttachment->getSampler();
 
     VkWriteDescriptorSet descriptorWrite{};
     descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -204,8 +207,8 @@ HDRPass::updateDescriptors(
     VkDescriptorImageInfo imageInfo{};
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     imageInfo.imageView =
-      brightSpotsAttachment->view; // <= hdr attachment from blin-phong
-    imageInfo.sampler = brightSpotsAttachment->sampler;
+      brightSpotsAttachment->getView(); // <= hdr attachment from blin-phong
+    imageInfo.sampler = brightSpotsAttachment->getSampler();
 
     VkWriteDescriptorSet descriptorWrite{};
     descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -222,8 +225,8 @@ HDRPass::updateDescriptors(
   {
     VkDescriptorImageInfo imageInfo{};
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageInfo.imageView = intermediateBloomAttachment->view;
-    imageInfo.sampler = intermediateBloomAttachment->sampler;
+    imageInfo.imageView = intermediateBloomAttachment->getView();
+    imageInfo.sampler = intermediateBloomAttachment->getSampler();
 
     VkWriteDescriptorSet descriptorWrite{};
     descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -242,7 +245,7 @@ void
 HDRPass::createFrameBuffers()
 {
   std::array<VkImageView, 2> attachments = {
-    brightSpotsAttachment->view, intermediateBloomAttachment->view
+    brightSpotsAttachment->getView(), intermediateBloomAttachment->getView()
   };
 
   VkFramebufferCreateInfo framebufferInfo{};
@@ -250,8 +253,8 @@ HDRPass::createFrameBuffers()
   framebufferInfo.renderPass = bloomRenderPass;
   framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
   framebufferInfo.pAttachments = attachments.data();
-  framebufferInfo.width = brightSpotsAttachment->width;
-  framebufferInfo.height = brightSpotsAttachment->height;
+  framebufferInfo.width = brightSpotsAttachment->getWidth();
+  framebufferInfo.height = brightSpotsAttachment->getHeight();
   framebufferInfo.layers = 1;
 
   if (vkCreateFramebuffer(vkContext->logicalDevice,
@@ -265,21 +268,23 @@ HDRPass::createFrameBuffers()
 void
 HDRPass::createAttachments(uint32_t width, uint32_t height)
 {
-  brightSpotsAttachment = std::make_unique<FramebufferAttachment>(
-    VK_FORMAT_R16G16B16A16_SFLOAT,
-    1,
-    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-    width,
-    height,
-    vkContext);
+  FramebufferAttachment::CreateInfo brightInfo{};
+  brightInfo.width = width;
+  brightInfo.height = height;
+  brightInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+  brightInfo.layerCount = 1;
+  brightInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  brightInfo.vkContext = vkContext;
+  brightSpotsAttachment = FramebufferAttachment::create(brightInfo);
 
-  intermediateBloomAttachment = std::make_unique<FramebufferAttachment>(
-    VK_FORMAT_R16G16B16A16_SFLOAT,
-    1,
-    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-    width,
-    height,
-    vkContext);
+  FramebufferAttachment::CreateInfo intermInfo{};
+  intermInfo.width = width;
+  intermInfo.height = height;
+  intermInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+  intermInfo.layerCount = 1;
+  intermInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  intermInfo.vkContext = vkContext;
+  intermediateBloomAttachment = FramebufferAttachment::create(intermInfo);
 }
 
 void
@@ -289,7 +294,7 @@ HDRPass::createRenderPass(VkFormat swapchainImageFormat)
   // two attachments. two subpasses.
   {
     VkAttachmentDescription brightSpotsAttachmentDescriptor{};
-    brightSpotsAttachmentDescriptor.format = brightSpotsAttachment->format;
+    brightSpotsAttachmentDescriptor.format = brightSpotsAttachment->getFormat();
     brightSpotsAttachmentDescriptor.samples = VK_SAMPLE_COUNT_1_BIT;
     brightSpotsAttachmentDescriptor.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     brightSpotsAttachmentDescriptor.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -303,7 +308,7 @@ HDRPass::createRenderPass(VkFormat swapchainImageFormat)
 
     VkAttachmentDescription intermediateBloomAttachmentDescriptor{};
     intermediateBloomAttachmentDescriptor.format =
-      intermediateBloomAttachment->format;
+      intermediateBloomAttachment->getFormat();
     intermediateBloomAttachmentDescriptor.samples = VK_SAMPLE_COUNT_1_BIT;
     intermediateBloomAttachmentDescriptor.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     intermediateBloomAttachmentDescriptor.storeOp =

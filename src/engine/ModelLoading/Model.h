@@ -1,20 +1,18 @@
-#ifndef _MODEL_H_
-#define _MODEL_H_
+#pragma once
 
 #include "engine/ModelLoading/Mesh.h"
 #include "engine/VulkanContext.h"
 
-#include <assimp/Importer.hpp>
-#include <assimp/material.h>
-#include <assimp/postprocess.h>
-#include <assimp/scene.h>
-
 #include <glm.hpp>
-#include <gtc/matrix_transform.hpp>
 
 #include <memory>
 #include <unordered_map>
 #include <vector>
+
+struct aiNode;
+struct aiScene;
+struct aiMesh;
+struct aiMaterial;
 
 struct MeshInstance
 {
@@ -72,7 +70,6 @@ private:
                    const aiScene* scene,
                    size_t& startIndex,
                    size_t& startVertex);
-  glm::mat4 AssimpToGlmMatrix(const aiMatrix4x4& from);
   std::unique_ptr<Mesh> processMesh(aiMesh* mesh,
                                     const aiScene* scene,
                                     size_t& startIndex,
@@ -80,7 +77,7 @@ private:
   void loadTexture(aiMaterial* material,
                    Texture& texture,
                    const aiScene* scene,
-                   aiTextureType type);
+                   int type);
 
   unsigned int vertexCount;
 
@@ -94,5 +91,3 @@ private:
 
   void cleanup();
 };
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef RENDERER_H
-#define RENDERER_H
+#pragma once
 
 #include "engine/Passes/BlinnPhongPass.h"
 #include "engine/Passes/HDRPass.h"
@@ -41,4 +40,3 @@ private:
   std::unique_ptr<HDRPass> m_hdrPass;
 };
 
-#endif

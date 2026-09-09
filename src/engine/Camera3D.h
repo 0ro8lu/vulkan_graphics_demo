@@ -1,9 +1,6 @@
-#ifndef _CAMERA3D_H_
-#define _CAMERA3D_H_
+#pragma once
 
-#include <ext/matrix_clip_space.hpp>
 #include <glm.hpp>
-#include <gtc/matrix_transform.hpp>
 
 class Camera3D
 {
@@ -54,4 +51,3 @@ struct CameraBuffer
   alignas(16) glm::vec4 cameraPos;
 };
 
-#endif

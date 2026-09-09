@@ -1,5 +1,4 @@
-#ifndef _SCENE_H_
-#define _SCENE_H_
+#pragma once
 
 #include "engine/Camera3D.h"
 #include "engine/Input.h"
@@ -38,4 +37,3 @@ private:
   VulkanContext* vkContext;
 };
 
-#endif

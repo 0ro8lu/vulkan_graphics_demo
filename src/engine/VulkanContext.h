@@ -1,10 +1,8 @@
-#ifndef _VULKAN_CONTEXT_H_
-#define _VULKAN_CONTEXT_H_
+#pragma once
 
+#include "engine/VulkanTypes.h"
 #include <vk_mem_alloc.h>
-#include <vulkan/vulkan_core.h>
 
-#include <string>
 #include <vector>
 
 struct GLFWwindow;
@@ -74,7 +72,14 @@ public:
   void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 
   // destroy vulkan primitives
-  void destroyImageView(VkImageView view);
+  void destroyImage(VkImage image, VmaAllocation allocation) noexcept;
+  void destroyImageView(VkImageView view) noexcept;
+  void destroyBuffer(VkBuffer buffer, VmaAllocation allocation) noexcept;
+
+  [[nodiscard]] VkSampler getSampler(SamplerType type) const noexcept
+  {
+    return m_samplers[static_cast<size_t>(type)];
+  }
 
   std::vector<char> readShader(const std::string& filename);
 
@@ -127,6 +132,10 @@ private:
     VkDebugUtilsMessengerCreateInfoEXT& createInfo);
 
   std::vector<const char*> getRequiredExtensions();
-};
 
-#endif
+  void createSamplers();
+
+  std::array<VkSampler, static_cast<size_t>(SamplerType::Count)> m_samplers{
+    VK_NULL_HANDLE
+  };
+};

@@ -1,7 +1,4 @@
-#ifndef _TEXTURE_H_
-#define _TEXTURE_H_
-
-#include <stb_image.h>
+#pragma once
 
 #include <string>
 
@@ -69,7 +66,7 @@ private:
   void cleanup();
 
   void createVulkanImage(int width, int height);
-  void createTextureImageFromPixels(stbi_uc* pixels,
+  void createTextureImageFromPixels(unsigned char* pixels,
                                     int texWidth,
                                     int texHeight);
 
@@ -87,7 +84,5 @@ private:
 
   VkCommandBuffer beginSingleTimeCommands();
   void endSingleTimeCommands(VkCommandBuffer commandBuffer);
-  void createTextureSampler();
 };
 
-#endif

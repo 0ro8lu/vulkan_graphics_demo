@@ -1,11 +1,9 @@
-#ifndef _VERTEX_H_
-#define _VERTEX_H_
+#pragma once
 
 #include <glm.hpp>
 #include <vulkan/vulkan_core.h>
 
 #include <array>
-#include <vector>
 
 struct Vertex
 {
@@ -46,5 +44,3 @@ struct Vertex
     return attributeDescriptions;
   }
 };
-
-#endif

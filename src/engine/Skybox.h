@@ -1,15 +1,10 @@
-#ifndef _SKYBOX_H_
-#define _SKYBOX_H_
+#pragma once
 
 #include <array>
 #include <memory>
 #include <string>
 
-#include <glm.hpp>
-#include <gtc/matrix_transform.hpp>
-
 #include "engine/ModelLoading/Model.h"
-#include "engine/VulkanContext.h"
 
 class Skybox
 {
@@ -52,4 +47,3 @@ private:
   void setupDescriptors();
 };
 
-#endif

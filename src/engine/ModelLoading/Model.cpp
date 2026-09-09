@@ -2,8 +2,14 @@
 #include "engine/ModelLoading/Mesh.h"
 #include "engine/Vertex.h"
 
+#include <assimp/Importer.hpp>
+#include <assimp/material.h>
 #include <assimp/postprocess.h>
+#include <assimp/scene.h>
+#include <gtc/matrix_transform.hpp>
 #include <iostream>
+
+static glm::mat4 AssimpToGlmMatrix(const aiMatrix4x4& from);
 
 VkDescriptorSetLayout Model::textureLayout = VK_NULL_HANDLE;
 
@@ -188,8 +194,8 @@ Model::processNode(aiNode* node,
   }
 }
 
-glm::mat4
-Model::AssimpToGlmMatrix(const aiMatrix4x4& from)
+static glm::mat4
+AssimpToGlmMatrix(const aiMatrix4x4& from)
 {
   glm::mat4 to;
   to[0][0] = from.a1;
@@ -281,11 +287,12 @@ void
 Model::loadTexture(aiMaterial* material,
                    Texture& texture,
                    const aiScene* scene,
-                   aiTextureType type)
+                   int type)
 {
-  if (material->GetTextureCount(type) > 0) {
+  aiTextureType aiType = static_cast<aiTextureType>(type);
+  if (material->GetTextureCount(aiType) > 0) {
     aiString str;
-    material->GetTexture(type, 0, &str);
+    material->GetTexture(aiType, 0, &str);
 
     if (str.C_Str()[0] == '*') {
       // embedded texture

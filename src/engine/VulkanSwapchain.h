@@ -1,12 +1,9 @@
-#ifndef _VULKAN_SWAPCHAIN_H_
-#define _VULKAN_SWAPCHAIN_H_
+#pragma once
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #include <functional>
-#include <vector>
-#include <vk_mem_alloc.h>
 
 #include "engine/VulkanContext.h"
 
@@ -98,5 +95,3 @@ struct SwapChainSupportDetails
   std::vector<VkSurfaceFormatKHR> formats;
   std::vector<VkPresentModeKHR> presentModes;
 };
-
-#endif

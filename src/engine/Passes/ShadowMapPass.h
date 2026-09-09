@@ -1,10 +1,9 @@
-#ifndef _SHADOW_MAP_PASS_H_
-#define _SHADOW_MAP_PASS_H_
+#pragma once
 
 #include "engine/FramebufferAttachment.h"
-#include "engine/RenderUtils.h"
-#include "engine/Scene.h"
 #include "engine/VulkanSwapchain.h"
+
+class Scene;
 
 #include <memory>
 
@@ -64,4 +63,3 @@ private:
   VulkanContext* vkContext;
 };
 
-#endif

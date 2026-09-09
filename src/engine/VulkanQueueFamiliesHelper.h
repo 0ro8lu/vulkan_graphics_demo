@@ -1,5 +1,4 @@
-#ifndef _VULKAN_QUEUE_FAMILIES_HELPER_H_
-#define _VULKAN_QUEUE_FAMILIES_HELPER_H_
+#pragma once
 
 #include <optional>
 #include <vector>
@@ -52,4 +51,3 @@ struct QueueFamilyIndices
   }
 };
 
-#endif

@@ -9,6 +9,7 @@
 #include <iostream>
 #include <set>
 #include <stdexcept>
+#include "engine/VulkanCheck.h"
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL
 debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -26,22 +27,27 @@ VulkanContext::VulkanContext(Key, GLFWwindow* window)
   setupDebugMessenger();
 
   VkSurfaceKHR tempSurface = VK_NULL_HANDLE;
-  if (glfwCreateWindowSurface(instance, window, nullptr, &tempSurface) !=
-      VK_SUCCESS) {
-    throw std::runtime_error(
-      "failed to create temporary window surface for device selection!");
-  }
+  VK_CHECK(glfwCreateWindowSurface(instance, window, nullptr, &tempSurface));
 
   selectPhysicalDevice(tempSurface);
   createLogicalDevice(tempSurface);
   createCommandPool(tempSurface);
   createVMAAllocator();
 
+  createSamplers();
+
   vkDestroySurfaceKHR(instance, tempSurface, nullptr);
 }
 
 VulkanContext::~VulkanContext()
 {
+  for (VkSampler& sampler : m_samplers) {
+    if (sampler != VK_NULL_HANDLE) {
+      vkDestroySampler(logicalDevice, sampler, nullptr);
+      sampler = VK_NULL_HANDLE;
+    }
+  }
+
   if (allocator != VK_NULL_HANDLE) {
     vmaDestroyAllocator(allocator);
   }
@@ -106,15 +112,13 @@ VulkanContext::createInstance()
     createInfo.ppEnabledLayerNames = validationLayers.data();
 
     populateDebugMessengerCreateInfo(debugCreateInfo);
-    createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
+    createInfo.pNext = &debugCreateInfo;
   } else {
     createInfo.enabledLayerCount = 0;
     createInfo.pNext = nullptr;
   }
 
-  if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create instance!");
-  }
+  VK_CHECK(vkCreateInstance(&createInfo, nullptr, &instance));
 }
 
 void
@@ -185,10 +189,8 @@ VulkanContext::setupDebugMessenger()
   VkDebugUtilsMessengerCreateInfoEXT createInfo;
   populateDebugMessengerCreateInfo(createInfo);
 
-  if (CreateDebugUtilsMessengerEXT(
-        instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS) {
-    throw std::runtime_error("failed to set up debug messenger!");
-  }
+  VK_CHECK(CreateDebugUtilsMessengerEXT(
+        instance, &createInfo, nullptr, &debugMessenger));
 }
 
 VkResult
@@ -325,10 +327,7 @@ VulkanContext::createLogicalDevice(VkSurfaceKHR surface)
     createInfo.enabledLayerCount = 0;
   }
 
-  if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &logicalDevice) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to create logical device!");
-  }
+  VK_CHECK(vkCreateDevice(physicalDevice, &createInfo, nullptr, &logicalDevice));
 
   vkGetDeviceQueue(
     logicalDevice, indices.graphicsFamily.value(), 0, &graphicsQueue);
@@ -347,10 +346,7 @@ VulkanContext::createCommandPool(VkSurfaceKHR surface)
   poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
   poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
 
-  if (vkCreateCommandPool(logicalDevice, &poolInfo, nullptr, &commandPool) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to create graphics command pool!");
-  }
+  VK_CHECK(vkCreateCommandPool(logicalDevice, &poolInfo, nullptr, &commandPool));
 }
 
 void
@@ -361,9 +357,7 @@ VulkanContext::createVMAAllocator()
   createInfo.device = logicalDevice;
   createInfo.instance = instance;
 
-  if (vmaCreateAllocator(&createInfo, &allocator) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create vma allocator!");
-  }
+  VK_CHECK(vmaCreateAllocator(&createInfo, &allocator));
 }
 
 VkImage
@@ -397,14 +391,12 @@ VulkanContext::createImage(uint32_t width,
   allocCreateInfo.priority = 1.0f;
 
   VkImage image;
-  if (vmaCreateImage(allocator,
+  VK_CHECK(vmaCreateImage(allocator,
                      &imageInfo,
                      &allocCreateInfo,
                      &image,
                      &allocation,
-                     nullptr) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create image!");
-  }
+                     nullptr));
   vmaSetAllocationName(allocator, allocation, "imageAllocation");
   return image;
 }
@@ -418,10 +410,8 @@ VulkanContext::createShaderModule(const std::vector<char>& code)
   createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
 
   VkShaderModule shaderModule;
-  if (vkCreateShaderModule(
-        logicalDevice, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create shader module!");
-  }
+  VK_CHECK(vkCreateShaderModule(
+        logicalDevice, &createInfo, nullptr, &shaderModule));
 
   return shaderModule;
 }
@@ -444,10 +434,7 @@ VulkanContext::createImageView(VkImage image,
   viewInfo.subresourceRange.layerCount = layerCount;
 
   VkImageView imageView;
-  if (vkCreateImageView(logicalDevice, &viewInfo, nullptr, &imageView) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to create texture image view!");
-  }
+  VK_CHECK(vkCreateImageView(logicalDevice, &viewInfo, nullptr, &imageView));
 
   return imageView;
 }
@@ -518,14 +505,12 @@ VulkanContext::createBuffer(VkDeviceSize size,
   }
 
   VmaAllocationInfo allocInfo;
-  if (vmaCreateBuffer(allocator,
+  VK_CHECK(vmaCreateBuffer(allocator,
                       &bufferInfo,
                       &allocCreateInfo,
                       &buffer,
                       &allocation,
-                      &allocInfo) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create buffer!");
-  }
+                      &allocInfo));
 
   vmaSetAllocationName(allocator, allocation, "bufferAllocation");
   return allocInfo.pMappedData;
@@ -568,9 +553,21 @@ VulkanContext::endSingleTimeCommands(VkCommandBuffer commandBuffer)
 }
 
 void
-VulkanContext::destroyImageView(VkImageView view)
+VulkanContext::destroyImage(VkImage image, VmaAllocation allocation) noexcept
+{
+  vmaDestroyImage(allocator, image, allocation);
+}
+
+void
+VulkanContext::destroyImageView(VkImageView view) noexcept
 {
   vkDestroyImageView(logicalDevice, view, nullptr);
+}
+
+void
+VulkanContext::destroyBuffer(VkBuffer buffer, VmaAllocation allocation) noexcept
+{
+  vmaDestroyBuffer(allocator, buffer, allocation);
 }
 
 std::vector<char>
@@ -582,7 +579,7 @@ VulkanContext::readShader(const std::string& filename)
     throw std::runtime_error("failed to open file! " + filename);
   }
 
-  size_t fileSize = (size_t)file.tellg();
+  size_t fileSize = static_cast<size_t>(file.tellg());
   std::vector<char> buffer(fileSize);
 
   file.seekg(0);
@@ -591,4 +588,92 @@ VulkanContext::readShader(const std::string& filename)
   file.close();
 
   return buffer;
+}
+
+void
+VulkanContext::createSamplers()
+{
+  VkSamplerCreateInfo samplerInfo{};
+  samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  samplerInfo.unnormalizedCoordinates = VK_FALSE;
+  samplerInfo.compareEnable = VK_FALSE;
+  samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+
+  const float maxAnisotropy = deviceProperties.limits.maxSamplerAnisotropy;
+
+  // 1. LinearRepeat (Default for textures)
+  {
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.anisotropyEnable = (maxAnisotropy > 1.0f) ? VK_TRUE : VK_FALSE;
+    samplerInfo.maxAnisotropy = maxAnisotropy;
+    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+
+    VK_CHECK(vkCreateSampler(
+      logicalDevice,
+      &samplerInfo,
+      nullptr,
+      &m_samplers[static_cast<size_t>(SamplerType::LinearRepeat)]));
+  }
+
+  // 2. LinearClampToEdge (Skybox, Post-processing, Framebuffer attachments)
+  {
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.anisotropyEnable = (maxAnisotropy > 1.0f) ? VK_TRUE : VK_FALSE;
+    samplerInfo.maxAnisotropy = maxAnisotropy;
+    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+
+    VK_CHECK(vkCreateSampler(
+      logicalDevice,
+      &samplerInfo,
+      nullptr,
+      &m_samplers[static_cast<size_t>(SamplerType::LinearClampToEdge)]));
+  }
+
+  // 3. LinearClampToBorder (Shadow maps with opaque white border)
+  {
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    samplerInfo.anisotropyEnable = VK_FALSE;
+    samplerInfo.maxAnisotropy = 1.0f;
+    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+
+    VK_CHECK(vkCreateSampler(
+      logicalDevice,
+      &samplerInfo,
+      nullptr,
+      &m_samplers[static_cast<size_t>(SamplerType::LinearClampToBorder)]));
+  }
+
+  // 4. NearestClampToEdge (Unfiltered sampling)
+  {
+    samplerInfo.magFilter = VK_FILTER_NEAREST;
+    samplerInfo.minFilter = VK_FILTER_NEAREST;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.anisotropyEnable = VK_FALSE;
+    samplerInfo.maxAnisotropy = 1.0f;
+    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+
+    VK_CHECK(vkCreateSampler(
+      logicalDevice,
+      &samplerInfo,
+      nullptr,
+      &m_samplers[static_cast<size_t>(SamplerType::NearestClampToEdge)]));
+  }
 }

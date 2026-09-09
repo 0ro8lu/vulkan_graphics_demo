@@ -1,5 +1,8 @@
 #include "engine/Passes/BlinnPhongPass.h"
 
+#include "engine/RenderUtils.h"
+#include "engine/Scene.h"
+
 BlinnPhongPass::BlinnPhongPass(VulkanContext* vkContext,
                                const AttachmentConfig& attachmentConfig,
                                const LayoutConfig& layoutConfig)
@@ -288,8 +291,8 @@ BlinnPhongPass::updateDescriptors(
     VkDescriptorImageInfo shadowMapImageInfo{};
     shadowMapImageInfo.imageLayout =
       VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-    shadowMapImageInfo.imageView = directionalShadowmap->view;
-    shadowMapImageInfo.sampler = directionalShadowmap->sampler;
+    shadowMapImageInfo.imageView = directionalShadowmap->getView();
+    shadowMapImageInfo.sampler = directionalShadowmap->getSampler();
 
     std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
 
@@ -313,8 +316,8 @@ BlinnPhongPass::updateDescriptors(
     VkDescriptorImageInfo shadowAtlasImageInfo{};
     shadowAtlasImageInfo.imageLayout =
       VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-    shadowAtlasImageInfo.imageView = spotPointShadowAtlas->view;
-    shadowAtlasImageInfo.sampler = spotPointShadowAtlas->sampler;
+    shadowAtlasImageInfo.imageView = spotPointShadowAtlas->getView();
+    shadowAtlasImageInfo.sampler = spotPointShadowAtlas->getSampler();
 
     std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
 
@@ -338,7 +341,7 @@ BlinnPhongPass::updateDescriptors(
 void
 BlinnPhongPass::createFrameBuffer(VkImageView depthImageView)
 {
-  std::array<VkImageView, 2> attachments = { hdrAttachment->view,
+  std::array<VkImageView, 2> attachments = { hdrAttachment->getView(),
                                              depthImageView };
 
   VkFramebufferCreateInfo framebufferInfo{};
@@ -346,8 +349,8 @@ BlinnPhongPass::createFrameBuffer(VkImageView depthImageView)
   framebufferInfo.renderPass = renderPass;
   framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
   framebufferInfo.pAttachments = attachments.data();
-  framebufferInfo.width = hdrAttachment->width;
-  framebufferInfo.height = hdrAttachment->height;
+  framebufferInfo.width = hdrAttachment->getWidth();
+  framebufferInfo.height = hdrAttachment->getHeight();
   framebufferInfo.layers = 1;
 
   if (vkCreateFramebuffer(
@@ -360,13 +363,14 @@ BlinnPhongPass::createFrameBuffer(VkImageView depthImageView)
 void
 BlinnPhongPass::createAttachments(uint32_t width, uint32_t height)
 {
-  hdrAttachment = std::make_unique<FramebufferAttachment>(
-    VK_FORMAT_R16G16B16A16_SFLOAT,
-    1,
-    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-    width,
-    height,
-    vkContext);
+  FramebufferAttachment::CreateInfo hdrInfo{};
+  hdrInfo.width = width;
+  hdrInfo.height = height;
+  hdrInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+  hdrInfo.layerCount = 1;
+  hdrInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  hdrInfo.vkContext = vkContext;
+  hdrAttachment = FramebufferAttachment::create(hdrInfo);
 }
 
 void
@@ -374,7 +378,7 @@ BlinnPhongPass::createRenderPass(VkFormat depthFormat)
 {
   // attachment for HDR
   VkAttachmentDescription hdrAttachmentDescription{};
-  hdrAttachmentDescription.format = hdrAttachment->format;
+  hdrAttachmentDescription.format = hdrAttachment->getFormat();
   hdrAttachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
   hdrAttachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
   hdrAttachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;

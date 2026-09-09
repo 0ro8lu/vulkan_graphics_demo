@@ -1,4 +1,5 @@
 #include "engine/ModelLoading/Texture.h"
+#include <stb_image.h>
 
 Texture::Texture()
   : vkContext(nullptr)
@@ -26,7 +27,7 @@ Texture::Texture(VulkanContext* vkContext, unsigned char* data, size_t size)
 
   // Create the image view and sampler as before.
   createTextureImageView();
-  createTextureSampler();
+  sampler = vkContext->getSampler(SamplerType::LinearRepeat);
 }
 
 Texture::Texture(VulkanContext* vkContext, std::string filePath)
@@ -49,12 +50,7 @@ Texture::Texture(VulkanContext* vkContext, std::string filePath)
   view = vkContext->createImageView(
     image, VK_FORMAT_R8G8B8A8_SRGB, 1, VK_IMAGE_ASPECT_COLOR_BIT);
 
-  // call this only if the global sampler is null.
-  // futureproofing: make a sampler manager, hash the VkSamplerCreateInfo struct
-  // so we know if the sampler has already been made (and i get a reference to
-  // it) or if its not present and it needs to be created and passed as a
-  // reference.
-  createTextureSampler();
+  sampler = vkContext->getSampler(SamplerType::LinearRepeat);
 }
 
 Texture::~Texture()
@@ -63,7 +59,7 @@ Texture::~Texture()
 }
 
 void
-Texture::createTextureImageFromPixels(stbi_uc* pixels,
+Texture::createTextureImageFromPixels(unsigned char* pixels,
                                       int texWidth,
                                       int texHeight)
 {
@@ -220,41 +216,12 @@ Texture::copyBufferToImage(VkBuffer buffer,
 }
 
 void
-Texture::createTextureSampler()
-{
-  VkPhysicalDeviceProperties properties{};
-  vkGetPhysicalDeviceProperties(vkContext->physicalDevice, &properties);
-
-  VkSamplerCreateInfo samplerInfo{};
-  samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  samplerInfo.magFilter = VK_FILTER_LINEAR;
-  samplerInfo.minFilter = VK_FILTER_LINEAR;
-  samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-  samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-  samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-  samplerInfo.anisotropyEnable = VK_TRUE;
-  samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
-  samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-  samplerInfo.unnormalizedCoordinates = VK_FALSE;
-  samplerInfo.compareEnable = VK_FALSE;
-  samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-  samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-
-  if (vkCreateSampler(
-        vkContext->logicalDevice, &samplerInfo, nullptr, &sampler) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to create texture sampler!");
-  }
-}
-
-void
 Texture::cleanup()
 {
   if (view != VK_NULL_HANDLE && sampler != VK_NULL_HANDLE &&
       image != VK_NULL_HANDLE) {
-    vkDestroyImageView(vkContext->logicalDevice, view, nullptr);
-    vmaDestroyImage(vkContext->allocator, image, allocation);
-    vkDestroySampler(vkContext->logicalDevice, sampler, nullptr);
+    vkContext->destroyImageView(view);
+    vkContext->destroyImage(image, allocation);
 
     view = VK_NULL_HANDLE;
     sampler = VK_NULL_HANDLE;

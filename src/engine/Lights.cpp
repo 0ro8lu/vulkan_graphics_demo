@@ -1,5 +1,7 @@
 #include "engine/Lights.h"
 
+#include <gtc/matrix_transform.hpp>
+
 DirectionalLight::DirectionalLight(glm::vec3 direction,
                                    glm::vec3 color,
                                    bool castsShadow)

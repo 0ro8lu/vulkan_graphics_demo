@@ -1,5 +1,10 @@
 #include "engine/Skybox.h"
 
+#include <glm.hpp>
+#include <gtc/matrix_transform.hpp>
+
+#include "engine/VulkanContext.h"
+
 #include <stb_image.h>
 
 VkDescriptorSetLayout Skybox::skyboxLayout = VK_NULL_HANDLE;
@@ -135,30 +140,7 @@ Skybox::Skybox(VulkanContext* vkContext, std::array<std::string, 6> filePaths)
   }
 
   // -------------------- CREATE SAMPLER --------------------
-  VkPhysicalDeviceProperties properties{};
-  vkGetPhysicalDeviceProperties(vkContext->physicalDevice, &properties);
-
-  VkSamplerCreateInfo samplerInfo{};
-  samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  samplerInfo.magFilter = VK_FILTER_LINEAR;
-  samplerInfo.minFilter = VK_FILTER_LINEAR;
-  samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-  samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  samplerInfo.addressModeV = samplerInfo.addressModeU;
-  samplerInfo.addressModeW = samplerInfo.addressModeU;
-  samplerInfo.mipLodBias = 0.0f;
-  samplerInfo.compareOp = VK_COMPARE_OP_NEVER;
-  samplerInfo.minLod = 0.0f;
-  samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-  samplerInfo.maxAnisotropy = 1.0f;
-  samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
-  samplerInfo.anisotropyEnable = VK_TRUE;
-
-  if (vkCreateSampler(
-        vkContext->logicalDevice, &samplerInfo, nullptr, &sampler) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to create texture sampler!");
-  }
+  sampler = vkContext->getSampler(SamplerType::LinearClampToEdge);
 
   vmaDestroyBuffer(
     vkContext->allocator, stagingBuffer, stagingBufferAllocation);
@@ -168,9 +150,8 @@ Skybox::Skybox(VulkanContext* vkContext, std::array<std::string, 6> filePaths)
 
 Skybox::~Skybox()
 {
-  vkDestroyImageView(vkContext->logicalDevice, view, nullptr);
-  vmaDestroyImage(vkContext->allocator, image, imageAllocation);
-  vkDestroySampler(vkContext->logicalDevice, sampler, nullptr);
+  vkContext->destroyImageView(view);
+  vkContext->destroyImage(image, imageAllocation);
 
   vkDestroyDescriptorSetLayout(vkContext->logicalDevice, skyboxLayout, nullptr);
 
