@@ -36,4 +36,3 @@ public:
 private:
   VulkanContext* vkContext;
 };
-
