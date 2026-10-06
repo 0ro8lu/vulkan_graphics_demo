@@ -1,43 +1,52 @@
 #pragma once
 
-#include <array>
 #include <memory>
+#include <span>
 #include <string>
 
-#include "engine/ModelLoading/Model.h"
+#include "engine/VulkanTypes.h"
+#include <glm/glm.hpp>
+
+class Model;
+class VulkanContext;
 
 class Skybox
 {
 public:
-  Skybox(VulkanContext* vkContext, std::array<std::string, 6> filePaths);
+  Skybox(VulkanContext* vkContext, std::span<const std::string, 6> filePaths);
   ~Skybox();
 
-  static VkDescriptorSetLayout skyboxLayout;
+  // Non-copyable and non-movable to safely manage Vulkan resources
+  Skybox(const Skybox&) = delete;
+  Skybox& operator=(const Skybox&) = delete;
+  Skybox(Skybox&&) = delete;
+  Skybox& operator=(Skybox&&) = delete;
 
-  VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
-  void update(glm::mat4 viewMatrix);
+  static VkDescriptorSetLayout s_skyboxLayout;
 
-  std::unique_ptr<Model> cube;
+  VkDescriptorSet m_descriptorSet = VK_NULL_HANDLE;
+
+  std::unique_ptr<Model> m_cube;
 
 private:
-  VulkanContext* vkContext;
+  VulkanContext* m_vkContext;
 
-  VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+  VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
 
-  VkImage image = VK_NULL_HANDLE;
-  VkImageView view = VK_NULL_HANDLE;
-  VkSampler sampler = VK_NULL_HANDLE;
+  VkImage m_image = VK_NULL_HANDLE;
+  VkImageView m_view = VK_NULL_HANDLE;
+  VkSampler m_sampler = VK_NULL_HANDLE;
 
-  VmaAllocation imageAllocation = VK_NULL_HANDLE;
+  VmaAllocation m_imageAllocation = VK_NULL_HANDLE;
 
   void transitionImageLayout(VkImage image,
-                             const std::vector<size_t>& offsets,
+                             std::span<const size_t> offsets,
                              VkImageLayout oldLayout,
                              VkImageLayout newLayout);
 
   void copyBufferToImage(VkBuffer buffer,
                          VkImage image,
-                         const std::vector<size_t>& offsets,
+                         std::span<const size_t> offsets,
                          uint32_t width,
                          uint32_t height);
 

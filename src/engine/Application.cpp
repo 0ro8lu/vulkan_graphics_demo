@@ -82,7 +82,6 @@ Application::run()
     if (sleep_duration > std::chrono::microseconds::zero()) {
       std::this_thread::sleep_for(sleep_duration);
     }
-    // glfwSetWindowShouldClose(window, true);
   }
   vkDeviceWaitIdle(m_renderer->m_vkContext->logicalDevice);
 }

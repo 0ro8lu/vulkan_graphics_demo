@@ -233,21 +233,21 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain,
                           skyboxPipelineLayout,
                           1,
                           1,
-                          &scene.skybox->descriptorSet,
+                          &scene.skybox->m_descriptorSet,
                           0,
                           nullptr);
 
-  VkBuffer vertexBuffers[] = { scene.skybox->cube->vertexBuffer };
+  VkBuffer vertexBuffers[] = { scene.skybox->m_cube->vertexBuffer };
   VkDeviceSize offsets[] = { 0 };
   vkCmdBindVertexBuffers(
     vkSwapchain->commandBuffer, 0, 1, vertexBuffers, offsets);
 
   vkCmdBindIndexBuffer(vkSwapchain->commandBuffer,
-                       scene.skybox->cube->indexBuffer,
+                       scene.skybox->m_cube->indexBuffer,
                        0,
                        VK_INDEX_TYPE_UINT32);
 
-  for (const auto& instance : scene.skybox->cube->meshInstances) {
+  for (const auto& instance : scene.skybox->m_cube->meshInstances) {
     PushConstant pc;
     pc.model = instance.transformation;
     vkCmdPushConstants(vkSwapchain->commandBuffer,
@@ -478,7 +478,7 @@ BlinnPhongPass::createPipelines(const LayoutConfig& layoutConfig)
     config.cullMode = VK_CULL_MODE_FRONT_BIT;
 
     config.descriptorSetLayouts = { layoutConfig.cameraLayout,
-                                    Skybox::skyboxLayout };
+                                    Skybox::s_skyboxLayout };
     config.pushConstantRanges = { modelPC };
     config.renderPass = renderPass;
     config.subpass = 0;

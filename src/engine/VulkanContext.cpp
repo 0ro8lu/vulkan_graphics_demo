@@ -457,20 +457,22 @@ VulkanContext::createShaderModule(const std::vector<char>& code)
 {
   if (code.empty()) {
     std::cerr << "\n========================================\n"
-              << "[VulkanContext ERROR]: Cannot create shader module from "
+              << "[FATAL ERROR]: Cannot create shader module from "
                  "empty bytecode!\n"
               << "========================================\n"
               << std::flush;
-    return VK_NULL_HANDLE;
+    ENGINE_DEBUG_BREAK();
+    std::abort();
   }
 
   if (code.size() % 4 != 0) {
     std::cerr << "\n========================================\n"
-              << "[VulkanContext ERROR]: Shader bytecode size (" << code.size()
+              << "[FATAL ERROR]: Shader bytecode size (" << code.size()
               << " bytes) is not a multiple of 4 (invalid SPIR-V)!\n"
               << "========================================\n"
               << std::flush;
-    return VK_NULL_HANDLE;
+    ENGINE_DEBUG_BREAK();
+    std::abort();
   }
 
   VkShaderModuleCreateInfo createInfo{};
