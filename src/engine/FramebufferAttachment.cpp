@@ -1,7 +1,6 @@
 #include "engine/FramebufferAttachment.h"
 #include "engine/VulkanContext.h"
 
-#include <stdexcept>
 #include <utility>
 
 std::unique_ptr<FramebufferAttachment>
@@ -27,14 +26,13 @@ FramebufferAttachment::create(const CreateInfo& info)
   VkSampler sampler = VK_NULL_HANDLE;
 
   try {
-    image = info.vkContext->createImage(
-      info.width,
-      info.height,
-      info.format,
-      info.layerCount,
-      VK_IMAGE_TILING_OPTIMAL,
-      imageUsage,
-      allocation);
+    image = info.vkContext->createImage(info.width,
+                                        info.height,
+                                        info.format,
+                                        info.layerCount,
+                                        VK_IMAGE_TILING_OPTIMAL,
+                                        imageUsage,
+                                        allocation);
 
     view = info.vkContext->createImageView(
       image, info.format, info.layerCount, aspectMask);
@@ -43,7 +41,8 @@ FramebufferAttachment::create(const CreateInfo& info)
     if (info.usage & VK_IMAGE_USAGE_SAMPLED_BIT) {
       if (info.samplerAddressMode == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE) {
         sampler = info.vkContext->getSampler(SamplerType::LinearClampToEdge);
-      } else if (info.samplerAddressMode == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER) {
+      } else if (info.samplerAddressMode ==
+                 VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER) {
         sampler = info.vkContext->getSampler(SamplerType::LinearClampToBorder);
       } else {
         sampler = info.vkContext->getSampler(SamplerType::LinearRepeat);
@@ -174,14 +173,13 @@ FramebufferAttachment::resize(uint32_t width, uint32_t height)
   VkImageView newView = VK_NULL_HANDLE;
 
   try {
-    newImage = m_VkContext->createImage(
-      width,
-      height,
-      m_Format,
-      m_LayerCount,
-      VK_IMAGE_TILING_OPTIMAL,
-      imageUsage,
-      newAllocation);
+    newImage = m_VkContext->createImage(width,
+                                        height,
+                                        m_Format,
+                                        m_LayerCount,
+                                        VK_IMAGE_TILING_OPTIMAL,
+                                        imageUsage,
+                                        newAllocation);
 
     newView = m_VkContext->createImageView(
       newImage, m_Format, m_LayerCount, aspectMask);
@@ -211,4 +209,3 @@ FramebufferAttachment::resize(uint32_t width, uint32_t height)
 
   return true;
 }
-

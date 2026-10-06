@@ -49,6 +49,14 @@ Renderer::~Renderer()
 }
 
 void
+Renderer::waitIdle() const
+{
+  if (m_vkContext && m_vkContext->logicalDevice != VK_NULL_HANDLE) {
+    vkDeviceWaitIdle(m_vkContext->logicalDevice);
+  }
+}
+
+void
 Renderer::update(const Scene& scene)
 {
   if (scene.spotLights.size() > MAX_SPOT_LIGHTS) {

@@ -19,6 +19,7 @@ public:
 
   void update(const Scene& scene);
   void draw(const Scene& scene, GLFWwindow* window);
+  void waitIdle() const;
 
   // TODO: re-make this private one day, after having built the asset manager
   // that will take care of the rest of the descriptor sets
