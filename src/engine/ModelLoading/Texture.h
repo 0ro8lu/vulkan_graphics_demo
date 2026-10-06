@@ -11,9 +11,8 @@ public:
   Texture(VulkanContext* vkContext, unsigned char* data, size_t size);
   Texture(VulkanContext* vkContext, std::string filePath);
 
-  // try to delete copy constructor
-  Texture(Texture& texture) = delete;
-  Texture& operator=(Texture& texture) = delete;
+  Texture(const Texture&) = delete;
+  Texture& operator=(const Texture&) = delete;
 
   // Move constructor
   Texture(Texture&& other) noexcept
@@ -32,7 +31,7 @@ public:
   }
 
   // Move assignment operator
-  Texture& operator=(Texture&& other)
+  Texture& operator=(Texture&& other) noexcept
   {
     if (this != &other) {
       cleanup();
@@ -65,15 +64,11 @@ private:
 
   void cleanup();
 
-  void createVulkanImage(int width, int height);
   void createTextureImageFromPixels(unsigned char* pixels,
                                     int texWidth,
                                     int texHeight);
 
-  void createTextureImageView();
-
   void transitionImageLayout(VkImage image,
-                             VkFormat format,
                              VkImageLayout oldLayout,
                              VkImageLayout newLayout);
 
@@ -81,8 +76,4 @@ private:
                          VkImage image,
                          uint32_t width,
                          uint32_t height);
-
-  VkCommandBuffer beginSingleTimeCommands();
-  void endSingleTimeCommands(VkCommandBuffer commandBuffer);
 };
-

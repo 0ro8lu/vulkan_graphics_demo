@@ -2,8 +2,6 @@
 
 #include "engine/VulkanContext.h"
 
-#include <vulkan/vulkan_core.h>
-
 #include <string>
 #include <vector>
 
@@ -22,6 +20,7 @@ struct CamLightShadowBundle
   VkDescriptorSetLayout cameraUBOLayout = VK_NULL_HANDLE;
   VkDescriptorSetLayout lightsUBOLayout = VK_NULL_HANDLE;
   VkDescriptorSetLayout directionalShadowmapLayout = VK_NULL_HANDLE;
+  // VkDescriptorSetLayout skyboxLayout = VK_NULL_HANDLE;
 
   VkDescriptorSet cameraUBODescriptorset = VK_NULL_HANDLE;
   VkDescriptorSet lightsUBODescriptorset = VK_NULL_HANDLE;
@@ -81,3 +80,6 @@ struct PipelineResult
 
 PipelineResult
 createPipeline(VulkanContext* vkContext, const GraphicsPipelineConfig& config);
+
+std::vector<char>
+readShader(const std::string& filename);

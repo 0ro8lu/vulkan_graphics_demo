@@ -51,9 +51,10 @@ public:
 
   struct LayoutConfig
   {
-    VkDescriptorSetLayout camera;
-    VkDescriptorSetLayout lights;
-    VkDescriptorSetLayout directionalShadowmap;
+    VkDescriptorSetLayout cameraLayout;
+    VkDescriptorSetLayout lightsLayout;
+    VkDescriptorSetLayout directionalShadowmapLayout;
+    // VkDescriptorSetLayout skyboxLayout;
   };
 
 private:
@@ -70,10 +71,7 @@ private:
   VkPipeline lightCubesPipeline;
   VkPipelineLayout lightCubesPipelineLayout;
 
-  void createPipelines(VkDescriptorSetLayout cameraLayout,
-                       VkDescriptorSetLayout lightsLayout,
-                       VkDescriptorSetLayout directionalShadowmapLayout);
+  void createPipelines(const LayoutConfig& layoutConfig);
 
   VulkanContext* vkContext;
 };
-

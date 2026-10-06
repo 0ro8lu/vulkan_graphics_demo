@@ -3,7 +3,7 @@
 #include "engine/ModelLoading/Mesh.h"
 #include "engine/VulkanContext.h"
 
-#include <glm.hpp>
+#include <glm/glm.hpp>
 
 #include <memory>
 #include <unordered_map>
@@ -79,13 +79,9 @@ private:
                    const aiScene* scene,
                    int type);
 
-  unsigned int vertexCount;
-
-  VkDeviceMemory vertexBufferMemory;
   VmaAllocation vertexBufferAllocation;
   void createVertexBuffer(VkDeviceSize bufferSize);
 
-  VkDeviceMemory indexBufferMemory;
   VmaAllocation indexBufferAllocation;
   void createIndexBuffer(VkDeviceSize bufferSize);
 

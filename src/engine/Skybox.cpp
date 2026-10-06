@@ -1,8 +1,9 @@
 #include "engine/Skybox.h"
 
-#include <glm.hpp>
-#include <gtc/matrix_transform.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
+#include "engine/VulkanCheck.h"
 #include "engine/VulkanContext.h"
 
 #include <stb_image.h>
@@ -23,7 +24,7 @@ Skybox::Skybox(VulkanContext* vkContext, std::array<std::string, 6> filePaths)
 
   std::vector<stbi_uc*> pixels;
   pixels.resize(filePaths.size());
-  for (int i = 0; i < filePaths.size(); i++) {
+  for (size_t i = 0; i < filePaths.size(); i++) {
     pixels[i] = stbi_load(filePaths[i].c_str(),
                           &texWidth,
                           &texHeight,
@@ -41,26 +42,26 @@ Skybox::Skybox(VulkanContext* vkContext, std::array<std::string, 6> filePaths)
   VkBuffer stagingBuffer;
   VmaAllocation stagingBufferAllocation;
 
-  char* data = static_cast<char*>(
-    vkContext->createBuffer(imageSize * filePaths.size(),
-                            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                            VulkanContext::BufferType::STAGING_BUFFER,
-                            stagingBuffer,
-                            stagingBufferAllocation));
+  char* data =
+    static_cast<char*>(vkContext->createBuffer(imageSize * filePaths.size(),
+                                               VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                               BufferType::STAGING_BUFFER,
+                                               stagingBuffer,
+                                               stagingBufferAllocation));
 
   size_t byteOffset = 0;
   std::vector<size_t> byteOffsets;
   byteOffsets.resize(filePaths.size());
 
   // Put all the image data into a single buffer
-  for (int i = 0; i < pixels.size(); i++) {
+  for (size_t i = 0; i < pixels.size(); i++) {
     data += byteOffset;
     memcpy(data, pixels[i], imageSize * sizeof(stbi_uc));
     byteOffset = imageSize;
   }
 
   // populate the offsets vector
-  for (int i = 0; i < byteOffsets.size(); i++) {
+  for (size_t i = 0; i < byteOffsets.size(); i++) {
     if (i == 0) {
       byteOffsets[i] = 0;
     } else {
@@ -73,42 +74,18 @@ Skybox::Skybox(VulkanContext* vkContext, std::array<std::string, 6> filePaths)
   }
 
   // -------------------- CREATE IMAGE --------------------
-  VkImageCreateInfo imageInfo{};
-  imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-  imageInfo.imageType = VK_IMAGE_TYPE_2D;
-  imageInfo.extent.width = texWidth;
-  imageInfo.extent.height = texHeight;
-  imageInfo.extent.depth = 1;
-  imageInfo.mipLevels = 1;
-  imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-  imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-  imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  imageInfo.usage =
-    VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-  imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-  imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-  // for cubemap
-  imageInfo.arrayLayers = 6;
-  imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-
-  VmaAllocationCreateInfo imageAllocCreateInfo = {};
-  imageAllocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-  imageAllocCreateInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
-  imageAllocCreateInfo.priority = 1.0f;
-
-  if (vmaCreateImage(vkContext->allocator,
-                     &imageInfo,
-                     &imageAllocCreateInfo,
-                     &image,
-                     &imageAllocation,
-                     nullptr) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create image!");
-  }
+  image = vkContext->createImage(static_cast<uint32_t>(texWidth),
+                                 static_cast<uint32_t>(texHeight),
+                                 VK_FORMAT_R8G8B8A8_SRGB,
+                                 6,
+                                 VK_IMAGE_TILING_OPTIMAL,
+                                 VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                                   VK_IMAGE_USAGE_SAMPLED_BIT,
+                                 imageAllocation,
+                                 VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT);
 
   // Copy data from staging buffer to image
   transitionImageLayout(image,
-                        VK_FORMAT_R8G8B8A8_SRGB,
                         byteOffsets,
                         VK_IMAGE_LAYOUT_UNDEFINED,
                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -118,32 +95,21 @@ Skybox::Skybox(VulkanContext* vkContext, std::array<std::string, 6> filePaths)
                     static_cast<uint32_t>(texWidth),
                     static_cast<uint32_t>(texHeight));
   transitionImageLayout(image,
-                        VK_FORMAT_R8G8B8A8_SRGB,
                         byteOffsets,
                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
   // -------------------- CREATE IMAGE VIEW --------------------
-  VkImageViewCreateInfo viewInfo{};
-  viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-  viewInfo.image = image;
-  viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
-  viewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-  viewInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-
-  viewInfo.subresourceRange.layerCount = 6;
-  viewInfo.subresourceRange.levelCount = 1;
-
-  if (vkCreateImageView(vkContext->logicalDevice, &viewInfo, nullptr, &view) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to create texture image view!");
-  }
+  view = vkContext->createImageView(image,
+                                    VK_FORMAT_R8G8B8A8_SRGB,
+                                    6,
+                                    VK_IMAGE_ASPECT_COLOR_BIT,
+                                    VK_IMAGE_VIEW_TYPE_CUBE);
 
   // -------------------- CREATE SAMPLER --------------------
   sampler = vkContext->getSampler(SamplerType::LinearClampToEdge);
 
-  vmaDestroyBuffer(
-    vkContext->allocator, stagingBuffer, stagingBufferAllocation);
+  vkContext->destroyBuffer(stagingBuffer, stagingBufferAllocation);
 
   setupDescriptors();
 }
@@ -158,10 +124,10 @@ Skybox::~Skybox()
   vkDestroyDescriptorPool(vkContext->logicalDevice, descriptorPool, nullptr);
 }
 
+// TODO: probably move this inside vkContext class
 void
 Skybox::transitionImageLayout(VkImage image,
-                              VkFormat format,
-                              std::vector<size_t> offsets,
+                              const std::vector<size_t>& offsets,
                               VkImageLayout oldLayout,
                               VkImageLayout newLayout)
 {
@@ -216,17 +182,18 @@ Skybox::transitionImageLayout(VkImage image,
   vkContext->endSingleTimeCommands(commandBuffer);
 }
 
+// TODO: probably move this inside vkContext class
 void
 Skybox::copyBufferToImage(VkBuffer buffer,
                           VkImage image,
-                          std::vector<size_t> offsets,
+                          const std::vector<size_t>& offsets,
                           uint32_t width,
                           uint32_t height)
 {
   VkCommandBuffer commandBuffer = vkContext->beginSingleTimeCommands();
 
   std::vector<VkBufferImageCopy> bufferCopyRegions;
-  for (int i = 0; i < offsets.size(); i++) {
+  for (size_t i = 0; i < offsets.size(); i++) {
     VkBufferImageCopy bufferCopyRegion = {};
     bufferCopyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     bufferCopyRegion.imageSubresource.mipLevel = 0;

@@ -1,7 +1,7 @@
 #include "engine/LightManager.h"
 #include "engine/Lights.h"
 
-#include <gtc/matrix_transform.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <iostream>
 

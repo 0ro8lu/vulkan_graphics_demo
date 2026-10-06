@@ -69,7 +69,7 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     renderPassInfo.renderArea.extent.width = directionalShadowMap->getWidth();
     renderPassInfo.renderArea.extent.height = directionalShadowMap->getHeight();
 
-    VkClearValue depthClearValue = { 1.0f, 0 };
+    VkClearValue depthClearValue = {.depthStencil = {1.0f, 0}};
 
     renderPassInfo.clearValueCount = 1;
     renderPassInfo.pClearValues = &depthClearValue;
@@ -146,7 +146,7 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     renderPassInfo.renderArea.extent.width = directionalShadowMap->getWidth();
     renderPassInfo.renderArea.extent.height = directionalShadowMap->getHeight();
 
-    VkClearValue depthClearValue = { 1.0f, 0 };
+    VkClearValue depthClearValue = {.depthStencil = {1.0f, 0}};
 
     renderPassInfo.clearValueCount = 1;
     renderPassInfo.pClearValues = &depthClearValue;
@@ -166,7 +166,7 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     renderPassInfo.renderArea.extent.width = spotPointShadowAtlas->getWidth();
     renderPassInfo.renderArea.extent.height = spotPointShadowAtlas->getHeight();
 
-    VkClearValue depthClearValue = { 1.0f, 0 };
+    VkClearValue depthClearValue = {.depthStencil = {1.0f, 0}};
 
     renderPassInfo.clearValueCount = 1;
     renderPassInfo.pClearValues = &depthClearValue;

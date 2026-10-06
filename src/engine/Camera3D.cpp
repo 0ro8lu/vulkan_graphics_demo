@@ -1,7 +1,7 @@
 #include "Camera3D.h"
 
-#include <ext/matrix_clip_space.hpp>
-#include <gtc/matrix_transform.hpp>
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 Camera3D::Camera3D(glm::vec3 cameraPos, glm::vec3 cameraFront)
   : cameraPos(cameraPos)

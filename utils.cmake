@@ -10,9 +10,9 @@ function(target_treat_all_warnings_as_errors Target)
 	endif()
 
 	if(XCODE)
-    set_target_properties(App PROPERTIES
-        XCODE_GENERATE_SCHEME ON
-        XCODE_SCHEME_ENABLE_GPU_FRAME_CAPTURE_MODE "Metal")
+		set_target_properties(${Target} PROPERTIES
+			XCODE_GENERATE_SCHEME ON
+			XCODE_SCHEME_ENABLE_GPU_FRAME_CAPTURE_MODE "Metal")
 	endif()
 	
 endfunction()

@@ -1,8 +1,8 @@
 #pragma once
 
 #include "engine/VulkanTypes.h"
-#include <vk_mem_alloc.h>
 
+#include <array>
 #include <vector>
 
 struct GLFWwindow;
@@ -37,6 +37,8 @@ public:
 
   VkCommandPool commandPool{ VK_NULL_HANDLE };
 
+  QueueFamilyIndices queueFamilies{};
+
   // create vulkan primitives
   VkImage createImage(uint32_t width,
                       uint32_t height,
@@ -44,21 +46,18 @@ public:
                       uint32_t layerCount,
                       VkImageTiling tiling,
                       VkImageUsageFlags usage,
-                      VmaAllocationCreateFlagBits flags,
-                      VmaAllocation& allocation);
+                      VmaAllocation& allocation,
+                      VkImageCreateFlags imageCreateFlags = 0);
 
-  VkShaderModule createShaderModule(const std::vector<char>& code);
+  [[nodiscard]] VkShaderModule createShaderModule(
+    const std::vector<char>& code);
 
   VkImageView createImageView(VkImage image,
                               VkFormat format,
                               uint32_t layerCount,
-                              VkImageAspectFlags aspectFlags);
+                              VkImageAspectFlags aspectFlags,
+                              VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D);
 
-  enum BufferType
-  {
-    STAGING_BUFFER,
-    GPU_BUFFER,
-  };
   void* createBuffer(VkDeviceSize size,
                      VkBufferUsageFlags usage,
                      BufferType bufferType,
@@ -80,8 +79,6 @@ public:
   {
     return m_samplers[static_cast<size_t>(type)];
   }
-
-  std::vector<char> readShader(const std::string& filename);
 
 private:
   VkDebugUtilsMessengerEXT debugMessenger{ VK_NULL_HANDLE };
@@ -114,7 +111,7 @@ private:
   VkPhysicalDeviceMemoryProperties deviceMemoryProperties{};
 
   void createLogicalDevice(VkSurfaceKHR surface);
-  void createCommandPool(VkSurfaceKHR surface);
+  void createCommandPool();
   void createVMAAllocator();
 
   const std::vector<const char*> validationLayers = {

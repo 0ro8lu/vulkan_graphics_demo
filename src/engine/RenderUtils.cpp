@@ -2,10 +2,11 @@
 #include "engine/LightManager.h"
 #include "engine/RenderUtils.h"
 #include "engine/Vertex.h"
+#include "engine/VulkanCheck.h"
+#include "engine/VulkanTypes.h"
 
-#include <array>
-#include <stdexcept>
-#include <vk_mem_alloc.h>
+#include <fstream>
+#include <iostream>
 
 CamLightShadowBundle
 createBaselineDescriptorsAndBuffers(VulkanContext* vkContext)
@@ -18,7 +19,7 @@ createBaselineDescriptorsAndBuffers(VulkanContext* vkContext)
   camLightShadowBundle.cameraBuffer.mapped =
     vkContext->createBuffer(camLightShadowBundle.cameraBuffer.size,
                             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                            VulkanContext::BufferType::STAGING_BUFFER,
+                            BufferType::STAGING_BUFFER,
                             camLightShadowBundle.cameraBuffer.buffer,
                             camLightShadowBundle.cameraBuffer.allocation);
 
@@ -32,21 +33,21 @@ createBaselineDescriptorsAndBuffers(VulkanContext* vkContext)
   camLightShadowBundle.directionalLightBuffer.mapped = vkContext->createBuffer(
     camLightShadowBundle.directionalLightBuffer.size,
     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-    VulkanContext::BufferType::STAGING_BUFFER,
+    BufferType::STAGING_BUFFER,
     camLightShadowBundle.directionalLightBuffer.buffer,
     camLightShadowBundle.directionalLightBuffer.allocation);
 
   camLightShadowBundle.pointLightsBuffer.mapped =
     vkContext->createBuffer(camLightShadowBundle.pointLightsBuffer.size,
                             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                            VulkanContext::BufferType::STAGING_BUFFER,
+                            BufferType::STAGING_BUFFER,
                             camLightShadowBundle.pointLightsBuffer.buffer,
                             camLightShadowBundle.pointLightsBuffer.allocation);
 
   camLightShadowBundle.spotLightsBuffer.mapped =
     vkContext->createBuffer(camLightShadowBundle.spotLightsBuffer.size,
                             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                            VulkanContext::BufferType::STAGING_BUFFER,
+                            BufferType::STAGING_BUFFER,
                             camLightShadowBundle.spotLightsBuffer.buffer,
                             camLightShadowBundle.spotLightsBuffer.allocation);
 
@@ -168,6 +169,28 @@ createBaselineDescriptorsAndBuffers(VulkanContext* vkContext)
           &camLightShadowBundle.directionalShadowmapLayout) != VK_SUCCESS) {
       throw std::runtime_error("failed to create descriptor set layout!");
     }
+  }
+
+  // --------------------- Create Skybox Layout ---------------------
+  {
+    VkDescriptorSetLayoutBinding cubemapLayoutBinding{};
+    cubemapLayoutBinding.binding = 0;
+    cubemapLayoutBinding.descriptorCount = 1;
+    cubemapLayoutBinding.descriptorType =
+      VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    cubemapLayoutBinding.pImmutableSamplers = nullptr;
+    cubemapLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &cubemapLayoutBinding;
+
+    // TODO: re-enable this once the resource allocator system is up and running
+    // VK_CHECK(vkCreateDescriptorSetLayout(vkContext->logicalDevice,
+    //                                      &layoutInfo,
+    //                                      nullptr,
+    //                                      &camLightShadowBundle.skyboxLayout));
   }
 
   // --------------------- Create Descriptorset for Camera ---------------------
@@ -300,7 +323,7 @@ createPipeline(VulkanContext* vkContext, const GraphicsPipelineConfig& config)
     if (name.empty())
       return;
 
-    auto code = vkContext->readShader(shaderPath + name);
+    auto code = readShader(shaderPath + name);
     VkShaderModule module = vkContext->createShaderModule(code);
     shaderModules.push_back(module);
 
@@ -452,4 +475,30 @@ createPipeline(VulkanContext* vkContext, const GraphicsPipelineConfig& config)
   }
 
   return result;
+}
+
+std::vector<char>
+readShader(const std::string& filename)
+{
+  std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+  if (!file.is_open()) {
+    std::cerr << "\n========================================\n"
+              << "[FATAL SHADER ERROR]: Failed to open shader file!\n"
+              << "  File: " << filename << "\n"
+              << "========================================\n"
+              << std::flush;
+    ENGINE_DEBUG_BREAK();
+    std::abort();
+  }
+
+  size_t fileSize = static_cast<size_t>(file.tellg());
+  std::vector<char> buffer(fileSize);
+
+  file.seekg(0);
+  file.read(buffer.data(), fileSize);
+
+  file.close();
+
+  return buffer;
 }

@@ -25,8 +25,9 @@ Texture::Texture(VulkanContext* vkContext, unsigned char* data, size_t size)
 
   stbi_image_free(pixels);
 
-  // Create the image view and sampler as before.
-  createTextureImageView();
+  // Create the image view and sampler.
+  view = vkContext->createImageView(
+    image, VK_FORMAT_R8G8B8A8_SRGB, 1, VK_IMAGE_ASPECT_COLOR_BIT);
   sampler = vkContext->getSampler(SamplerType::LinearRepeat);
 }
 
@@ -69,12 +70,11 @@ Texture::createTextureImageFromPixels(unsigned char* pixels,
   VkBuffer stagingBuffer;
   VmaAllocation stagingBufferAllocation;
 
-  void* data =
-    vkContext->createBuffer(imageSize,
-                            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                            VulkanContext::BufferType::STAGING_BUFFER,
-                            stagingBuffer,
-                            stagingBufferAllocation);
+  void* data = vkContext->createBuffer(imageSize,
+                                       VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                       BufferType::STAGING_BUFFER,
+                                       stagingBuffer,
+                                       stagingBufferAllocation);
 
   memcpy(data, pixels, static_cast<size_t>(imageSize));
 
@@ -86,52 +86,25 @@ Texture::createTextureImageFromPixels(unsigned char* pixels,
                                  VK_IMAGE_TILING_OPTIMAL,
                                  VK_IMAGE_USAGE_TRANSFER_DST_BIT |
                                    VK_IMAGE_USAGE_SAMPLED_BIT,
-                                 VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
                                  allocation);
 
   // Copy data from staging buffer to image
-  transitionImageLayout(image,
-                        VK_FORMAT_R8G8B8A8_SRGB,
-                        VK_IMAGE_LAYOUT_UNDEFINED,
-                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  transitionImageLayout(
+    image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
   copyBufferToImage(stagingBuffer,
                     image,
                     static_cast<uint32_t>(texWidth),
                     static_cast<uint32_t>(texHeight));
   transitionImageLayout(image,
-                        VK_FORMAT_R8G8B8A8_SRGB,
                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-  vmaDestroyBuffer(
-    vkContext->allocator, stagingBuffer, stagingBufferAllocation);
+  vkContext->destroyBuffer(stagingBuffer, stagingBufferAllocation);
 }
 
-void
-Texture::createTextureImageView()
-{
-  VkImageViewCreateInfo viewInfo{};
-  viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-  viewInfo.image = image;
-  viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-  viewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-  viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
-  // TODO: maybe one day generate mipmap levels
-  viewInfo.subresourceRange.baseMipLevel = 0;
-  viewInfo.subresourceRange.levelCount = 1;
-  viewInfo.subresourceRange.baseArrayLayer = 0;
-  viewInfo.subresourceRange.layerCount = 1;
-
-  if (vkCreateImageView(vkContext->logicalDevice, &viewInfo, nullptr, &view) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to create texture image view!");
-  }
-}
 
 void
 Texture::transitionImageLayout(VkImage image,
-                               VkFormat format,
                                VkImageLayout oldLayout,
                                VkImageLayout newLayout)
 {

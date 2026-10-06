@@ -34,7 +34,6 @@ FramebufferAttachment::create(const CreateInfo& info)
       info.layerCount,
       VK_IMAGE_TILING_OPTIMAL,
       imageUsage,
-      VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
       allocation);
 
     view = info.vkContext->createImageView(
@@ -182,7 +181,6 @@ FramebufferAttachment::resize(uint32_t width, uint32_t height)
       m_LayerCount,
       VK_IMAGE_TILING_OPTIMAL,
       imageUsage,
-      VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
       newAllocation);
 
     newView = m_VkContext->createImageView(

@@ -8,11 +8,11 @@ Mesh::Mesh(VulkanContext* vkContext,
            size_t startIndex,
            Texture&& diffuseTexture,
            Texture&& specularTexture)
-  : vkContext(vkContext)
+  : diffuseTexture(std::move(diffuseTexture))
+  , specularTexture(std::move(specularTexture))
   , indexCount(indexCount)
   , startIndex(startIndex)
-  , diffuseTexture(std::move(diffuseTexture))
-  , specularTexture(std::move(specularTexture))
+  , vkContext(vkContext)
 {
 }
 

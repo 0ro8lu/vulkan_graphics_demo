@@ -1,6 +1,6 @@
 #pragma once
 
-#include <glm.hpp>
+#include <glm/glm.hpp>
 
 class LightManager;
 
@@ -62,7 +62,7 @@ private:
              uint32_t shadowMapIndex,
              bool castsShadow);
 
-  const uint32_t sideToIndex(Side side) const
+  uint32_t sideToIndex(Side side) const
   {
     switch (side) {
       case UP:

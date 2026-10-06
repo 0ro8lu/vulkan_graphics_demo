@@ -31,19 +31,15 @@ private:
   VmaAllocation imageAllocation = VK_NULL_HANDLE;
 
   void transitionImageLayout(VkImage image,
-                             VkFormat format,
-                             std::vector<size_t> offsets,
+                             const std::vector<size_t>& offsets,
                              VkImageLayout oldLayout,
                              VkImageLayout newLayout);
 
   void copyBufferToImage(VkBuffer buffer,
                          VkImage image,
-                         std::vector<size_t> offsets,
+                         const std::vector<size_t>& offsets,
                          uint32_t width,
                          uint32_t height);
 
-  void createTextureImageView();
-
   void setupDescriptors();
 };
-

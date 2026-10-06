@@ -20,7 +20,7 @@ public:
   HDRPass& operator=(const HDRPass&) = delete;
   HDRPass& operator=(HDRPass&&) = delete;
 
-  void draw(VulkanSwapchain* vkSwapchain, const Scene& scene);
+  void draw(VulkanSwapchain* vkSwapchain);
   void recreateAttachments(int width, int height);
   void updateDescriptors(
     const std::unique_ptr<FramebufferAttachment>& blinnPhongAttachment);
@@ -68,4 +68,3 @@ private:
 
   VulkanContext* vkContext;
 };
-

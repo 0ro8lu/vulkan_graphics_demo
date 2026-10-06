@@ -14,9 +14,7 @@ BlinnPhongPass::BlinnPhongPass(VulkanContext* vkContext,
 
   createFrameBuffer(attachmentConfig.depthImageView);
 
-  createPipelines(layoutConfig.camera,
-                  layoutConfig.lights,
-                  layoutConfig.directionalShadowmap);
+  createPipelines(layoutConfig);
 }
 
 BlinnPhongPass::~BlinnPhongPass()
@@ -173,7 +171,7 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain,
     glm::vec4 lightColor;
   };
 
-  for (int i = 0; i < scene.lightCubes.size(); i++) {
+  for (size_t i = 0; i < scene.lightCubes.size(); i++) {
     VkBuffer vertexBuffers[] = { scene.lightCubes[i].vertexBuffer };
     VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(
@@ -368,7 +366,8 @@ BlinnPhongPass::createAttachments(uint32_t width, uint32_t height)
   hdrInfo.height = height;
   hdrInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
   hdrInfo.layerCount = 1;
-  hdrInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  hdrInfo.usage =
+    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
   hdrInfo.vkContext = vkContext;
   hdrAttachment = FramebufferAttachment::create(hdrInfo);
 }
@@ -446,10 +445,7 @@ BlinnPhongPass::createRenderPass(VkFormat depthFormat)
 }
 
 void
-BlinnPhongPass::createPipelines(
-  VkDescriptorSetLayout cameraLayout,
-  VkDescriptorSetLayout lightsLayout,
-  VkDescriptorSetLayout directionalShadowmapLayout)
+BlinnPhongPass::createPipelines(const LayoutConfig& layoutConfig)
 {
   VkPushConstantRange modelPC{};
   modelPC.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
@@ -461,10 +457,10 @@ BlinnPhongPass::createPipelines(
     GraphicsPipelineConfig config{};
     config.vertShaderName = "texture_vert.spv";
     config.fragShaderName = "texture_frag.spv";
-    config.descriptorSetLayouts = { cameraLayout,
-                                    lightsLayout,
+    config.descriptorSetLayouts = { layoutConfig.cameraLayout,
+                                    layoutConfig.lightsLayout,
                                     Model::textureLayout,
-                                    directionalShadowmapLayout };
+                                    layoutConfig.directionalShadowmapLayout };
     config.pushConstantRanges = { modelPC };
     config.renderPass = renderPass;
 
@@ -481,7 +477,8 @@ BlinnPhongPass::createPipelines(
 
     config.cullMode = VK_CULL_MODE_FRONT_BIT;
 
-    config.descriptorSetLayouts = { cameraLayout, Skybox::skyboxLayout };
+    config.descriptorSetLayouts = { layoutConfig.cameraLayout,
+                                    Skybox::skyboxLayout };
     config.pushConstantRanges = { modelPC };
     config.renderPass = renderPass;
     config.subpass = 0;
@@ -502,7 +499,7 @@ BlinnPhongPass::createPipelines(
     config.vertShaderName = "light_cube_vert.spv";
     config.fragShaderName = "light_cube_frag.spv";
 
-    config.descriptorSetLayouts = { cameraLayout };
+    config.descriptorSetLayouts = { layoutConfig.cameraLayout };
     config.pushConstantRanges = { modelPC, colorPC };
     config.renderPass = renderPass;
     config.subpass = 0;

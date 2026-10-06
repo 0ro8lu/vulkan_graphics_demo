@@ -24,21 +24,25 @@ Renderer::~Renderer()
     m_camLightShadowBundle.directionalShadowmapLayout,
     nullptr);
 
-  vmaDestroyBuffer(m_vkContext->allocator,
-                   m_camLightShadowBundle.cameraBuffer.buffer,
-                   m_camLightShadowBundle.cameraBuffer.allocation);
+  // TODO: use this when the resource manager comes into place
+  // vkDestroyDescriptorSetLayout(
+  //   m_vkContext->logicalDevice, m_camLightShadowBundle.skyboxLayout,
+  //   nullptr);
 
-  vmaDestroyBuffer(m_vkContext->allocator,
-                   m_camLightShadowBundle.directionalLightBuffer.buffer,
-                   m_camLightShadowBundle.directionalLightBuffer.allocation);
+  m_vkContext->destroyBuffer(m_camLightShadowBundle.cameraBuffer.buffer,
+                             m_camLightShadowBundle.cameraBuffer.allocation);
 
-  vmaDestroyBuffer(m_vkContext->allocator,
-                   m_camLightShadowBundle.pointLightsBuffer.buffer,
-                   m_camLightShadowBundle.pointLightsBuffer.allocation);
+  m_vkContext->destroyBuffer(
+    m_camLightShadowBundle.directionalLightBuffer.buffer,
+    m_camLightShadowBundle.directionalLightBuffer.allocation);
 
-  vmaDestroyBuffer(m_vkContext->allocator,
-                   m_camLightShadowBundle.spotLightsBuffer.buffer,
-                   m_camLightShadowBundle.spotLightsBuffer.allocation);
+  m_vkContext->destroyBuffer(
+    m_camLightShadowBundle.pointLightsBuffer.buffer,
+    m_camLightShadowBundle.pointLightsBuffer.allocation);
+
+  m_vkContext->destroyBuffer(
+    m_camLightShadowBundle.spotLightsBuffer.buffer,
+    m_camLightShadowBundle.spotLightsBuffer.allocation);
 
   vkDestroyDescriptorPool(
     m_vkContext->logicalDevice, m_camLightShadowBundle.descriptorPool, nullptr);
@@ -96,7 +100,7 @@ Renderer::draw(const Scene& scene, GLFWwindow* window)
                          m_camLightShadowBundle.cameraUBODescriptorset,
                          m_camLightShadowBundle.lightsUBODescriptorset,
                          m_camLightShadowBundle.shadowMapDescriptorSet);
-  m_hdrPass->draw(m_vkSwapchain.get(), scene);
+  m_hdrPass->draw(m_vkSwapchain.get());
 
   m_vkSwapchain->submitFrame(window);
 }
@@ -118,10 +122,10 @@ Renderer::buildRenderGraph()
   blinnPhongAttachmentConfig.height = m_vkSwapchain->height;
 
   BlinnPhongPass::LayoutConfig blinnPhongLayoutConfig{};
-  blinnPhongLayoutConfig.camera = m_camLightShadowBundle.cameraUBOLayout;
-  blinnPhongLayoutConfig.directionalShadowmap =
+  blinnPhongLayoutConfig.cameraLayout = m_camLightShadowBundle.cameraUBOLayout;
+  blinnPhongLayoutConfig.directionalShadowmapLayout =
     m_camLightShadowBundle.directionalShadowmapLayout;
-  blinnPhongLayoutConfig.lights = m_camLightShadowBundle.lightsUBOLayout;
+  blinnPhongLayoutConfig.lightsLayout = m_camLightShadowBundle.lightsUBOLayout;
 
   m_blinnPhongPass = std::make_unique<BlinnPhongPass>(
     m_vkContext, blinnPhongAttachmentConfig, blinnPhongLayoutConfig);

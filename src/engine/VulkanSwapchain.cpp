@@ -6,12 +6,9 @@
 
 #include "GLFW/glfw3.h"
 #include "engine/VulkanCheck.h"
-#include "engine/VulkanQueueFamiliesHelper.h"
 
 void
-VulkanSwapchain::framebufferResizeCallback(GLFWwindow* window,
-                                           int width,
-                                           int height)
+VulkanSwapchain::framebufferResizeCallback(GLFWwindow* window, int, int)
 {
   auto vulkanSwapchainPtr =
     static_cast<VulkanSwapchain*>(glfwGetWindowUserPointer(window));
@@ -230,8 +227,7 @@ VulkanSwapchain::createVulkanSwapChain(GLFWwindow* window)
   createInfo.imageArrayLayers = 1;
   createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-  QueueFamilyIndices indices =
-    QueueFamilyIndices::findQueueFamilies(vkContext->physicalDevice, surface);
+  QueueFamilyIndices indices = vkContext->queueFamilies;
   uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(),
                                     indices.presentFamily.value() };
 
@@ -283,7 +279,6 @@ VulkanSwapchain::createVulkanSwapChain(GLFWwindow* window)
                            1,
                            VK_IMAGE_TILING_OPTIMAL,
                            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                           VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
                            depthAllocation);
   depthImageView = vkContext->createImageView(
     depthImage, depthFormat, 1, VK_IMAGE_ASPECT_DEPTH_BIT);
@@ -318,8 +313,8 @@ VulkanSwapchain::cleanSwapChain()
     vkDestroyImageView(vkContext->logicalDevice, imageView, nullptr);
   }
 
-  vkDestroyImageView(vkContext->logicalDevice, depthImageView, nullptr);
-  vmaDestroyImage(vkContext->allocator, depthImage, depthAllocation);
+  vkContext->destroyImageView(depthImageView);
+  vkContext->destroyImage(depthImage, depthAllocation);
 
   vkDestroySwapchainKHR(vkContext->logicalDevice, swapChain, nullptr);
 }
