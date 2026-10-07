@@ -3,8 +3,6 @@
 #include "engine/ModelLoading/Texture.h"
 #include "engine/VulkanContext.h"
 
-struct Vertex;
-
 class Mesh
 {
 public:
@@ -37,4 +35,3 @@ public:
 private:
   VulkanContext* vkContext;
 };
-
