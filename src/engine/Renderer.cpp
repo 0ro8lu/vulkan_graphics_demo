@@ -1,3 +1,4 @@
+#include "engine/VulkanCheck.h"
 #include "engine/Renderer.h"
 
 Renderer::Renderer(GLFWwindow* window)
@@ -60,7 +61,8 @@ void
 Renderer::update(const Scene& scene)
 {
   if (scene.spotLights.size() > MAX_SPOT_LIGHTS) {
-    throw std::runtime_error("spotLights > MAX_SPOT_LIGHTS");
+    ENGINE_DEBUG_BREAK();
+    std::abort();
   }
 
   if (scene.directionalLight.has_value()) {

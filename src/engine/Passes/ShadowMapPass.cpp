@@ -1,3 +1,4 @@
+#include "engine/VulkanCheck.h"
 #include "engine/Passes/ShadowMapPass.h"
 
 #include "engine/RenderUtils.h"
@@ -329,12 +330,10 @@ ShadowMapPass::createFrameBuffers()
     framebufferInfo.height = directionalShadowmapSize;
     framebufferInfo.layers = 1;
 
-    if (vkCreateFramebuffer(vkContext->logicalDevice,
+    VK_CHECK(vkCreateFramebuffer(vkContext->logicalDevice,
                             &framebufferInfo,
                             nullptr,
-                            &directionalShadowMapFramebuffer) != VK_SUCCESS) {
-      throw std::runtime_error("failed to create framebuffer!");
-    }
+                            &directionalShadowMapFramebuffer));
   }
 
   {
@@ -348,12 +347,10 @@ ShadowMapPass::createFrameBuffers()
     framebufferInfo.height = spotPointShadowmapSize;
     framebufferInfo.layers = 1;
 
-    if (vkCreateFramebuffer(vkContext->logicalDevice,
+    VK_CHECK(vkCreateFramebuffer(vkContext->logicalDevice,
                             &framebufferInfo,
                             nullptr,
-                            &spotShadowMapFramebuffer) != VK_SUCCESS) {
-      throw std::runtime_error("failed to create framebuffer!");
-    }
+                            &spotShadowMapFramebuffer));
   }
 }
 
@@ -407,12 +404,10 @@ ShadowMapPass::createDirectionalRenderPass()
   renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
   renderPassInfo.pDependencies = dependencies.data();
 
-  if (vkCreateRenderPass(vkContext->logicalDevice,
+  VK_CHECK(vkCreateRenderPass(vkContext->logicalDevice,
                          &renderPassInfo,
                          nullptr,
-                         &shadowMapRenderPass) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create render pass!");
-  }
+                         &shadowMapRenderPass));
 }
 
 void

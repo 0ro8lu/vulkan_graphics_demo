@@ -1,9 +1,9 @@
 #pragma once
 
 #include "engine/ModelLoading/Mesh.h"
-#include "engine/VulkanContext.h"
 
-#include <glm/glm.hpp>
+#include "engine/Vertex.h"
+#include <glm/mat4x4.hpp>
 
 #include <memory>
 #include <unordered_map>
@@ -20,7 +20,9 @@ struct MeshInstance
   Mesh* mesh;
 };
 
-class Model
+class VulkanContext;
+
+class Model final
 {
 public:
   Model(const std::string& filePath,

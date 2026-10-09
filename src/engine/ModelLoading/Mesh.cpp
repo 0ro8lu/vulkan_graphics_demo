@@ -1,7 +1,8 @@
 #include "engine/ModelLoading/Mesh.h"
+#include "engine/VulkanCheck.h"
+#include "engine/VulkanContext.h"
 
 #include <array>
-#include <stdexcept>
 
 Mesh::Mesh(VulkanContext* vkContext,
            size_t indexCount,
@@ -28,10 +29,8 @@ Mesh::createDescriptorSet(VkDescriptorPool descriptorPool,
   allocInfo.descriptorSetCount = 1;
   allocInfo.pSetLayouts = &descriptorLayout;
 
-  if (vkAllocateDescriptorSets(
-        vkContext->logicalDevice, &allocInfo, &descriptorSet) != VK_SUCCESS) {
-    throw std::runtime_error("failed to allocate descriptor sets!");
-  }
+  VK_CHECK(vkAllocateDescriptorSets(
+    vkContext->logicalDevice, &allocInfo, &descriptorSet));
 
   VkDescriptorImageInfo diffuseImageInfo{};
   diffuseImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

@@ -1,9 +1,10 @@
 #pragma once
 
 #include "engine/ModelLoading/Texture.h"
-#include "engine/VulkanContext.h"
 
-class Mesh
+class VulkanContext;
+
+class Mesh final
 {
 public:
   Mesh(VulkanContext* vkContext,

@@ -1,7 +1,7 @@
 #include "engine/Passes/HDRPass.h"
+#include "engine/VulkanCheck.h"
 
 #include "engine/RenderUtils.h"
-#include "engine/Scene.h"
 
 HDRPass::HDRPass(VulkanContext* vkContext,
                  const AttachmentConfig& attachmentConfig)
@@ -257,12 +257,8 @@ HDRPass::createFrameBuffers()
   framebufferInfo.height = brightSpotsAttachment->getHeight();
   framebufferInfo.layers = 1;
 
-  if (vkCreateFramebuffer(vkContext->logicalDevice,
-                          &framebufferInfo,
-                          nullptr,
-                          &bloomFramebuffer) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create framebuffer!");
-  }
+  VK_CHECK(vkCreateFramebuffer(
+    vkContext->logicalDevice, &framebufferInfo, nullptr, &bloomFramebuffer));
 }
 
 void
@@ -402,12 +398,8 @@ HDRPass::createRenderPass(VkFormat swapchainImageFormat)
     renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
     renderPassInfo.pDependencies = dependencies.data();
 
-    if (vkCreateRenderPass(vkContext->logicalDevice,
-                           &renderPassInfo,
-                           nullptr,
-                           &bloomRenderPass) != VK_SUCCESS) {
-      throw std::runtime_error("failed to create render pass!");
-    }
+    VK_CHECK(vkCreateRenderPass(
+      vkContext->logicalDevice, &renderPassInfo, nullptr, &bloomRenderPass));
   }
 
   // render pass for presentation
@@ -451,12 +443,10 @@ HDRPass::createRenderPass(VkFormat swapchainImageFormat)
     renderPassInfo.dependencyCount = 1;
     renderPassInfo.pDependencies = &dependency;
 
-    if (vkCreateRenderPass(vkContext->logicalDevice,
-                           &renderPassInfo,
-                           nullptr,
-                           &presentationRenderPass) != VK_SUCCESS) {
-      throw std::runtime_error("failed to create render pass!");
-    }
+    VK_CHECK(vkCreateRenderPass(vkContext->logicalDevice,
+                                &renderPassInfo,
+                                nullptr,
+                                &presentationRenderPass));
   }
 }
 
@@ -474,11 +464,8 @@ HDRPass::createDescriptors()
   poolInfo.pPoolSizes = &poolSize;
   poolInfo.maxSets = 3;
 
-  if (vkCreateDescriptorPool(
-        vkContext->logicalDevice, &poolInfo, nullptr, &mainDescriptorPool) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to create descriptor pool!");
-  }
+  VK_CHECK(vkCreateDescriptorPool(
+    vkContext->logicalDevice, &poolInfo, nullptr, &mainDescriptorPool));
 
   // create descr layout
   std::array<VkDescriptorSetLayoutBinding, 1> bindings;
@@ -495,12 +482,10 @@ HDRPass::createDescriptors()
     static_cast<uint32_t>(bindings.size());
   layoutInfoAttachmentWrite.pBindings = bindings.data();
 
-  if (vkCreateDescriptorSetLayout(vkContext->logicalDevice,
-                                  &layoutInfoAttachmentWrite,
-                                  nullptr,
-                                  &bloomDescriptorSetLayout) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create descriptor set layout!");
-  }
+  VK_CHECK(vkCreateDescriptorSetLayout(vkContext->logicalDevice,
+                                       &layoutInfoAttachmentWrite,
+                                       nullptr,
+                                       &bloomDescriptorSetLayout));
 
   VkDescriptorSetAllocateInfo allocInfo{};
   allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -508,21 +493,12 @@ HDRPass::createDescriptors()
   allocInfo.descriptorSetCount = 1;
   allocInfo.pSetLayouts = &bloomDescriptorSetLayout;
 
-  if (vkAllocateDescriptorSets(vkContext->logicalDevice,
-                               &allocInfo,
-                               &brightPointDescriptorSet) != VK_SUCCESS) {
-    throw std::runtime_error("failed to allocate descriptor sets!");
-  }
-  if (vkAllocateDescriptorSets(vkContext->logicalDevice,
-                               &allocInfo,
-                               &horizontalBloomDescriptorSet) != VK_SUCCESS) {
-    throw std::runtime_error("failed to allocate descriptor sets!");
-  }
-  if (vkAllocateDescriptorSets(vkContext->logicalDevice,
-                               &allocInfo,
-                               &verticalBloomDescriptorSet) != VK_SUCCESS) {
-    throw std::runtime_error("failed to allocate descriptor sets!");
-  }
+  VK_CHECK(vkAllocateDescriptorSets(
+    vkContext->logicalDevice, &allocInfo, &brightPointDescriptorSet));
+  VK_CHECK(vkAllocateDescriptorSets(
+    vkContext->logicalDevice, &allocInfo, &horizontalBloomDescriptorSet));
+  VK_CHECK(vkAllocateDescriptorSets(
+    vkContext->logicalDevice, &allocInfo, &verticalBloomDescriptorSet));
 }
 
 void

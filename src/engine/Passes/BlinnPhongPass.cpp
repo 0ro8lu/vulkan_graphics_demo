@@ -1,3 +1,4 @@
+#include "engine/VulkanCheck.h"
 #include "engine/Passes/BlinnPhongPass.h"
 
 #include "engine/RenderUtils.h"
@@ -351,11 +352,8 @@ BlinnPhongPass::createFrameBuffer(VkImageView depthImageView)
   framebufferInfo.height = hdrAttachment->getHeight();
   framebufferInfo.layers = 1;
 
-  if (vkCreateFramebuffer(
-        vkContext->logicalDevice, &framebufferInfo, nullptr, &hdrFramebuffer) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to create framebuffer!");
-  }
+  VK_CHECK(vkCreateFramebuffer(
+        vkContext->logicalDevice, &framebufferInfo, nullptr, &hdrFramebuffer));
 }
 
 void
@@ -437,11 +435,8 @@ BlinnPhongPass::createRenderPass(VkFormat depthFormat)
   renderPassInfo.dependencyCount = 1;
   renderPassInfo.pDependencies = &dependency;
 
-  if (vkCreateRenderPass(
-        vkContext->logicalDevice, &renderPassInfo, nullptr, &renderPass) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to create render pass!");
-  }
+  VK_CHECK(vkCreateRenderPass(
+        vkContext->logicalDevice, &renderPassInfo, nullptr, &renderPass));
 }
 
 void

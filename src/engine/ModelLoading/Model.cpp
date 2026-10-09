@@ -1,13 +1,13 @@
-#include "engine/ModelLoading/Mesh.h"
 #include "engine/ModelLoading/Model.h"
-#include "engine/Vertex.h"
 #include "engine/VulkanCheck.h"
+#include "engine/VulkanContext.h"
 
 #include <assimp/Importer.hpp>
 #include <assimp/material.h>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 #include <glm/gtc/matrix_transform.hpp>
+
 #include <iostream>
 
 static glm::mat4

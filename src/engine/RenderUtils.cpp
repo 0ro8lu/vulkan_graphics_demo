@@ -70,13 +70,10 @@ createBaselineDescriptorsAndBuffers(VulkanContext* vkContext)
   poolInfo.pPoolSizes = poolSizes.data();
   poolInfo.maxSets = 3;
 
-  if (vkCreateDescriptorPool(vkContext->logicalDevice,
+  VK_CHECK(vkCreateDescriptorPool(vkContext->logicalDevice,
                              &poolInfo,
                              nullptr,
-                             &camLightShadowBundle.descriptorPool) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to create descriptor pool!");
-  }
+                             &camLightShadowBundle.descriptorPool));
 
   // --------------------- Create Camera Layout ---------------------
   {
@@ -94,13 +91,10 @@ createBaselineDescriptorsAndBuffers(VulkanContext* vkContext)
       static_cast<uint32_t>(bindings.size());
     layoutInfoAttachmentWrite.pBindings = bindings.data();
 
-    if (vkCreateDescriptorSetLayout(vkContext->logicalDevice,
+    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->logicalDevice,
                                     &layoutInfoAttachmentWrite,
                                     nullptr,
-                                    &camLightShadowBundle.cameraUBOLayout) !=
-        VK_SUCCESS) {
-      throw std::runtime_error("failed to create descriptor set layout!");
-    }
+                                    &camLightShadowBundle.cameraUBOLayout));
   }
 
   // --------------------- Create Lights Layout ---------------------
@@ -131,13 +125,10 @@ createBaselineDescriptorsAndBuffers(VulkanContext* vkContext)
       static_cast<uint32_t>(bindings.size());
     layoutInfoAttachmentWrite.pBindings = bindings.data();
 
-    if (vkCreateDescriptorSetLayout(vkContext->logicalDevice,
+    VK_CHECK(vkCreateDescriptorSetLayout(vkContext->logicalDevice,
                                     &layoutInfoAttachmentWrite,
                                     nullptr,
-                                    &camLightShadowBundle.lightsUBOLayout) !=
-        VK_SUCCESS) {
-      throw std::runtime_error("failed to create descriptor set layout!");
-    }
+                                    &camLightShadowBundle.lightsUBOLayout));
   }
 
   // --------------------- Create Shadow Map Layout ---------------------
@@ -163,13 +154,11 @@ createBaselineDescriptorsAndBuffers(VulkanContext* vkContext)
       static_cast<uint32_t>(bindings.size());
     layoutInfoAttachmentWrite.pBindings = bindings.data();
 
-    if (vkCreateDescriptorSetLayout(
+    VK_CHECK(vkCreateDescriptorSetLayout(
           vkContext->logicalDevice,
           &layoutInfoAttachmentWrite,
           nullptr,
-          &camLightShadowBundle.directionalShadowmapLayout) != VK_SUCCESS) {
-      throw std::runtime_error("failed to create descriptor set layout!");
-    }
+          &camLightShadowBundle.directionalShadowmapLayout));
   }
 
   // --------------------- Create Skybox Layout ---------------------
@@ -201,12 +190,10 @@ createBaselineDescriptorsAndBuffers(VulkanContext* vkContext)
     allocInfo.descriptorPool = camLightShadowBundle.descriptorPool;
     allocInfo.descriptorSetCount = 1;
     allocInfo.pSetLayouts = &camLightShadowBundle.cameraUBOLayout;
-    if (vkAllocateDescriptorSets(
+    VK_CHECK(vkAllocateDescriptorSets(
           vkContext->logicalDevice,
           &allocInfo,
-          &camLightShadowBundle.cameraUBODescriptorset) != VK_SUCCESS) {
-      throw std::runtime_error("failed to allocate descriptor sets!");
-    }
+          &camLightShadowBundle.cameraUBODescriptorset));
     VkDescriptorBufferInfo uniformBufferInfo{};
     uniformBufferInfo.buffer = camLightShadowBundle.cameraBuffer.buffer;
     uniformBufferInfo.offset = 0;
@@ -234,12 +221,10 @@ createBaselineDescriptorsAndBuffers(VulkanContext* vkContext)
     allocInfo.descriptorSetCount = 1;
     allocInfo.pSetLayouts = &camLightShadowBundle.lightsUBOLayout;
 
-    if (vkAllocateDescriptorSets(
+    VK_CHECK(vkAllocateDescriptorSets(
           vkContext->logicalDevice,
           &allocInfo,
-          &camLightShadowBundle.lightsUBODescriptorset) != VK_SUCCESS) {
-      throw std::runtime_error("failed to allocate descriptor sets!");
-    }
+          &camLightShadowBundle.lightsUBODescriptorset));
 
     VkDescriptorBufferInfo directionalLightBufferInfo{};
     directionalLightBufferInfo.buffer =
@@ -298,12 +283,10 @@ createBaselineDescriptorsAndBuffers(VulkanContext* vkContext)
     allocInfo.descriptorSetCount = 1;
     allocInfo.pSetLayouts = &camLightShadowBundle.directionalShadowmapLayout;
 
-    if (vkAllocateDescriptorSets(
+    VK_CHECK(vkAllocateDescriptorSets(
           vkContext->logicalDevice,
           &allocInfo,
-          &camLightShadowBundle.shadowMapDescriptorSet) != VK_SUCCESS) {
-      throw std::runtime_error("failed to allocate descriptor sets!");
-    }
+          &camLightShadowBundle.shadowMapDescriptorSet));
   }
 
   return camLightShadowBundle;
@@ -470,12 +453,10 @@ createPipeline(VulkanContext* vkContext, const GraphicsPipelineConfig& config)
   pipelineLayoutInfo.pPushConstantRanges = config.pushConstantRanges.data();
 
   PipelineResult result{};
-  if (vkCreatePipelineLayout(vkContext->logicalDevice,
+  VK_CHECK(vkCreatePipelineLayout(vkContext->logicalDevice,
                              &pipelineLayoutInfo,
                              nullptr,
-                             &result.layout) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create pipeline layout!");
-  }
+                             &result.layout));
 
   VkGraphicsPipelineCreateInfo pipelineInfo{};
   pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -494,14 +475,12 @@ createPipeline(VulkanContext* vkContext, const GraphicsPipelineConfig& config)
   pipelineInfo.pDepthStencilState = &depthStencil;
   pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-  if (vkCreateGraphicsPipelines(vkContext->logicalDevice,
+  VK_CHECK(vkCreateGraphicsPipelines(vkContext->logicalDevice,
                                 VK_NULL_HANDLE,
                                 1,
                                 &pipelineInfo,
                                 nullptr,
-                                &result.pipeline) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create graphics pipeline!");
-  }
+                                &result.pipeline));
 
   for (auto module : shaderModules) {
     vkDestroyShaderModule(vkContext->logicalDevice, module, nullptr);

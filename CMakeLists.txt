@@ -124,7 +124,10 @@ target_treat_all_warnings_as_errors(${PROJECT_NAME})
 get_target_property(VMA_INCLUDE_DIRS GPUOpen::VulkanMemoryAllocator INTERFACE_INCLUDE_DIRECTORIES)
 target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE ${VMA_INCLUDE_DIRS})
 if(NOT MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE -Wno-nullability-extension)
+    target_compile_options(${PROJECT_NAME} PRIVATE -Wno-nullability-extension -fno-exceptions)
+else()
+    target_compile_options(${PROJECT_NAME} PRIVATE /EHs-c-)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE _HAS_EXCEPTIONS=0)
 endif()
 
 # Include directories

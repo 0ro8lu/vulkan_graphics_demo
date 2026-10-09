@@ -4,7 +4,7 @@
 
 #include "engine/VulkanContext.h"
 
-class Texture
+class Texture final
 {
 public:
   Texture();

@@ -25,37 +25,27 @@ FramebufferAttachment::create(const CreateInfo& info)
   VkImageView view = VK_NULL_HANDLE;
   VkSampler sampler = VK_NULL_HANDLE;
 
-  try {
-    image = info.vkContext->createImage(info.width,
-                                        info.height,
-                                        info.format,
-                                        info.layerCount,
-                                        VK_IMAGE_TILING_OPTIMAL,
-                                        imageUsage,
-                                        allocation);
+  image = info.vkContext->createImage(info.width,
+                                      info.height,
+                                      info.format,
+                                      info.layerCount,
+                                      VK_IMAGE_TILING_OPTIMAL,
+                                      imageUsage,
+                                      allocation);
 
-    view = info.vkContext->createImageView(
-      image, info.format, info.layerCount, aspectMask);
+  view = info.vkContext->createImageView(
+    image, info.format, info.layerCount, aspectMask);
 
-    // Only create a sampler if the attachment is actually sampled
-    if (info.usage & VK_IMAGE_USAGE_SAMPLED_BIT) {
-      if (info.samplerAddressMode == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE) {
-        sampler = info.vkContext->getSampler(SamplerType::LinearClampToEdge);
-      } else if (info.samplerAddressMode ==
-                 VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER) {
-        sampler = info.vkContext->getSampler(SamplerType::LinearClampToBorder);
-      } else {
-        sampler = info.vkContext->getSampler(SamplerType::LinearRepeat);
-      }
+  // Only create a sampler if the attachment is actually sampled
+  if (info.usage & VK_IMAGE_USAGE_SAMPLED_BIT) {
+    if (info.samplerAddressMode == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE) {
+      sampler = info.vkContext->getSampler(SamplerType::LinearClampToEdge);
+    } else if (info.samplerAddressMode ==
+               VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER) {
+      sampler = info.vkContext->getSampler(SamplerType::LinearClampToBorder);
+    } else {
+      sampler = info.vkContext->getSampler(SamplerType::LinearRepeat);
     }
-  } catch (...) {
-    if (view != VK_NULL_HANDLE) {
-      info.vkContext->destroyImageView(view);
-    }
-    if (image != VK_NULL_HANDLE) {
-      info.vkContext->destroyImage(image, allocation);
-    }
-    throw;
   }
 
   return std::unique_ptr<FramebufferAttachment>(
@@ -172,26 +162,16 @@ FramebufferAttachment::resize(uint32_t width, uint32_t height)
   VmaAllocation newAllocation = VK_NULL_HANDLE;
   VkImageView newView = VK_NULL_HANDLE;
 
-  try {
-    newImage = m_VkContext->createImage(width,
-                                        height,
-                                        m_Format,
-                                        m_LayerCount,
-                                        VK_IMAGE_TILING_OPTIMAL,
-                                        imageUsage,
-                                        newAllocation);
+  newImage = m_VkContext->createImage(width,
+                                      height,
+                                      m_Format,
+                                      m_LayerCount,
+                                      VK_IMAGE_TILING_OPTIMAL,
+                                      imageUsage,
+                                      newAllocation);
 
-    newView = m_VkContext->createImageView(
-      newImage, m_Format, m_LayerCount, aspectMask);
-  } catch (...) {
-    if (newView != VK_NULL_HANDLE) {
-      m_VkContext->destroyImageView(newView);
-    }
-    if (newImage != VK_NULL_HANDLE) {
-      m_VkContext->destroyImage(newImage, newAllocation);
-    }
-    return false;
-  }
+  newView = m_VkContext->createImageView(
+    newImage, m_Format, m_LayerCount, aspectMask);
 
   // Destroy old resources in correct Vulkan order: View before Image!
   if (m_View != VK_NULL_HANDLE) {

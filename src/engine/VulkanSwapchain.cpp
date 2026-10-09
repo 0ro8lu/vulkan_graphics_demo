@@ -137,7 +137,8 @@ VulkanSwapchain::prepareFrame(GLFWwindow* window)
     recreateSwapChain(window);
     return;
   } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-    throw std::runtime_error("failed to acquire swap chain image!");
+    ENGINE_DEBUG_BREAK();
+    std::abort();
   }
 
   vkResetFences(vkContext->logicalDevice, 1, &inFlightFence);
@@ -192,7 +193,8 @@ VulkanSwapchain::submitFrame(GLFWwindow* window)
     resized = false;
     recreateSwapChain(window);
   } else if (result != VK_SUCCESS) {
-    throw std::runtime_error("failed to present swap chain image!");
+    ENGINE_DEBUG_BREAK();
+    std::abort();
   }
 
   currentFrame = (currentFrame + 1) % m_imageAvailableSemaphores.size();
@@ -389,7 +391,8 @@ VulkanSwapchain::findSupportedFormat(const std::vector<VkFormat>& candidates,
       return format;
     }
   }
-  throw std::runtime_error("failed to find supported format!");
+  ENGINE_DEBUG_BREAK();
+  std::abort();
 }
 
 void

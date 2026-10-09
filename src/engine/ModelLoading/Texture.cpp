@@ -1,4 +1,5 @@
 #include "engine/ModelLoading/Texture.h"
+#include "engine/VulkanCheck.h"
 #include <stb_image.h>
 
 Texture::Texture()
@@ -18,7 +19,8 @@ Texture::Texture(VulkanContext* vkContext, unsigned char* data, size_t size)
   stbi_uc* pixels = stbi_load_from_memory(
     data, size, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
   if (!pixels) {
-    throw std::runtime_error("Failed to load texture image from memory!");
+    ENGINE_DEBUG_BREAK();
+    std::abort();
   }
 
   createTextureImageFromPixels(pixels, texWidth, texHeight);
@@ -40,8 +42,8 @@ Texture::Texture(VulkanContext* vkContext, std::string filePath)
   stbi_uc* pixels = stbi_load(
     filePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
   if (!pixels) {
-    throw std::runtime_error("Failed to load texture image from file: " +
-                             filePath);
+    ENGINE_DEBUG_BREAK();
+    std::abort();
   }
 
   createTextureImageFromPixels(pixels, texWidth, texHeight);
@@ -102,7 +104,6 @@ Texture::createTextureImageFromPixels(unsigned char* pixels,
   vkContext->destroyBuffer(stagingBuffer, stagingBufferAllocation);
 }
 
-
 void
 Texture::transitionImageLayout(VkImage image,
                                VkImageLayout oldLayout,
@@ -142,7 +143,8 @@ Texture::transitionImageLayout(VkImage image,
     sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
     destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
   } else {
-    throw std::invalid_argument("unsupported layout transition!");
+    ENGINE_DEBUG_BREAK();
+    std::abort();
   }
 
   vkCmdPipelineBarrier(commandBuffer,
