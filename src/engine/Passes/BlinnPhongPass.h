@@ -36,10 +36,10 @@ public:
     const std::unique_ptr<FramebufferAttachment>& spotPointShadowAtlas,
     VkDescriptorSet shadowMapDescriptorSet);
 
-  std::unique_ptr<FramebufferAttachment> hdrAttachment;
+  std::unique_ptr<FramebufferAttachment> m_hdrAttachment;
 
-  VkFramebuffer hdrFramebuffer;
-  VkRenderPass renderPass;
+  VkFramebuffer m_hdrFramebuffer;
+  VkRenderPass m_renderPass;
 
   struct AttachmentConfig
   {
@@ -62,16 +62,16 @@ private:
   void createAttachments(uint32_t attachmentWidth, uint32_t attachmentHeight);
   void createRenderPass(VkFormat depthImageFormat);
 
-  VkPipeline blinnPhongPipeline;
-  VkPipelineLayout blinnPhongPipelineLayout;
+  VkPipeline m_blinnPhongPipeline;
+  VkPipelineLayout m_blinnPhongPipelineLayout;
 
-  VkPipeline skyboxPipeline;
-  VkPipelineLayout skyboxPipelineLayout;
+  VkPipeline m_skyboxPipeline;
+  VkPipelineLayout m_skyboxPipelineLayout;
 
-  VkPipeline lightCubesPipeline;
-  VkPipelineLayout lightCubesPipelineLayout;
+  VkPipeline m_lightCubesPipeline;
+  VkPipelineLayout m_lightCubesPipelineLayout;
 
   void createPipelines(const LayoutConfig& layoutConfig);
 
-  VulkanContext* vkContext;
+  VulkanContext* m_vkContext;
 };

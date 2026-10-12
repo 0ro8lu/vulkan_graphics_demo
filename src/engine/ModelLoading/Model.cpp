@@ -13,7 +13,7 @@
 static glm::mat4
 AssimpToGlmMatrix(const aiMatrix4x4& from);
 
-VkDescriptorSetLayout Model::textureLayout = VK_NULL_HANDLE;
+VkDescriptorSetLayout Model::s_textureLayout = VK_NULL_HANDLE;
 
 Model::Model(const std::string& filePath,
              VulkanContext* vkContext,
@@ -21,25 +21,25 @@ Model::Model(const std::string& filePath,
              glm::vec3 rotationAxis,
              float rotationAngle,
              glm::vec3 scale)
-  : vkContext(vkContext)
+  : m_vkContext(vkContext)
 {
-  modelMatrix = glm::translate(modelMatrix, pos);
+  m_modelMatrix = glm::translate(m_modelMatrix, pos);
   if (rotationAngle != 0) {
-    modelMatrix =
-      glm::rotate(modelMatrix, glm::radians(rotationAngle), rotationAxis);
+    m_modelMatrix =
+      glm::rotate(m_modelMatrix, glm::radians(rotationAngle), rotationAxis);
   }
-  modelMatrix = glm::scale(modelMatrix, scale);
+  m_modelMatrix = glm::scale(m_modelMatrix, scale);
 
   loadModel(filePath);
 
-  createVertexBuffer(sizeof(vertices[0]) * vertices.size());
-  createIndexBuffer(sizeof(indices[0]) * indices.size());
+  createVertexBuffer(sizeof(m_vertices[0]) * m_vertices.size());
+  createIndexBuffer(sizeof(m_indices[0]) * m_indices.size());
 
   setupDescriptors();
 
   // Release vertex/index data now that it's uploaded to GPU
-  std::vector<Vertex>().swap(vertices);
-  std::vector<uint32_t>().swap(indices);
+  std::vector<Vertex>().swap(m_vertices);
+  std::vector<uint32_t>().swap(m_indices);
 }
 
 Model::~Model()
@@ -49,29 +49,29 @@ Model::~Model()
 
 Model::Model(Model&& other) noexcept
 {
-  modelMatrix = other.modelMatrix;
-  meshInstances = std::move(other.meshInstances);
-  uniqueMeshes = std::move(other.uniqueMeshes);
+  m_modelMatrix = other.m_modelMatrix;
+  m_meshInstances = std::move(other.m_meshInstances);
+  m_uniqueMeshes = std::move(other.m_uniqueMeshes);
 
-  vertices = std::move(other.vertices);
-  vertexBuffer = other.vertexBuffer;
-  vertexBufferAllocation = other.vertexBufferAllocation;
+  m_vertices = std::move(other.m_vertices);
+  m_vertexBuffer = other.m_vertexBuffer;
+  m_vertexBufferAllocation = other.m_vertexBufferAllocation;
 
-  indices = std::move(other.indices);
-  indexBuffer = other.indexBuffer;
-  indexBufferAllocation = other.indexBufferAllocation;
+  m_indices = std::move(other.m_indices);
+  m_indexBuffer = other.m_indexBuffer;
+  m_indexBufferAllocation = other.m_indexBufferAllocation;
 
-  vkContext = other.vkContext;
-  descriptorPool = other.descriptorPool;
+  m_vkContext = other.m_vkContext;
+  m_descriptorPool = other.m_descriptorPool;
 
-  other.vertexBuffer = VK_NULL_HANDLE;
-  other.vertexBufferAllocation = VK_NULL_HANDLE;
+  other.m_vertexBuffer = VK_NULL_HANDLE;
+  other.m_vertexBufferAllocation = VK_NULL_HANDLE;
 
-  other.indexBuffer = VK_NULL_HANDLE;
-  other.indexBufferAllocation = VK_NULL_HANDLE;
+  other.m_indexBuffer = VK_NULL_HANDLE;
+  other.m_indexBufferAllocation = VK_NULL_HANDLE;
 
-  other.descriptorPool = VK_NULL_HANDLE;
-  other.vkContext = nullptr;
+  other.m_descriptorPool = VK_NULL_HANDLE;
+  other.m_vkContext = nullptr;
 }
 
 Model&
@@ -80,27 +80,27 @@ Model::operator=(Model&& other) noexcept
   if (this != &other) {
     cleanup();
 
-    modelMatrix = other.modelMatrix;
-    meshInstances = std::move(other.meshInstances);
-    uniqueMeshes = std::move(other.uniqueMeshes);
+    m_modelMatrix = other.m_modelMatrix;
+    m_meshInstances = std::move(other.m_meshInstances);
+    m_uniqueMeshes = std::move(other.m_uniqueMeshes);
 
-    vertices = std::move(other.vertices);
-    vertexBuffer = other.vertexBuffer;
-    vertexBufferAllocation = other.vertexBufferAllocation;
+    m_vertices = std::move(other.m_vertices);
+    m_vertexBuffer = other.m_vertexBuffer;
+    m_vertexBufferAllocation = other.m_vertexBufferAllocation;
 
-    indices = std::move(other.indices);
-    indexBuffer = other.indexBuffer;
-    indexBufferAllocation = other.indexBufferAllocation;
+    m_indices = std::move(other.m_indices);
+    m_indexBuffer = other.m_indexBuffer;
+    m_indexBufferAllocation = other.m_indexBufferAllocation;
 
-    vkContext = other.vkContext;
-    descriptorPool = other.descriptorPool;
+    m_vkContext = other.m_vkContext;
+    m_descriptorPool = other.m_descriptorPool;
 
-    other.vertexBuffer = VK_NULL_HANDLE;
-    other.vertexBufferAllocation = VK_NULL_HANDLE;
-    other.indexBuffer = VK_NULL_HANDLE;
-    other.indexBufferAllocation = VK_NULL_HANDLE;
-    other.descriptorPool = VK_NULL_HANDLE;
-    other.vkContext = nullptr;
+    other.m_vertexBuffer = VK_NULL_HANDLE;
+    other.m_vertexBufferAllocation = VK_NULL_HANDLE;
+    other.m_indexBuffer = VK_NULL_HANDLE;
+    other.m_indexBufferAllocation = VK_NULL_HANDLE;
+    other.m_descriptorPool = VK_NULL_HANDLE;
+    other.m_vkContext = nullptr;
   }
   return *this;
 }
@@ -108,7 +108,7 @@ Model::operator=(Model&& other) noexcept
 void
 Model::applyTransform(const glm::mat4& transform)
 {
-  for (auto& instance : meshInstances) {
+  for (auto& instance : m_meshInstances) {
     instance.transformation = instance.transformation * transform;
   }
 }
@@ -150,9 +150,9 @@ Model::loadModel(const std::string& filePath)
                           // of the TRIANGULATE option
   }
 
-  meshInstances.reserve(scene->mNumMeshes);
-  indices.reserve(totalNumIndices);
-  vertices.reserve(totalNumVertices);
+  m_meshInstances.reserve(scene->mNumMeshes);
+  m_indices.reserve(totalNumIndices);
+  m_vertices.reserve(totalNumVertices);
 
   size_t startIndex = 0;
   size_t startVertex = 0;
@@ -167,17 +167,17 @@ Model::processNode(aiNode* node,
                    size_t& startVertex)
 {
   glm::mat4 nodeTransform =
-    modelMatrix * AssimpToGlmMatrix(node->mTransformation);
+    m_modelMatrix * AssimpToGlmMatrix(node->mTransformation);
 
   for (unsigned int i = 0; i < node->mNumMeshes; i++) {
     aiMesh* assimpMesh = scene->mMeshes[node->mMeshes[i]];
     Mesh* mesh;
 
-    auto it = uniqueMeshes.find(assimpMesh);
-    if (it == uniqueMeshes.end()) {
+    auto it = m_uniqueMeshes.find(assimpMesh);
+    if (it == m_uniqueMeshes.end()) {
       auto newMesh = processMesh(assimpMesh, scene, startIndex, startVertex);
       mesh = newMesh.get();
-      uniqueMeshes[assimpMesh] = std::move(newMesh);
+      m_uniqueMeshes[assimpMesh] = std::move(newMesh);
 
       startIndex += scene->mMeshes[node->mMeshes[i]]->mNumFaces * 3;
       startVertex += assimpMesh->mNumVertices;
@@ -185,7 +185,7 @@ Model::processNode(aiNode* node,
       mesh = it->second.get();
     }
 
-    meshInstances.push_back({ nodeTransform, mesh });
+    m_meshInstances.push_back({ nodeTransform, mesh });
   }
 
   for (unsigned int i = 0; i < node->mNumChildren; i++) {
@@ -245,7 +245,7 @@ Model::processMesh(aiMesh* mesh,
       vertex.texCoords = glm::vec2(0.0f, 0.0f);
     }
 
-    vertices.push_back(vertex);
+    m_vertices.push_back(vertex);
   }
 
   // If we do have textures
@@ -259,14 +259,14 @@ Model::processMesh(aiMesh* mesh,
   }
 
   std::string path = TEXTURE_PATH;
-  if (diffuseTexture.view == VK_NULL_HANDLE) {
-    diffuseTexture = Texture(vkContext, path + "empty_diffuse.png");
+  if (diffuseTexture.m_view == VK_NULL_HANDLE) {
+    diffuseTexture = Texture(m_vkContext, path + "empty_diffuse.png");
   }
-  if (specularTexture.view == VK_NULL_HANDLE) {
-    specularTexture = Texture(vkContext, path + "empty_specular.png");
+  if (specularTexture.m_view == VK_NULL_HANDLE) {
+    specularTexture = Texture(m_vkContext, path + "empty_specular.png");
   }
 
-  auto newMesh = std::make_unique<Mesh>(vkContext,
+  auto newMesh = std::make_unique<Mesh>(m_vkContext,
                                         mesh->mNumFaces * 3,
                                         startIndex,
                                         std::move(diffuseTexture),
@@ -274,9 +274,9 @@ Model::processMesh(aiMesh* mesh,
 
   for (unsigned int i = 0; i < mesh->mNumFaces; i++) {
     const aiFace& face = mesh->mFaces[i];
-    indices.push_back(face.mIndices[0] + startVertex);
-    indices.push_back(face.mIndices[1] + startVertex);
-    indices.push_back(face.mIndices[2] + startVertex);
+    m_indices.push_back(face.mIndices[0] + startVertex);
+    m_indices.push_back(face.mIndices[1] + startVertex);
+    m_indices.push_back(face.mIndices[2] + startVertex);
   }
 
   return newMesh;
@@ -302,7 +302,7 @@ Model::loadTexture(aiMaterial* material,
       // mHeight == 0 means the texture is compressed
       if (aiTexture->mHeight == 0) {
         // Compressed texture data
-        texture = Texture(vkContext,
+        texture = Texture(m_vkContext,
                           reinterpret_cast<unsigned char*>(aiTexture->pcData),
                           aiTexture->mWidth);
       } else {
@@ -314,7 +314,7 @@ Model::loadTexture(aiMaterial* material,
       }
     } else {
       // Load texture from file path
-      texture = Texture(vkContext, str.C_Str());
+      texture = Texture(m_vkContext, str.C_Str());
     }
   }
 }
@@ -326,19 +326,19 @@ Model::setupDescriptors()
   VkDescriptorPoolSize poolSize;
 
   poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  poolSize.descriptorCount = 2 * meshInstances.size();
+  poolSize.descriptorCount = 2 * m_meshInstances.size();
 
   VkDescriptorPoolCreateInfo poolInfo{};
   poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   poolInfo.poolSizeCount = 1;
   poolInfo.pPoolSizes = &poolSize;
-  poolInfo.maxSets = meshInstances.size();
+  poolInfo.maxSets = m_meshInstances.size();
 
   VK_CHECK(vkCreateDescriptorPool(
-    vkContext->logicalDevice, &poolInfo, nullptr, &descriptorPool));
+    m_vkContext->logicalDevice, &poolInfo, nullptr, &m_descriptorPool));
 
   // -------------------- DESCRIPTOR LAYOUT --------------------
-  if (Model::textureLayout == VK_NULL_HANDLE) {
+  if (Model::s_textureLayout == VK_NULL_HANDLE) {
     VkDescriptorSetLayoutBinding diffuseLayoutBinding{};
     diffuseLayoutBinding.binding = 0;
     diffuseLayoutBinding.descriptorCount = 1;
@@ -366,13 +366,13 @@ Model::setupDescriptors()
     layoutInfo.pBindings = bindings.data();
 
     VK_CHECK(vkCreateDescriptorSetLayout(
-      vkContext->logicalDevice, &layoutInfo, nullptr, &Model::textureLayout));
+      m_vkContext->logicalDevice, &layoutInfo, nullptr, &Model::s_textureLayout));
   }
 
   // -------------------- DESCRIPTOR ALLOCATION --------------------
-  for (const auto& uniqueMesh : uniqueMeshes) {
-    uniqueMesh.second->createDescriptorSet(descriptorPool,
-                                           Model::textureLayout);
+  for (const auto& uniqueMesh : m_uniqueMeshes) {
+    uniqueMesh.second->createDescriptorSet(m_descriptorPool,
+                                           Model::s_textureLayout);
   }
 }
 
@@ -381,24 +381,24 @@ Model::createVertexBuffer(VkDeviceSize bufferSize)
 {
   VkBuffer stagingBuffer;
   VmaAllocation stagingBufferAllocation;
-  void* data = vkContext->createBuffer(bufferSize,
-                                       VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                       BufferType::STAGING_BUFFER,
-                                       stagingBuffer,
-                                       stagingBufferAllocation);
+  void* data = m_vkContext->createBuffer(bufferSize,
+                                         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                         BufferType::STAGING_BUFFER,
+                                         stagingBuffer,
+                                         stagingBufferAllocation);
 
-  memcpy(data, vertices.data(), (size_t)bufferSize);
+  memcpy(data, m_vertices.data(), (size_t)bufferSize);
 
-  vkContext->createBuffer(bufferSize,
-                          VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                          BufferType::GPU_BUFFER,
-                          vertexBuffer,
-                          vertexBufferAllocation);
+  m_vkContext->createBuffer(bufferSize,
+                            VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                              VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                            BufferType::GPU_BUFFER,
+                            m_vertexBuffer,
+                            m_vertexBufferAllocation);
 
-  vkContext->copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+  m_vkContext->copyBuffer(stagingBuffer, m_vertexBuffer, bufferSize);
 
-  vkContext->destroyBuffer(stagingBuffer, stagingBufferAllocation);
+  m_vkContext->destroyBuffer(stagingBuffer, stagingBufferAllocation);
 }
 
 void
@@ -406,34 +406,34 @@ Model::createIndexBuffer(VkDeviceSize bufferSize)
 {
   VkBuffer stagingBuffer;
   VmaAllocation stagingBufferAllocation;
-  void* data = vkContext->createBuffer(bufferSize,
-                                       VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                       BufferType::STAGING_BUFFER,
-                                       stagingBuffer,
-                                       stagingBufferAllocation);
+  void* data = m_vkContext->createBuffer(bufferSize,
+                                         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                         BufferType::STAGING_BUFFER,
+                                         stagingBuffer,
+                                         stagingBufferAllocation);
 
-  memcpy(data, indices.data(), (size_t)bufferSize);
+  memcpy(data, m_indices.data(), (size_t)bufferSize);
 
-  vkContext->createBuffer(bufferSize,
-                          VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                            VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                          BufferType::GPU_BUFFER,
-                          indexBuffer,
-                          indexBufferAllocation);
+  m_vkContext->createBuffer(bufferSize,
+                            VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                              VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                            BufferType::GPU_BUFFER,
+                            m_indexBuffer,
+                            m_indexBufferAllocation);
 
-  vkContext->copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+  m_vkContext->copyBuffer(stagingBuffer, m_indexBuffer, bufferSize);
 
-  vkContext->destroyBuffer(stagingBuffer, stagingBufferAllocation);
+  m_vkContext->destroyBuffer(stagingBuffer, stagingBufferAllocation);
 }
 
 void
 Model::cleanup()
 {
-  if (vertexBuffer != VK_NULL_HANDLE && indexBuffer != VK_NULL_HANDLE &&
-      descriptorPool != VK_NULL_HANDLE) {
-    vkContext->destroyBuffer(vertexBuffer, vertexBufferAllocation);
-    vkContext->destroyBuffer(indexBuffer, indexBufferAllocation);
+  if (m_vertexBuffer != VK_NULL_HANDLE && m_indexBuffer != VK_NULL_HANDLE &&
+      m_descriptorPool != VK_NULL_HANDLE) {
+    m_vkContext->destroyBuffer(m_vertexBuffer, m_vertexBufferAllocation);
+    m_vkContext->destroyBuffer(m_indexBuffer, m_indexBufferAllocation);
 
-    vkDestroyDescriptorPool(vkContext->logicalDevice, descriptorPool, nullptr);
+    vkDestroyDescriptorPool(m_vkContext->logicalDevice, m_descriptorPool, nullptr);
   }
 }

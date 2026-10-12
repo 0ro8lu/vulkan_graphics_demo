@@ -41,30 +41,30 @@ public:
 
   ~Model();
 
-  const glm::mat4& getModelMatrix() const { return modelMatrix; }
+  const glm::mat4& getModelMatrix() const { return m_modelMatrix; }
 
   void rotate(float angle, glm::vec3 rotationAxis);
   void translate(glm::vec3 position);
   void scale(glm::vec3 scale);
 
-  std::unordered_map<aiMesh*, std::unique_ptr<Mesh>> uniqueMeshes;
-  std::vector<MeshInstance> meshInstances;
+  std::unordered_map<aiMesh*, std::unique_ptr<Mesh>> m_uniqueMeshes;
+  std::vector<MeshInstance> m_meshInstances;
 
-  std::vector<Vertex> vertices;
-  VkBuffer vertexBuffer = VK_NULL_HANDLE;
+  std::vector<Vertex> m_vertices;
+  VkBuffer m_vertexBuffer = VK_NULL_HANDLE;
 
-  std::vector<uint32_t> indices;
-  VkBuffer indexBuffer = VK_NULL_HANDLE;
+  std::vector<uint32_t> m_indices;
+  VkBuffer m_indexBuffer = VK_NULL_HANDLE;
 
-  static VkDescriptorSetLayout textureLayout;
+  static VkDescriptorSetLayout s_textureLayout;
 
 private:
-  VulkanContext* vkContext;
+  VulkanContext* m_vkContext;
 
-  glm::mat4 modelMatrix = glm::mat4(1.0);
+  glm::mat4 m_modelMatrix = glm::mat4(1.0);
   inline void applyTransform(const glm::mat4& transform);
 
-  VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+  VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
   void setupDescriptors();
 
   void loadModel(const std::string& filePath);
@@ -81,10 +81,10 @@ private:
                    const aiScene* scene,
                    int type);
 
-  VmaAllocation vertexBufferAllocation;
+  VmaAllocation m_vertexBufferAllocation;
   void createVertexBuffer(VkDeviceSize bufferSize);
 
-  VmaAllocation indexBufferAllocation;
+  VmaAllocation m_indexBufferAllocation;
   void createIndexBuffer(VkDeviceSize bufferSize);
 
   void cleanup();

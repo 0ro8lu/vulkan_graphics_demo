@@ -33,15 +33,15 @@ public:
 
   bool resize(uint32_t width, uint32_t height);
 
-  [[nodiscard]] VkFormat getFormat() const noexcept { return m_Format; }
-  [[nodiscard]] VkImage getImage() const noexcept { return m_Image; }
-  [[nodiscard]] VkImageView getView() const noexcept { return m_View; }
-  [[nodiscard]] VkSampler getSampler() const noexcept { return m_Sampler; }
-  [[nodiscard]] bool hasSampler() const noexcept { return m_Sampler != VK_NULL_HANDLE; }
-  [[nodiscard]] uint32_t getWidth() const noexcept { return m_Width; }
-  [[nodiscard]] uint32_t getHeight() const noexcept { return m_Height; }
-  [[nodiscard]] uint32_t getLayerCount() const noexcept { return m_LayerCount; }
-  [[nodiscard]] VkImageUsageFlags getUsage() const noexcept { return m_Usage; }
+  [[nodiscard]] VkFormat getFormat() const noexcept { return m_format; }
+  [[nodiscard]] VkImage getImage() const noexcept { return m_image; }
+  [[nodiscard]] VkImageView getView() const noexcept { return m_view; }
+  [[nodiscard]] VkSampler getSampler() const noexcept { return m_sampler; }
+  [[nodiscard]] bool hasSampler() const noexcept { return m_sampler != VK_NULL_HANDLE; }
+  [[nodiscard]] uint32_t getWidth() const noexcept { return m_width; }
+  [[nodiscard]] uint32_t getHeight() const noexcept { return m_height; }
+  [[nodiscard]] uint32_t getLayerCount() const noexcept { return m_layerCount; }
+  [[nodiscard]] VkImageUsageFlags getUsage() const noexcept { return m_usage; }
 
 private:
   FramebufferAttachment(const CreateInfo& info,
@@ -54,17 +54,17 @@ private:
   [[nodiscard]] static VkImageAspectFlags determineAspectMask(
     VkImageUsageFlags usage) noexcept;
 
-  VkFormat m_Format = VK_FORMAT_UNDEFINED;
-  VkImage m_Image = VK_NULL_HANDLE;
-  VkImageView m_View = VK_NULL_HANDLE;
-  VkSampler m_Sampler = VK_NULL_HANDLE;
-  VmaAllocation m_Allocation = VK_NULL_HANDLE;
-  VkImageUsageFlags m_Usage = 0;
+  VkFormat m_format = VK_FORMAT_UNDEFINED;
+  VkImage m_image = VK_NULL_HANDLE;
+  VkImageView m_view = VK_NULL_HANDLE;
+  VkSampler m_sampler = VK_NULL_HANDLE;
+  VmaAllocation m_allocation = VK_NULL_HANDLE;
+  VkImageUsageFlags m_usage = 0;
 
-  VulkanContext* m_VkContext = nullptr;
+  VulkanContext* m_vkContext = nullptr;
 
-  uint32_t m_Width = 0;
-  uint32_t m_Height = 0;
-  uint32_t m_LayerCount = 0;
+  uint32_t m_width = 0;
+  uint32_t m_height = 0;
+  uint32_t m_layerCount = 0;
 };
 

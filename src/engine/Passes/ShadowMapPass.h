@@ -25,13 +25,13 @@ public:
 
   void draw(VulkanSwapchain* vkSwapchain, const Scene& scene);
 
-  std::unique_ptr<FramebufferAttachment> directionalShadowMap = nullptr;
-  std::unique_ptr<FramebufferAttachment> spotPointShadowAtlas = nullptr;
+  std::unique_ptr<FramebufferAttachment> m_directionalShadowMap = nullptr;
+  std::unique_ptr<FramebufferAttachment> m_spotPointShadowAtlas = nullptr;
 
-  VkFramebuffer directionalShadowMapFramebuffer;
-  VkRenderPass shadowMapRenderPass;
+  VkFramebuffer m_directionalShadowMapFramebuffer;
+  VkRenderPass m_shadowMapRenderPass;
 
-  VkFramebuffer spotShadowMapFramebuffer;
+  VkFramebuffer m_spotShadowMapFramebuffer;
 
   struct AttachmentConfig
   {
@@ -49,17 +49,16 @@ private:
 
   // void createSpotRenderPass(std::array<AttachmentData, 16> attachmentData);
 
-  VkPipeline shadowMapPipeline;
-  VkPipelineLayout shadowMapPipelineLayout;
+  VkPipeline m_shadowMapPipeline;
+  VkPipelineLayout m_shadowMapPipelineLayout;
   void createShadowMapPipeline();
 
   // VkPipeline spotShadowMapPipeline;
   // VkPipelineLayout spotShadowMapPipelineLayout;
   // void createSpotShadowMapPipeline();
 
-  uint32_t directionalShadowmapSize;
-  uint32_t spotPointShadowmapSize;
+  uint32_t m_directionalShadowmapSize;
+  uint32_t m_spotPointShadowmapSize;
 
-  VulkanContext* vkContext;
+  VulkanContext* m_vkContext;
 };
-

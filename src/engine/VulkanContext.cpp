@@ -98,11 +98,11 @@ VulkanContext::~VulkanContext()
     vkDestroyDevice(logicalDevice, nullptr);
   }
 
-  if (enableValidationLayers && debugMessenger != VK_NULL_HANDLE) {
+  if (m_enableValidationLayers && m_debugMessenger != VK_NULL_HANDLE) {
     auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
       instance, "vkDestroyDebugUtilsMessengerEXT");
     if (func != nullptr) {
-      func(instance, debugMessenger, nullptr);
+      func(instance, m_debugMessenger, nullptr);
     }
   }
 
@@ -114,7 +114,7 @@ VulkanContext::~VulkanContext()
 void
 VulkanContext::createInstance()
 {
-  if (enableValidationLayers && !checkValidationLayerSupport()) {
+  if (m_enableValidationLayers && !checkValidationLayerSupport()) {
     std::cerr
       << "\n========================================\n"
       << "[FATAL ERROR]: Validation layers requested, but not available!\n"
@@ -150,10 +150,10 @@ VulkanContext::createInstance()
   createInfo.ppEnabledExtensionNames = extensions.data();
 
   VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
-  if (enableValidationLayers) {
+  if (m_enableValidationLayers) {
     createInfo.enabledLayerCount =
-      static_cast<uint32_t>(validationLayers.size());
-    createInfo.ppEnabledLayerNames = validationLayers.data();
+      static_cast<uint32_t>(m_validationLayers.size());
+    createInfo.ppEnabledLayerNames = m_validationLayers.data();
 
     populateDebugMessengerCreateInfo(debugCreateInfo);
     createInfo.pNext = &debugCreateInfo;
@@ -190,7 +190,7 @@ VulkanContext::getRequiredExtensions()
   std::vector<const char*> extensions(glfwExtensions,
                                       glfwExtensions + glfwExtensionCount);
 
-  if (enableValidationLayers) {
+  if (m_enableValidationLayers) {
     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
   }
 
@@ -206,7 +206,7 @@ VulkanContext::checkValidationLayerSupport()
   std::vector<VkLayerProperties> availableLayers(layerCount);
   vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
 
-  for (const char* layerName : validationLayers) {
+  for (const char* layerName : m_validationLayers) {
     bool layerFound = false;
 
     for (const auto& layerProperties : availableLayers) {
@@ -227,14 +227,14 @@ VulkanContext::checkValidationLayerSupport()
 void
 VulkanContext::setupDebugMessenger()
 {
-  if (!enableValidationLayers)
+  if (!m_enableValidationLayers)
     return;
 
   VkDebugUtilsMessengerCreateInfoEXT createInfo;
   populateDebugMessengerCreateInfo(createInfo);
 
   VK_CHECK(CreateDebugUtilsMessengerEXT(
-    instance, &createInfo, nullptr, &debugMessenger));
+    instance, &createInfo, nullptr, &m_debugMessenger));
 }
 
 VkResult
@@ -288,9 +288,9 @@ VulkanContext::selectPhysicalDevice(VkSurfaceKHR surface)
     std::abort();
   }
 
-  vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
-  vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
-  vkGetPhysicalDeviceMemoryProperties(physicalDevice, &deviceMemoryProperties);
+  vkGetPhysicalDeviceProperties(physicalDevice, &m_deviceProperties);
+  vkGetPhysicalDeviceFeatures(physicalDevice, &m_deviceFeatures);
+  vkGetPhysicalDeviceMemoryProperties(physicalDevice, &m_deviceMemoryProperties);
 }
 
 bool
@@ -333,8 +333,8 @@ VulkanContext::checkDeviceExtensionSupport(VkPhysicalDevice device)
   vkEnumerateDeviceExtensionProperties(
     device, nullptr, &extensionCount, availableExtensions.data());
 
-  std::set<std::string> requiredExtensions(deviceExtensions.begin(),
-                                           deviceExtensions.end());
+  std::set<std::string> requiredExtensions(m_deviceExtensions.begin(),
+                                           m_deviceExtensions.end());
 
   for (const auto& extension : availableExtensions) {
     requiredExtensions.erase(extension.extensionName);
@@ -371,13 +371,13 @@ VulkanContext::createLogicalDevice(VkSurfaceKHR)
     static_cast<uint32_t>(queueCreateInfos.size());
   createInfo.pQueueCreateInfos = queueCreateInfos.data();
   createInfo.enabledExtensionCount =
-    static_cast<uint32_t>(deviceExtensions.size());
-  createInfo.ppEnabledExtensionNames = deviceExtensions.data();
+    static_cast<uint32_t>(m_deviceExtensions.size());
+  createInfo.ppEnabledExtensionNames = m_deviceExtensions.data();
 
-  if (enableValidationLayers) {
+  if (m_enableValidationLayers) {
     createInfo.enabledLayerCount =
-      static_cast<uint32_t>(validationLayers.size());
-    createInfo.ppEnabledLayerNames = validationLayers.data();
+      static_cast<uint32_t>(m_validationLayers.size());
+    createInfo.ppEnabledLayerNames = m_validationLayers.data();
   } else {
     createInfo.enabledLayerCount = 0;
   }
@@ -630,7 +630,7 @@ VulkanContext::createSamplers()
   samplerInfo.compareEnable = VK_FALSE;
   samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
 
-  const float maxAnisotropy = deviceProperties.limits.maxSamplerAnisotropy;
+  const float maxAnisotropy = m_deviceProperties.limits.maxSamplerAnisotropy;
 
   // 1. LinearRepeat (Default for textures)
   {

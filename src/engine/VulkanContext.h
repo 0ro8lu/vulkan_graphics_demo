@@ -81,7 +81,7 @@ public:
   }
 
 private:
-  VkDebugUtilsMessengerEXT debugMessenger{ VK_NULL_HANDLE };
+  VkDebugUtilsMessengerEXT m_debugMessenger{ VK_NULL_HANDLE };
   void setupDebugMessenger();
 
   VkResult CreateDebugUtilsMessengerEXT(
@@ -95,33 +95,33 @@ private:
   bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface);
 
 #ifdef __APPLE__
-  const std::vector<const char*> deviceExtensions = {
+  const std::vector<const char*> m_deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     "VK_KHR_portability_subset"
   };
 #else
-  const std::vector<const char*> deviceExtensions = {
+  const std::vector<const char*> m_deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME
   };
 #endif
   bool checkDeviceExtensionSupport(VkPhysicalDevice device);
 
-  VkPhysicalDeviceProperties deviceProperties{};
-  VkPhysicalDeviceFeatures deviceFeatures{};
-  VkPhysicalDeviceMemoryProperties deviceMemoryProperties{};
+  VkPhysicalDeviceProperties m_deviceProperties{};
+  VkPhysicalDeviceFeatures m_deviceFeatures{};
+  VkPhysicalDeviceMemoryProperties m_deviceMemoryProperties{};
 
   void createLogicalDevice(VkSurfaceKHR surface);
   void createCommandPool();
   void createVMAAllocator();
 
-  const std::vector<const char*> validationLayers = {
+  const std::vector<const char*> m_validationLayers = {
     "VK_LAYER_KHRONOS_validation"
   };
 
 #ifdef NDEBUG
-  const bool enableValidationLayers = false;
+  const bool m_enableValidationLayers = false;
 #else
-  const bool enableValidationLayers = true;
+  const bool m_enableValidationLayers = true;
 #endif
   bool checkValidationLayerSupport();
 

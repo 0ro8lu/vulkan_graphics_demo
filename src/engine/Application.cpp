@@ -4,32 +4,10 @@
 #include "engine/Scene.h"
 #include "engine/VulkanCheck.h"
 
-#include <GLFW/glfw3.h>
-
-#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <format>
 #include <iostream>
-
-namespace {
-
-GameEvent
-pollGameEvents(GLFWwindow* window)
-{
-  return GameEvent{
-    .moveForward = glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS,
-    .moveBackward = glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS,
-    .moveLeft = glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS,
-    .moveRight = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS,
-    .lookUp = glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS,
-    .lookDown = glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS,
-    .lookLeft = glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS,
-    .lookRight = glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS,
-  };
-}
-
-} // namespace
 
 Application::Application(uint32_t width,
                          uint32_t height,
@@ -72,7 +50,7 @@ Application::Application(uint32_t width,
   int framebufferWidth, framebufferHeight;
   glfwGetFramebufferSize(m_window, &framebufferWidth, &framebufferHeight);
 
-  m_scene->camera->resizeCamera(framebufferWidth, framebufferHeight);
+  m_scene->m_camera->resizeCamera(framebufferWidth, framebufferHeight);
 }
 
 Application::~Application()
@@ -100,6 +78,8 @@ Application::run()
   int frameCount = 0;
   constexpr double fpsUpdateInterval = 1.0;
 
+  GameEvent gameEvents = {};
+
   while (!glfwWindowShouldClose(m_window)) {
     const auto frameStart = std::chrono::steady_clock::now();
     const std::chrono::duration<float> rawDelta = frameStart - lastFrameTime;
@@ -114,8 +94,8 @@ Application::run()
       glfwSetWindowShouldClose(m_window, GLFW_TRUE);
     }
 
-    const GameEvent events = pollGameEvents(m_window);
-    m_scene->update(deltaTime, events);
+    GameEvent::pollGameEvents(m_window, gameEvents);
+    m_scene->update(deltaTime, gameEvents);
     m_renderer->update(*m_scene);
     m_renderer->draw(*m_scene, m_window);
 

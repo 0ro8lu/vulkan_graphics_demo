@@ -18,7 +18,7 @@ VulkanSwapchain::framebufferResizeCallback(GLFWwindow* window, int, int)
 VulkanSwapchain::VulkanSwapchain(Key,
                                  VulkanContext* vkContext,
                                  GLFWwindow* window)
-  : vkContext(vkContext)
+  : m_vkContext(vkContext)
 {
   glfwGetFramebufferSize(window, &width, &height);
   glfwSetWindowUserPointer(window, this);
@@ -34,22 +34,22 @@ VulkanSwapchain::~VulkanSwapchain()
 {
   cleanSwapChain();
 
-  vkDestroySurfaceKHR(vkContext->instance, surface, nullptr);
+  vkDestroySurfaceKHR(m_vkContext->instance, m_surface, nullptr);
 
-  for (size_t i = 0; i < swapChainImages.size(); i++) {
+  for (size_t i = 0; i < m_swapChainImages.size(); i++) {
     vkDestroySemaphore(
-      vkContext->logicalDevice, m_imageAvailableSemaphores[i], nullptr);
+      m_vkContext->logicalDevice, m_imageAvailableSemaphores[i], nullptr);
     vkDestroySemaphore(
-      vkContext->logicalDevice, m_renderFinishedSemaphores[i], nullptr);
+      m_vkContext->logicalDevice, m_renderFinishedSemaphores[i], nullptr);
   }
-  vkDestroyFence(vkContext->logicalDevice, inFlightFence, nullptr);
+  vkDestroyFence(m_vkContext->logicalDevice, m_inFlightFence, nullptr);
 }
 
 void
 VulkanSwapchain::createSurface(GLFWwindow* window)
 {
   VK_CHECK(
-    glfwCreateWindowSurface(vkContext->instance, window, nullptr, &surface));
+    glfwCreateWindowSurface(m_vkContext->instance, window, nullptr, &m_surface));
 }
 
 SwapChainSupportDetails
@@ -58,25 +58,25 @@ VulkanSwapchain::querySwapChainSupport(VkPhysicalDevice device)
   SwapChainSupportDetails details;
 
   vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-    device, surface, &details.capabilities);
+    device, m_surface, &details.capabilities);
 
   uint32_t formatCount;
-  vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
+  vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, nullptr);
 
   if (formatCount != 0) {
     details.formats.resize(formatCount);
     vkGetPhysicalDeviceSurfaceFormatsKHR(
-      device, surface, &formatCount, details.formats.data());
+      device, m_surface, &formatCount, details.formats.data());
   }
 
   uint32_t presentModeCount;
   vkGetPhysicalDeviceSurfacePresentModesKHR(
-    device, surface, &presentModeCount, nullptr);
+    device, m_surface, &presentModeCount, nullptr);
 
   if (presentModeCount != 0) {
     details.presentModes.resize(presentModeCount);
     vkGetPhysicalDeviceSurfacePresentModesKHR(
-      device, surface, &presentModeCount, details.presentModes.data());
+      device, m_surface, &presentModeCount, details.presentModes.data());
   }
 
   return details;
@@ -85,10 +85,10 @@ VulkanSwapchain::querySwapChainSupport(VkPhysicalDevice device)
 void
 VulkanSwapchain::createSwapChainFrameBuffer()
 {
-  swapChainFramebuffers.resize(swapChainImageViews.size());
+  swapChainFramebuffers.resize(m_swapChainImageViews.size());
 
-  for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-    std::array<VkImageView, 1> attachments = { swapChainImageViews[i] };
+  for (size_t i = 0; i < m_swapChainImageViews.size(); i++) {
+    std::array<VkImageView, 1> attachments = { m_swapChainImageViews[i] };
 
     VkFramebufferCreateInfo framebufferInfo{};
     framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -99,7 +99,7 @@ VulkanSwapchain::createSwapChainFrameBuffer()
     framebufferInfo.height = swapChainExtent.height;
     framebufferInfo.layers = 1;
 
-    VK_CHECK(vkCreateFramebuffer(vkContext->logicalDevice,
+    VK_CHECK(vkCreateFramebuffer(m_vkContext->logicalDevice,
                                  &framebufferInfo,
                                  nullptr,
                                  &swapChainFramebuffers[i]));
@@ -111,23 +111,23 @@ VulkanSwapchain::createCommandBuffer()
 {
   VkCommandBufferAllocateInfo allocInfo{};
   allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  allocInfo.commandPool = vkContext->commandPool;
+  allocInfo.commandPool = m_vkContext->commandPool;
   allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   allocInfo.commandBufferCount = 1;
 
   VK_CHECK(vkAllocateCommandBuffers(
-    vkContext->logicalDevice, &allocInfo, &commandBuffer));
+    m_vkContext->logicalDevice, &allocInfo, &commandBuffer));
 }
 
 void
 VulkanSwapchain::prepareFrame(GLFWwindow* window)
 {
   vkWaitForFences(
-    vkContext->logicalDevice, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
+    m_vkContext->logicalDevice, 1, &m_inFlightFence, VK_TRUE, UINT64_MAX);
 
   VkResult result =
-    vkAcquireNextImageKHR(vkContext->logicalDevice,
-                          swapChain,
+    vkAcquireNextImageKHR(m_vkContext->logicalDevice,
+                          m_swapChain,
                           UINT64_MAX,
                           m_imageAvailableSemaphores[currentFrame],
                           VK_NULL_HANDLE,
@@ -141,7 +141,7 @@ VulkanSwapchain::prepareFrame(GLFWwindow* window)
     std::abort();
   }
 
-  vkResetFences(vkContext->logicalDevice, 1, &inFlightFence);
+  vkResetFences(m_vkContext->logicalDevice, 1, &m_inFlightFence);
   vkResetCommandBuffer(commandBuffer, 0);
 
   VkCommandBufferBeginInfo beginInfo{};
@@ -172,7 +172,7 @@ VulkanSwapchain::submitFrame(GLFWwindow* window)
   submitInfo.pSignalSemaphores = signalSemaphores;
 
   VK_CHECK(
-    vkQueueSubmit(vkContext->graphicsQueue, 1, &submitInfo, inFlightFence));
+    vkQueueSubmit(m_vkContext->graphicsQueue, 1, &submitInfo, m_inFlightFence));
 
   VkPresentInfoKHR presentInfo{};
   presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -180,16 +180,16 @@ VulkanSwapchain::submitFrame(GLFWwindow* window)
   presentInfo.waitSemaphoreCount = 1;
   presentInfo.pWaitSemaphores = signalSemaphores;
 
-  VkSwapchainKHR swapChains[] = { swapChain };
+  VkSwapchainKHR swapChains[] = { m_swapChain };
   presentInfo.swapchainCount = 1;
   presentInfo.pSwapchains = swapChains;
 
   presentInfo.pImageIndices = &imageIndex;
 
-  VkResult result = vkQueuePresentKHR(vkContext->presentQueue, &presentInfo);
+  VkResult result = vkQueuePresentKHR(m_vkContext->presentQueue, &presentInfo);
 
   if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
-      resized) {
+    resized) {
     resized = false;
     recreateSwapChain(window);
   } else if (result != VK_SUCCESS) {
@@ -204,7 +204,7 @@ void
 VulkanSwapchain::createVulkanSwapChain(GLFWwindow* window)
 {
   SwapChainSupportDetails swapChainSupport =
-    querySwapChainSupport(vkContext->physicalDevice);
+    querySwapChainSupport(m_vkContext->physicalDevice);
 
   VkSurfaceFormatKHR surfaceFormat =
     chooseSwapSurfaceFormat(swapChainSupport.formats);
@@ -220,7 +220,7 @@ VulkanSwapchain::createVulkanSwapChain(GLFWwindow* window)
 
   VkSwapchainCreateInfoKHR createInfo{};
   createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-  createInfo.surface = surface;
+  createInfo.surface = m_surface;
 
   createInfo.minImageCount = imageCount;
   createInfo.imageFormat = surfaceFormat.format;
@@ -229,7 +229,7 @@ VulkanSwapchain::createVulkanSwapChain(GLFWwindow* window)
   createInfo.imageArrayLayers = 1;
   createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-  QueueFamilyIndices indices = vkContext->queueFamilies;
+  QueueFamilyIndices indices = m_vkContext->queueFamilies;
   uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(),
                                     indices.presentFamily.value() };
 
@@ -247,23 +247,23 @@ VulkanSwapchain::createVulkanSwapChain(GLFWwindow* window)
   createInfo.clipped = VK_TRUE;
 
   VK_CHECK(vkCreateSwapchainKHR(
-    vkContext->logicalDevice, &createInfo, nullptr, &swapChain));
+    m_vkContext->logicalDevice, &createInfo, nullptr, &m_swapChain));
 
   vkGetSwapchainImagesKHR(
-    vkContext->logicalDevice, swapChain, &imageCount, nullptr);
-  swapChainImages.resize(imageCount);
+    m_vkContext->logicalDevice, m_swapChain, &imageCount, nullptr);
+  m_swapChainImages.resize(imageCount);
   vkGetSwapchainImagesKHR(
-    vkContext->logicalDevice, swapChain, &imageCount, swapChainImages.data());
+    m_vkContext->logicalDevice, m_swapChain, &imageCount, m_swapChainImages.data());
 
   swapChainImageFormat = surfaceFormat.format;
   swapChainExtent = extent;
 
   // finally create image views for swapchain
-  swapChainImageViews.resize(swapChainImages.size());
+  m_swapChainImageViews.resize(m_swapChainImages.size());
 
-  for (size_t i = 0; i < swapChainImages.size(); i++) {
-    swapChainImageViews[i] = vkContext->createImageView(
-      swapChainImages[i], swapChainImageFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT);
+  for (size_t i = 0; i < m_swapChainImages.size(); i++) {
+    m_swapChainImageViews[i] = m_vkContext->createImageView(
+      m_swapChainImages[i], swapChainImageFormat, 1, VK_IMAGE_ASPECT_COLOR_BIT);
   }
 
   // create depth resources
@@ -274,16 +274,16 @@ VulkanSwapchain::createVulkanSwapChain(GLFWwindow* window)
                         VK_IMAGE_TILING_OPTIMAL,
                         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-  depthImage =
-    vkContext->createImage(swapChainExtent.width,
-                           swapChainExtent.height,
-                           depthFormat,
-                           1,
-                           VK_IMAGE_TILING_OPTIMAL,
-                           VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                           depthAllocation);
-  depthImageView = vkContext->createImageView(
-    depthImage, depthFormat, 1, VK_IMAGE_ASPECT_DEPTH_BIT);
+  m_depthImage =
+    m_vkContext->createImage(swapChainExtent.width,
+                             swapChainExtent.height,
+                             depthFormat,
+                             1,
+                             VK_IMAGE_TILING_OPTIMAL,
+                             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                             m_depthAllocation);
+  depthImageView = m_vkContext->createImageView(
+    m_depthImage, depthFormat, 1, VK_IMAGE_ASPECT_DEPTH_BIT);
 }
 
 void
@@ -296,7 +296,7 @@ VulkanSwapchain::recreateSwapChain(GLFWwindow* window)
     glfwWaitEvents();
   }
 
-  vkDeviceWaitIdle(vkContext->logicalDevice);
+  vkDeviceWaitIdle(m_vkContext->logicalDevice);
   cleanSwapChain();
   createVulkanSwapChain(window);
   createSwapChainFrameBuffer();
@@ -308,17 +308,17 @@ void
 VulkanSwapchain::cleanSwapChain()
 {
   for (auto framebuffer : swapChainFramebuffers) {
-    vkDestroyFramebuffer(vkContext->logicalDevice, framebuffer, nullptr);
+    vkDestroyFramebuffer(m_vkContext->logicalDevice, framebuffer, nullptr);
   }
   // cleanup swapchain
-  for (auto imageView : swapChainImageViews) {
-    vkDestroyImageView(vkContext->logicalDevice, imageView, nullptr);
+  for (auto imageView : m_swapChainImageViews) {
+    vkDestroyImageView(m_vkContext->logicalDevice, imageView, nullptr);
   }
 
-  vkContext->destroyImageView(depthImageView);
-  vkContext->destroyImage(depthImage, depthAllocation);
+  m_vkContext->destroyImageView(depthImageView);
+  m_vkContext->destroyImage(m_depthImage, m_depthAllocation);
 
-  vkDestroySwapchainKHR(vkContext->logicalDevice, swapChain, nullptr);
+  vkDestroySwapchainKHR(m_vkContext->logicalDevice, m_swapChain, nullptr);
 }
 
 VkSurfaceFormatKHR
@@ -381,7 +381,7 @@ VulkanSwapchain::findSupportedFormat(const std::vector<VkFormat>& candidates,
   for (VkFormat format : candidates) {
     VkFormatProperties props;
     vkGetPhysicalDeviceFormatProperties(
-      vkContext->physicalDevice, format, &props);
+      m_vkContext->physicalDevice, format, &props);
 
     if (tiling == VK_IMAGE_TILING_LINEAR &&
         (props.linearTilingFeatures & features) == features) {
@@ -405,19 +405,19 @@ VulkanSwapchain::createSyncObjects()
   fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-  m_imageAvailableSemaphores.resize(swapChainImages.size());
-  m_renderFinishedSemaphores.resize(swapChainImages.size());
-  for (size_t i = 0; i < swapChainImages.size(); i++) {
-    VK_CHECK(vkCreateSemaphore(vkContext->logicalDevice,
+  m_imageAvailableSemaphores.resize(m_swapChainImages.size());
+  m_renderFinishedSemaphores.resize(m_swapChainImages.size());
+  for (size_t i = 0; i < m_swapChainImages.size(); i++) {
+    VK_CHECK(vkCreateSemaphore(m_vkContext->logicalDevice,
                                &semaphoreInfo,
                                nullptr,
                                &m_imageAvailableSemaphores[i]));
-    VK_CHECK(vkCreateSemaphore(vkContext->logicalDevice,
+    VK_CHECK(vkCreateSemaphore(m_vkContext->logicalDevice,
                                &semaphoreInfo,
                                nullptr,
                                &m_renderFinishedSemaphores[i]));
   }
 
   VK_CHECK(vkCreateFence(
-    vkContext->logicalDevice, &fenceInfo, nullptr, &inFlightFence));
+    m_vkContext->logicalDevice, &fenceInfo, nullptr, &m_inFlightFence));
 }

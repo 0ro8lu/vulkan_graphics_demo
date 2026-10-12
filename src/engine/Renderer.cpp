@@ -1,5 +1,5 @@
-#include "engine/VulkanCheck.h"
 #include "engine/Renderer.h"
+#include "engine/VulkanCheck.h"
 
 Renderer::Renderer(GLFWwindow* window)
 {
@@ -60,41 +60,41 @@ Renderer::waitIdle() const
 void
 Renderer::update(const Scene& scene)
 {
-  if (scene.spotLights.size() > MAX_SPOT_LIGHTS) {
+  if (scene.m_spotLights.size() > MAX_SPOT_LIGHTS) {
     ENGINE_DEBUG_BREAK();
     std::abort();
   }
 
-  if (scene.directionalLight.has_value()) {
+  if (scene.m_directionalLight.has_value()) {
     uint8_t* directionalMapped = reinterpret_cast<uint8_t*>(
       m_camLightShadowBundle.directionalLightBuffer.mapped);
 
     memcpy(directionalMapped,
-           &scene.directionalLight.value(),
+           &scene.m_directionalLight.value(),
            m_camLightShadowBundle.directionalLightBuffer.size);
   }
 
-  if (!scene.pointLights.empty()) {
+  if (!scene.m_pointLights.empty()) {
     uint8_t* pointMapped = reinterpret_cast<uint8_t*>(
       m_camLightShadowBundle.pointLightsBuffer.mapped);
     memcpy(pointMapped,
-           scene.pointLights.data(),
+           scene.m_pointLights.data(),
            m_camLightShadowBundle.pointLightsBuffer.size);
   }
 
-  if (!scene.spotLights.empty()) {
+  if (!scene.m_spotLights.empty()) {
     uint8_t* spotMapped = reinterpret_cast<uint8_t*>(
       m_camLightShadowBundle.spotLightsBuffer.mapped);
     memcpy(spotMapped,
-           scene.spotLights.data(),
+           scene.m_spotLights.data(),
            m_camLightShadowBundle.spotLightsBuffer.size);
   }
 
   CameraBuffer cb;
 
-  cb.view = scene.camera->getCameraMatrix();
-  cb.proj = scene.camera->getCameraProjectionMatrix();
-  cb.cameraPos = glm::vec4(scene.camera->getCameraPos(), 1);
+  cb.view = scene.m_camera->getCameraMatrix();
+  cb.proj = scene.m_camera->getCameraProjectionMatrix();
+  cb.cameraPos = glm::vec4(scene.m_camera->getCameraPos(), 1);
 
   memcpy(m_camLightShadowBundle.cameraBuffer.mapped, &cb, sizeof(CameraBuffer));
 }
@@ -148,14 +148,14 @@ Renderer::buildRenderGraph()
 
   m_hdrPass = std::make_unique<HDRPass>(m_vkContext, hdrAttachmentConfig);
 
-  m_hdrPass->updateDescriptors(m_blinnPhongPass->hdrAttachment);
+  m_hdrPass->updateDescriptors(m_blinnPhongPass->m_hdrAttachment);
 
   m_blinnPhongPass->updateDescriptors(
-    m_shadowMapPass->directionalShadowMap,
-    m_shadowMapPass->spotPointShadowAtlas,
+    m_shadowMapPass->m_directionalShadowMap,
+    m_shadowMapPass->m_spotPointShadowAtlas,
     m_camLightShadowBundle.shadowMapDescriptorSet);
 
-  m_vkSwapchain->drawingPass = m_hdrPass->presentationRenderPass;
+  m_vkSwapchain->drawingPass = m_hdrPass->m_presentationRenderPass;
 
   m_vkSwapchain->createSwapChainFrameBuffer();
   m_vkSwapchain->onResize = [this](int width, int height) {
@@ -164,6 +164,6 @@ Renderer::buildRenderGraph()
 
     m_hdrPass->recreateAttachments(width, height);
 
-    m_hdrPass->updateDescriptors(m_blinnPhongPass->hdrAttachment);
+    m_hdrPass->updateDescriptors(m_blinnPhongPass->m_hdrAttachment);
   };
 }

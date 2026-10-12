@@ -23,7 +23,7 @@ public:
                                    bool castsShadow);
 
 private:
-  static uint32_t currentShadowIndex;
-  const static uint32_t maximumAtlasTiles;
+  static uint32_t s_currentShadowIndex;
+  const static uint32_t s_maximumAtlasTiles;
 };
 

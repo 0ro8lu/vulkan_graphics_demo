@@ -29,6 +29,7 @@ public:
   Renderer& operator=(Renderer&&) = delete;
   Renderer(const Renderer&) = delete;
   Renderer& operator=(const Renderer&) = delete;
+
   VulkanContext* m_vkContext{ nullptr };
 
 private:
@@ -40,4 +41,3 @@ private:
   std::unique_ptr<BlinnPhongPass> m_blinnPhongPass;
   std::unique_ptr<HDRPass> m_hdrPass;
 };
-

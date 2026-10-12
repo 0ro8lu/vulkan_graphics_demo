@@ -1,5 +1,5 @@
-#include "engine/VulkanCheck.h"
 #include "engine/Passes/BlinnPhongPass.h"
+#include "engine/VulkanCheck.h"
 
 #include "engine/RenderUtils.h"
 #include "engine/Scene.h"
@@ -7,7 +7,7 @@
 BlinnPhongPass::BlinnPhongPass(VulkanContext* vkContext,
                                const AttachmentConfig& attachmentConfig,
                                const LayoutConfig& layoutConfig)
-  : vkContext(vkContext)
+  : m_vkContext(vkContext)
 {
   createAttachments(attachmentConfig.width, attachmentConfig.height);
 
@@ -20,21 +20,21 @@ BlinnPhongPass::BlinnPhongPass(VulkanContext* vkContext,
 
 BlinnPhongPass::~BlinnPhongPass()
 {
-  vkDestroyRenderPass(vkContext->logicalDevice, renderPass, nullptr);
+  vkDestroyRenderPass(m_vkContext->logicalDevice, m_renderPass, nullptr);
 
-  vkDestroyPipeline(vkContext->logicalDevice, blinnPhongPipeline, nullptr);
+  vkDestroyPipeline(m_vkContext->logicalDevice, m_blinnPhongPipeline, nullptr);
   vkDestroyPipelineLayout(
-    vkContext->logicalDevice, blinnPhongPipelineLayout, nullptr);
+    m_vkContext->logicalDevice, m_blinnPhongPipelineLayout, nullptr);
 
-  vkDestroyPipeline(vkContext->logicalDevice, skyboxPipeline, nullptr);
+  vkDestroyPipeline(m_vkContext->logicalDevice, m_skyboxPipeline, nullptr);
   vkDestroyPipelineLayout(
-    vkContext->logicalDevice, skyboxPipelineLayout, nullptr);
+    m_vkContext->logicalDevice, m_skyboxPipelineLayout, nullptr);
 
-  vkDestroyPipeline(vkContext->logicalDevice, lightCubesPipeline, nullptr);
+  vkDestroyPipeline(m_vkContext->logicalDevice, m_lightCubesPipeline, nullptr);
   vkDestroyPipelineLayout(
-    vkContext->logicalDevice, lightCubesPipelineLayout, nullptr);
+    m_vkContext->logicalDevice, m_lightCubesPipelineLayout, nullptr);
 
-  vkDestroyFramebuffer(vkContext->logicalDevice, hdrFramebuffer, nullptr);
+  vkDestroyFramebuffer(m_vkContext->logicalDevice, m_hdrFramebuffer, nullptr);
 }
 
 void
@@ -46,8 +46,8 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain,
 {
   VkRenderPassBeginInfo renderPassInfo{};
   renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-  renderPassInfo.renderPass = renderPass;
-  renderPassInfo.framebuffer = hdrFramebuffer;
+  renderPassInfo.renderPass = m_renderPass;
+  renderPassInfo.framebuffer = m_hdrFramebuffer;
   renderPassInfo.renderArea.offset = { 0, 0 };
   renderPassInfo.renderArea.extent = vkSwapchain->swapChainExtent;
 
@@ -64,7 +64,7 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain,
   // -------------------- bind main pipeline --------------------
   vkCmdBindPipeline(vkSwapchain->commandBuffer,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    blinnPhongPipeline);
+                    m_blinnPhongPipeline);
 
   VkViewport viewport{};
   viewport.x = 0.0f;
@@ -82,7 +82,7 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain,
 
   vkCmdBindDescriptorSets(vkSwapchain->commandBuffer,
                           VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          blinnPhongPipelineLayout,
+                          m_blinnPhongPipelineLayout,
                           0,
                           1,
                           &cameraUBODescriptorset,
@@ -91,7 +91,7 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain,
 
   vkCmdBindDescriptorSets(vkSwapchain->commandBuffer,
                           VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          blinnPhongPipelineLayout,
+                          m_blinnPhongPipelineLayout,
                           1,
                           1,
                           &lightsUBODescriptorset,
@@ -100,7 +100,7 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain,
 
   vkCmdBindDescriptorSets(vkSwapchain->commandBuffer,
                           VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          blinnPhongPipelineLayout,
+                          m_blinnPhongPipelineLayout,
                           3,
                           1,
                           &shadowMapDescriptorSet,
@@ -112,21 +112,21 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain,
     glm::mat4 model;
   };
 
-  for (auto& model : scene.models) {
+  for (auto& model : scene.m_models) {
 
-    VkBuffer vertexBuffers[] = { model.vertexBuffer };
+    VkBuffer vertexBuffers[] = { model.m_vertexBuffer };
     VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(
       vkSwapchain->commandBuffer, 0, 1, vertexBuffers, offsets);
 
     vkCmdBindIndexBuffer(
-      vkSwapchain->commandBuffer, model.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+      vkSwapchain->commandBuffer, model.m_indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
-    for (const auto& instance : model.meshInstances) {
+    for (const auto& instance : model.m_meshInstances) {
       PushConstant pc;
       pc.model = instance.transformation;
       vkCmdPushConstants(vkSwapchain->commandBuffer,
-                         blinnPhongPipelineLayout,
+                         m_blinnPhongPipelineLayout,
                          VK_SHADER_STAGE_VERTEX_BIT,
                          0,
                          sizeof(PushConstant),
@@ -134,17 +134,17 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain,
 
       vkCmdBindDescriptorSets(vkSwapchain->commandBuffer,
                               VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              blinnPhongPipelineLayout,
+                              m_blinnPhongPipelineLayout,
                               2,
                               1,
-                              &instance.mesh->descriptorSet,
+                              &instance.mesh->m_descriptorSet,
                               0,
                               nullptr);
 
       vkCmdDrawIndexed(vkSwapchain->commandBuffer,
-                       instance.mesh->indexCount,
+                       instance.mesh->m_indexCount,
                        1,
-                       instance.mesh->startIndex,
+                       instance.mesh->m_startIndex,
                        0,
                        0);
     }
@@ -153,14 +153,14 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain,
   // -------------------- bind lightCubes pipeline --------------------
   vkCmdBindPipeline(vkSwapchain->commandBuffer,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    lightCubesPipeline);
+                    m_lightCubesPipeline);
 
   vkCmdSetViewport(vkSwapchain->commandBuffer, 0, 1, &viewport);
   vkCmdSetScissor(vkSwapchain->commandBuffer, 0, 1, &scissor);
 
   vkCmdBindDescriptorSets(vkSwapchain->commandBuffer,
                           VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          lightCubesPipelineLayout,
+                          m_lightCubesPipelineLayout,
                           0,
                           1,
                           &cameraUBODescriptorset,
@@ -172,41 +172,41 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain,
     glm::vec4 lightColor;
   };
 
-  for (size_t i = 0; i < scene.lightCubes.size(); i++) {
-    VkBuffer vertexBuffers[] = { scene.lightCubes[i].vertexBuffer };
+  for (size_t i = 0; i < scene.m_lightCubes.size(); i++) {
+    VkBuffer vertexBuffers[] = { scene.m_lightCubes[i].m_vertexBuffer };
     VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(
       vkSwapchain->commandBuffer, 0, 1, vertexBuffers, offsets);
 
     vkCmdBindIndexBuffer(vkSwapchain->commandBuffer,
-                         scene.lightCubes[i].indexBuffer,
+                         scene.m_lightCubes[i].m_indexBuffer,
                          0,
                          VK_INDEX_TYPE_UINT32);
 
-    for (const auto& instance : scene.lightCubes[i].meshInstances) {
+    for (const auto& instance : scene.m_lightCubes[i].m_meshInstances) {
       PushConstant pc;
       pc.model = instance.transformation;
       vkCmdPushConstants(vkSwapchain->commandBuffer,
-                         lightCubesPipelineLayout,
+                         m_lightCubesPipelineLayout,
                          VK_SHADER_STAGE_VERTEX_BIT,
                          0,
                          64,
                          &pc);
 
       LightColor lightColor;
-      glm::vec3 color = scene.pointLights[i].getColor();
+      glm::vec3 color = scene.m_pointLights[i].getColor();
       lightColor.lightColor = glm::vec4(color, 1.0);
       vkCmdPushConstants(vkSwapchain->commandBuffer,
-                         lightCubesPipelineLayout,
+                         m_lightCubesPipelineLayout,
                          VK_SHADER_STAGE_FRAGMENT_BIT,
                          sizeof(PushConstant),
                          sizeof(LightColor),
                          &lightColor);
 
       vkCmdDrawIndexed(vkSwapchain->commandBuffer,
-                       instance.mesh->indexCount,
+                       instance.mesh->m_indexCount,
                        1,
-                       instance.mesh->startIndex,
+                       instance.mesh->m_startIndex,
                        0,
                        0);
     }
@@ -215,14 +215,14 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain,
   // -------------------- bind skybox pipeline --------------------
   vkCmdBindPipeline(vkSwapchain->commandBuffer,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    skyboxPipeline);
+                    m_skyboxPipeline);
 
   vkCmdSetViewport(vkSwapchain->commandBuffer, 0, 1, &viewport);
   vkCmdSetScissor(vkSwapchain->commandBuffer, 0, 1, &scissor);
 
   vkCmdBindDescriptorSets(vkSwapchain->commandBuffer,
                           VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          skyboxPipelineLayout,
+                          m_skyboxPipelineLayout,
                           0,
                           1,
                           &cameraUBODescriptorset,
@@ -231,37 +231,37 @@ BlinnPhongPass::draw(VulkanSwapchain* vkSwapchain,
 
   vkCmdBindDescriptorSets(vkSwapchain->commandBuffer,
                           VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          skyboxPipelineLayout,
+                          m_skyboxPipelineLayout,
                           1,
                           1,
-                          &scene.skybox->m_descriptorSet,
+                          &scene.m_skybox->m_descriptorSet,
                           0,
                           nullptr);
 
-  VkBuffer vertexBuffers[] = { scene.skybox->m_cube->vertexBuffer };
+  VkBuffer vertexBuffers[] = { scene.m_skybox->m_cube->m_vertexBuffer };
   VkDeviceSize offsets[] = { 0 };
   vkCmdBindVertexBuffers(
     vkSwapchain->commandBuffer, 0, 1, vertexBuffers, offsets);
 
   vkCmdBindIndexBuffer(vkSwapchain->commandBuffer,
-                       scene.skybox->m_cube->indexBuffer,
+                       scene.m_skybox->m_cube->m_indexBuffer,
                        0,
                        VK_INDEX_TYPE_UINT32);
 
-  for (const auto& instance : scene.skybox->m_cube->meshInstances) {
+  for (const auto& instance : scene.m_skybox->m_cube->m_meshInstances) {
     PushConstant pc;
     pc.model = instance.transformation;
     vkCmdPushConstants(vkSwapchain->commandBuffer,
-                       skyboxPipelineLayout,
+                       m_skyboxPipelineLayout,
                        VK_SHADER_STAGE_VERTEX_BIT,
                        0,
                        sizeof(PushConstant),
                        &pc);
 
     vkCmdDrawIndexed(vkSwapchain->commandBuffer,
-                     instance.mesh->indexCount,
+                     instance.mesh->m_indexCount,
                      1,
-                     instance.mesh->startIndex,
+                     instance.mesh->m_startIndex,
                      0,
                      0);
   }
@@ -274,8 +274,8 @@ BlinnPhongPass::recreateAttachments(int width,
                                     int height,
                                     VkImageView depthImageView)
 {
-  hdrAttachment->resize(width, height);
-  vkDestroyFramebuffer(vkContext->logicalDevice, hdrFramebuffer, nullptr);
+  m_hdrAttachment->resize(width, height);
+  vkDestroyFramebuffer(m_vkContext->logicalDevice, m_hdrFramebuffer, nullptr);
   createFrameBuffer(depthImageView);
 }
 
@@ -304,7 +304,7 @@ BlinnPhongPass::updateDescriptors(
     descriptorWrites[0].descriptorCount = 1;
     descriptorWrites[0].pImageInfo = &shadowMapImageInfo;
 
-    vkUpdateDescriptorSets(vkContext->logicalDevice,
+    vkUpdateDescriptorSets(m_vkContext->logicalDevice,
                            static_cast<uint32_t>(descriptorWrites.size()),
                            descriptorWrites.data(),
                            0,
@@ -329,7 +329,7 @@ BlinnPhongPass::updateDescriptors(
     descriptorWrites[0].descriptorCount = 1;
     descriptorWrites[0].pImageInfo = &shadowAtlasImageInfo;
 
-    vkUpdateDescriptorSets(vkContext->logicalDevice,
+    vkUpdateDescriptorSets(m_vkContext->logicalDevice,
                            static_cast<uint32_t>(descriptorWrites.size()),
                            descriptorWrites.data(),
                            0,
@@ -340,20 +340,20 @@ BlinnPhongPass::updateDescriptors(
 void
 BlinnPhongPass::createFrameBuffer(VkImageView depthImageView)
 {
-  std::array<VkImageView, 2> attachments = { hdrAttachment->getView(),
+  std::array<VkImageView, 2> attachments = { m_hdrAttachment->getView(),
                                              depthImageView };
 
   VkFramebufferCreateInfo framebufferInfo{};
   framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-  framebufferInfo.renderPass = renderPass;
+  framebufferInfo.renderPass = m_renderPass;
   framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
   framebufferInfo.pAttachments = attachments.data();
-  framebufferInfo.width = hdrAttachment->getWidth();
-  framebufferInfo.height = hdrAttachment->getHeight();
+  framebufferInfo.width = m_hdrAttachment->getWidth();
+  framebufferInfo.height = m_hdrAttachment->getHeight();
   framebufferInfo.layers = 1;
 
   VK_CHECK(vkCreateFramebuffer(
-        vkContext->logicalDevice, &framebufferInfo, nullptr, &hdrFramebuffer));
+    m_vkContext->logicalDevice, &framebufferInfo, nullptr, &m_hdrFramebuffer));
 }
 
 void
@@ -366,8 +366,8 @@ BlinnPhongPass::createAttachments(uint32_t width, uint32_t height)
   hdrInfo.layerCount = 1;
   hdrInfo.usage =
     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-  hdrInfo.vkContext = vkContext;
-  hdrAttachment = FramebufferAttachment::create(hdrInfo);
+  hdrInfo.vkContext = m_vkContext;
+  m_hdrAttachment = FramebufferAttachment::create(hdrInfo);
 }
 
 void
@@ -375,7 +375,7 @@ BlinnPhongPass::createRenderPass(VkFormat depthFormat)
 {
   // attachment for HDR
   VkAttachmentDescription hdrAttachmentDescription{};
-  hdrAttachmentDescription.format = hdrAttachment->getFormat();
+  hdrAttachmentDescription.format = m_hdrAttachment->getFormat();
   hdrAttachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
   hdrAttachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
   hdrAttachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -436,7 +436,7 @@ BlinnPhongPass::createRenderPass(VkFormat depthFormat)
   renderPassInfo.pDependencies = &dependency;
 
   VK_CHECK(vkCreateRenderPass(
-        vkContext->logicalDevice, &renderPassInfo, nullptr, &renderPass));
+    m_vkContext->logicalDevice, &renderPassInfo, nullptr, &m_renderPass));
 }
 
 void
@@ -453,15 +453,15 @@ BlinnPhongPass::createPipelines(const LayoutConfig& layoutConfig)
     config.vertShaderName = "texture_vert.spv";
     config.fragShaderName = "texture_frag.spv";
     config.descriptorSetLayouts = { layoutConfig.cameraLayout,
-                                    layoutConfig.lightsLayout,
-                                    Model::textureLayout,
-                                    layoutConfig.directionalShadowmapLayout };
+                                     layoutConfig.lightsLayout,
+                                     Model::s_textureLayout,
+                                     layoutConfig.directionalShadowmapLayout };
     config.pushConstantRanges = { modelPC };
-    config.renderPass = renderPass;
+    config.renderPass = m_renderPass;
 
-    auto result = createPipeline(vkContext, config);
-    blinnPhongPipeline = result.pipeline;
-    blinnPhongPipelineLayout = result.layout;
+    auto result = createPipeline(m_vkContext, config);
+    m_blinnPhongPipeline = result.pipeline;
+    m_blinnPhongPipelineLayout = result.layout;
   }
 
   // Skybox pipeline
@@ -475,12 +475,12 @@ BlinnPhongPass::createPipelines(const LayoutConfig& layoutConfig)
     config.descriptorSetLayouts = { layoutConfig.cameraLayout,
                                     Skybox::s_skyboxLayout };
     config.pushConstantRanges = { modelPC };
-    config.renderPass = renderPass;
+    config.renderPass = m_renderPass;
     config.subpass = 0;
 
-    auto result = createPipeline(vkContext, config);
-    skyboxPipeline = result.pipeline;
-    skyboxPipelineLayout = result.layout;
+    auto result = createPipeline(m_vkContext, config);
+    m_skyboxPipeline = result.pipeline;
+    m_skyboxPipelineLayout = result.layout;
   }
 
   // Light cubes pipeline
@@ -496,11 +496,11 @@ BlinnPhongPass::createPipelines(const LayoutConfig& layoutConfig)
 
     config.descriptorSetLayouts = { layoutConfig.cameraLayout };
     config.pushConstantRanges = { modelPC, colorPC };
-    config.renderPass = renderPass;
+    config.renderPass = m_renderPass;
     config.subpass = 0;
 
-    auto result = createPipeline(vkContext, config);
-    lightCubesPipeline = result.pipeline;
-    lightCubesPipelineLayout = result.layout;
+    auto result = createPipeline(m_vkContext, config);
+    m_lightCubesPipeline = result.pipeline;
+    m_lightCubesPipelineLayout = result.layout;
   }
 }

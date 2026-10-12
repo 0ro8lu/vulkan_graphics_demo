@@ -10,23 +10,23 @@
 #include <memory>
 #include <optional>
 
-class Scene
+class Scene final
 {
 public:
   Scene(VulkanContext* vkContext);
   ~Scene();
 
-  void update(float deltaTime, GameEvent events);
+  void update(float deltaTime, const GameEvent& events) noexcept;
 
-  std::vector<Model> models;
-  std::vector<Model> lightCubes;
+  std::vector<Model> m_models;
+  std::vector<Model> m_lightCubes;
 
-  std::unique_ptr<Skybox> skybox;
-  std::unique_ptr<Camera3D> camera;
+  std::unique_ptr<Skybox> m_skybox;
+  std::unique_ptr<Camera3D> m_camera;
 
-  std::vector<PointLight> pointLights;
-  std::optional<DirectionalLight> directionalLight;
-  std::vector<SpotLight> spotLights;
+  std::vector<PointLight> m_pointLights;
+  std::optional<DirectionalLight> m_directionalLight;
+  std::vector<SpotLight> m_spotLights;
 
   Scene(Scene&&) = delete;
   Scene& operator=(Scene&&) = delete;
@@ -34,5 +34,5 @@ public:
   Scene& operator=(const Scene&) = delete;
 
 private:
-  VulkanContext* vkContext;
+  VulkanContext* m_vkContext;
 };

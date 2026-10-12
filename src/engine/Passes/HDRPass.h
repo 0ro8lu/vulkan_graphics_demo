@@ -25,13 +25,13 @@ public:
   void updateDescriptors(
     const std::unique_ptr<FramebufferAttachment>& blinnPhongAttachment);
 
-  std::unique_ptr<FramebufferAttachment> brightSpotsAttachment;
-  std::unique_ptr<FramebufferAttachment> intermediateBloomAttachment;
+  std::unique_ptr<FramebufferAttachment> m_brightSpotsAttachment;
+  std::unique_ptr<FramebufferAttachment> m_intermediateBloomAttachment;
 
-  VkFramebuffer bloomFramebuffer;
+  VkFramebuffer m_bloomFramebuffer;
 
-  VkRenderPass bloomRenderPass;
-  VkRenderPass presentationRenderPass;
+  VkRenderPass m_bloomRenderPass;
+  VkRenderPass m_presentationRenderPass;
 
   struct AttachmentConfig
   {
@@ -46,25 +46,25 @@ private:
 
   void createRenderPass(VkFormat swapchainImageFormat);
 
-  VkDescriptorPool mainDescriptorPool;
-  VkDescriptorSetLayout bloomDescriptorSetLayout;
-  VkDescriptorSet brightPointDescriptorSet;
-  VkDescriptorSet horizontalBloomDescriptorSet;
-  VkDescriptorSet verticalBloomDescriptorSet;
+  VkDescriptorPool m_mainDescriptorPool;
+  VkDescriptorSetLayout m_bloomDescriptorSetLayout;
+  VkDescriptorSet m_brightPointDescriptorSet;
+  VkDescriptorSet m_horizontalBloomDescriptorSet;
+  VkDescriptorSet m_verticalBloomDescriptorSet;
   void createDescriptors();
 
-  VkPipeline brightPointExtractionPipeline;
-  VkPipelineLayout brightPointExtractionPipelineLayout;
+  VkPipeline m_brightPointExtractionPipeline;
+  VkPipelineLayout m_brightPointExtractionPipelineLayout;
 
-  VkPipeline horizontalBloomPipeline;
-  VkPipelineLayout horizontalBloomPipelineLayout;
+  VkPipeline m_horizontalBloomPipeline;
+  VkPipelineLayout m_horizontalBloomPipelineLayout;
 
-  VkPipeline verticalBloomPipeline;
-  VkPipelineLayout verticalBloomPipelineLayout;
+  VkPipeline m_verticalBloomPipeline;
+  VkPipelineLayout m_verticalBloomPipelineLayout;
 
-  VkPipeline compositionPipeline;
-  VkPipelineLayout compositionPipelineLayout;
+  VkPipeline m_compositionPipeline;
+  VkPipelineLayout m_compositionPipelineLayout;
   void createPipelines();
 
-  VulkanContext* vkContext;
+  VulkanContext* m_vkContext;
 };

@@ -9,11 +9,11 @@ Mesh::Mesh(VulkanContext* vkContext,
            size_t startIndex,
            Texture&& diffuseTexture,
            Texture&& specularTexture)
-  : diffuseTexture(std::move(diffuseTexture))
-  , specularTexture(std::move(specularTexture))
-  , indexCount(indexCount)
-  , startIndex(startIndex)
-  , vkContext(vkContext)
+  : m_diffuseTexture(std::move(diffuseTexture))
+  , m_specularTexture(std::move(specularTexture))
+  , m_indexCount(indexCount)
+  , m_startIndex(startIndex)
+  , m_vkContext(vkContext)
 {
 }
 
@@ -30,22 +30,22 @@ Mesh::createDescriptorSet(VkDescriptorPool descriptorPool,
   allocInfo.pSetLayouts = &descriptorLayout;
 
   VK_CHECK(vkAllocateDescriptorSets(
-    vkContext->logicalDevice, &allocInfo, &descriptorSet));
+    m_vkContext->logicalDevice, &allocInfo, &m_descriptorSet));
 
   VkDescriptorImageInfo diffuseImageInfo{};
   diffuseImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-  diffuseImageInfo.imageView = diffuseTexture.view;
-  diffuseImageInfo.sampler = diffuseTexture.sampler;
+  diffuseImageInfo.imageView = m_diffuseTexture.m_view;
+  diffuseImageInfo.sampler = m_diffuseTexture.m_sampler;
 
   VkDescriptorImageInfo specularImageInfo{};
   specularImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-  specularImageInfo.imageView = specularTexture.view;
-  specularImageInfo.sampler = specularTexture.sampler;
+  specularImageInfo.imageView = m_specularTexture.m_view;
+  specularImageInfo.sampler = m_specularTexture.m_sampler;
 
   std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
 
   descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  descriptorWrites[0].dstSet = descriptorSet;
+  descriptorWrites[0].dstSet = m_descriptorSet;
   descriptorWrites[0].dstBinding = 0;
   descriptorWrites[0].dstArrayElement = 0;
   descriptorWrites[0].descriptorType =
@@ -54,7 +54,7 @@ Mesh::createDescriptorSet(VkDescriptorPool descriptorPool,
   descriptorWrites[0].pImageInfo = &diffuseImageInfo;
 
   descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  descriptorWrites[1].dstSet = descriptorSet;
+  descriptorWrites[1].dstSet = m_descriptorSet;
   descriptorWrites[1].dstBinding = 1;
   descriptorWrites[1].dstArrayElement = 0;
   descriptorWrites[1].descriptorType =
@@ -62,7 +62,7 @@ Mesh::createDescriptorSet(VkDescriptorPool descriptorPool,
   descriptorWrites[1].descriptorCount = 1;
   descriptorWrites[1].pImageInfo = &specularImageInfo;
 
-  vkUpdateDescriptorSets(vkContext->logicalDevice,
+  vkUpdateDescriptorSets(m_vkContext->logicalDevice,
                          static_cast<uint32_t>(descriptorWrites.size()),
                          descriptorWrites.data(),
                          0,

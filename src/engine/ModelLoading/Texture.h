@@ -17,17 +17,17 @@ public:
   // Move constructor
   Texture(Texture&& other) noexcept
   {
-    view = other.view;
-    sampler = other.sampler;
-    image = other.image;
-    allocation = other.allocation;
-    vkContext = other.vkContext;
+    m_view = other.m_view;
+    m_sampler = other.m_sampler;
+    m_image = other.m_image;
+    m_allocation = other.m_allocation;
+    m_vkContext = other.m_vkContext;
 
-    other.view = VK_NULL_HANDLE;
-    other.sampler = VK_NULL_HANDLE;
-    other.image = VK_NULL_HANDLE;
-    other.allocation = VK_NULL_HANDLE;
-    other.vkContext = nullptr;
+    other.m_view = VK_NULL_HANDLE;
+    other.m_sampler = VK_NULL_HANDLE;
+    other.m_image = VK_NULL_HANDLE;
+    other.m_allocation = VK_NULL_HANDLE;
+    other.m_vkContext = nullptr;
   }
 
   // Move assignment operator
@@ -36,31 +36,31 @@ public:
     if (this != &other) {
       cleanup();
 
-      view = other.view;
-      sampler = other.sampler;
-      image = other.image;
-      allocation = other.allocation;
-      vkContext = other.vkContext;
+      m_view = other.m_view;
+      m_sampler = other.m_sampler;
+      m_image = other.m_image;
+      m_allocation = other.m_allocation;
+      m_vkContext = other.m_vkContext;
 
-      other.view = VK_NULL_HANDLE;
-      other.sampler = VK_NULL_HANDLE;
-      other.image = VK_NULL_HANDLE;
-      other.allocation = VK_NULL_HANDLE;
-      other.vkContext = nullptr;
+      other.m_view = VK_NULL_HANDLE;
+      other.m_sampler = VK_NULL_HANDLE;
+      other.m_image = VK_NULL_HANDLE;
+      other.m_allocation = VK_NULL_HANDLE;
+      other.m_vkContext = nullptr;
     }
     return *this;
   }
 
   ~Texture();
 
-  VkImageView view = VK_NULL_HANDLE;
-  VkSampler sampler = VK_NULL_HANDLE;
+  VkImageView m_view = VK_NULL_HANDLE;
+  VkSampler m_sampler = VK_NULL_HANDLE;
 
 private:
-  VkImage image = VK_NULL_HANDLE;
-  VmaAllocation allocation = VK_NULL_HANDLE;
+  VkImage m_image = VK_NULL_HANDLE;
+  VmaAllocation m_allocation = VK_NULL_HANDLE;
 
-  VulkanContext* vkContext;
+  VulkanContext* m_vkContext;
 
   void cleanup();
 

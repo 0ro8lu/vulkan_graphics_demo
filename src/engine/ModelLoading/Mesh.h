@@ -23,16 +23,16 @@ public:
 
   // probably embed this into a Material object and add normal mapping and other
   // fancy textures.
-  Texture diffuseTexture;
-  Texture specularTexture;
+  Texture m_diffuseTexture;
+  Texture m_specularTexture;
 
   void createDescriptorSet(VkDescriptorPool descriptorPool,
                            VkDescriptorSetLayout descriptorLayout);
 
-  VkDescriptorSet descriptorSet;
-  size_t indexCount;
-  size_t startIndex;
+  VkDescriptorSet m_descriptorSet;
+  size_t m_indexCount;
+  size_t m_startIndex;
 
 private:
-  VulkanContext* vkContext;
+  VulkanContext* m_vkContext;
 };

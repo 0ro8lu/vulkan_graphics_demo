@@ -5,8 +5,8 @@
 
 #include <iostream>
 
-uint32_t LightManager::currentShadowIndex = 0;
-const uint32_t LightManager::maximumAtlasTiles =
+uint32_t LightManager::s_currentShadowIndex = 0;
+const uint32_t LightManager::s_maximumAtlasTiles =
   SPOT_POINT_ATLAS_TILES * SPOT_POINT_ATLAS_TILES;
 
 DirectionalLight
@@ -23,11 +23,11 @@ LightManager::createPointLight(glm::vec3 position,
                                bool castsShadow)
 {
   if (castsShadow) {
-    if (currentShadowIndex + 6 <= maximumAtlasTiles) {
-      currentShadowIndex += 6;
+    if (s_currentShadowIndex + 6 <= s_maximumAtlasTiles) {
+      s_currentShadowIndex += 6;
     } else {
       std::cout << "Out of available slots for shadow maps "
-                << maximumAtlasTiles
+                << s_maximumAtlasTiles
                 << " disabling light's shadow casting capabilities"
                 << std::endl;
       castsShadow = false;
@@ -35,7 +35,7 @@ LightManager::createPointLight(glm::vec3 position,
   }
 
   auto pointLight =
-    PointLight(position, color, currentShadowIndex - 6, castsShadow);
+    PointLight(position, color, s_currentShadowIndex - 6, castsShadow);
 
   return pointLight;
 }
@@ -50,11 +50,11 @@ LightManager::createSpotLight(glm::vec3 position,
 {
 
   if (castsShadow) {
-    if (currentShadowIndex + 1 <= maximumAtlasTiles) {
-      currentShadowIndex += 1;
+    if (s_currentShadowIndex + 1 <= s_maximumAtlasTiles) {
+      s_currentShadowIndex += 1;
     } else {
       std::cout << "Out of available slots for shadow maps "
-                << maximumAtlasTiles
+                << s_maximumAtlasTiles
                 << " disabling light's shadow casting capabilities"
                 << std::endl;
       castsShadow = false;
@@ -66,7 +66,7 @@ LightManager::createSpotLight(glm::vec3 position,
                              color,
                              innerCutoff,
                              outerCutoff,
-                             currentShadowIndex - 1,
+                             s_currentShadowIndex - 1,
                              castsShadow);
 
   return spotLight;

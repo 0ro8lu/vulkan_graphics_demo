@@ -3,16 +3,16 @@
 #include <stb_image.h>
 
 Texture::Texture()
-  : vkContext(nullptr)
+  : m_vkContext(nullptr)
 {
-  image = VK_NULL_HANDLE;
-  view = VK_NULL_HANDLE;
-  sampler = VK_NULL_HANDLE;
+  m_image = VK_NULL_HANDLE;
+  m_view = VK_NULL_HANDLE;
+  m_sampler = VK_NULL_HANDLE;
 }
 
 Texture::Texture(VulkanContext* vkContext, unsigned char* data, size_t size)
 {
-  this->vkContext = vkContext;
+  this->m_vkContext = vkContext;
 
   int texWidth, texHeight, texChannels;
 
@@ -28,14 +28,14 @@ Texture::Texture(VulkanContext* vkContext, unsigned char* data, size_t size)
   stbi_image_free(pixels);
 
   // Create the image view and sampler.
-  view = vkContext->createImageView(
-    image, VK_FORMAT_R8G8B8A8_SRGB, 1, VK_IMAGE_ASPECT_COLOR_BIT);
-  sampler = vkContext->getSampler(SamplerType::LinearRepeat);
+  m_view = vkContext->createImageView(
+    m_image, VK_FORMAT_R8G8B8A8_SRGB, 1, VK_IMAGE_ASPECT_COLOR_BIT);
+  m_sampler = vkContext->getSampler(SamplerType::LinearRepeat);
 }
 
 Texture::Texture(VulkanContext* vkContext, std::string filePath)
 {
-  this->vkContext = vkContext;
+  this->m_vkContext = vkContext;
 
   int texWidth, texHeight, texChannels;
 
@@ -50,10 +50,10 @@ Texture::Texture(VulkanContext* vkContext, std::string filePath)
 
   stbi_image_free(pixels);
 
-  view = vkContext->createImageView(
-    image, VK_FORMAT_R8G8B8A8_SRGB, 1, VK_IMAGE_ASPECT_COLOR_BIT);
+  m_view = vkContext->createImageView(
+    m_image, VK_FORMAT_R8G8B8A8_SRGB, 1, VK_IMAGE_ASPECT_COLOR_BIT);
 
-  sampler = vkContext->getSampler(SamplerType::LinearRepeat);
+  m_sampler = vkContext->getSampler(SamplerType::LinearRepeat);
 }
 
 Texture::~Texture()
@@ -72,36 +72,36 @@ Texture::createTextureImageFromPixels(unsigned char* pixels,
   VkBuffer stagingBuffer;
   VmaAllocation stagingBufferAllocation;
 
-  void* data = vkContext->createBuffer(imageSize,
-                                       VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                       BufferType::STAGING_BUFFER,
-                                       stagingBuffer,
-                                       stagingBufferAllocation);
+  void* data = m_vkContext->createBuffer(imageSize,
+                                         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                         BufferType::STAGING_BUFFER,
+                                         stagingBuffer,
+                                         stagingBufferAllocation);
 
   memcpy(data, pixels, static_cast<size_t>(imageSize));
 
   // Create the Vulkan image
-  image = vkContext->createImage(texWidth,
-                                 texHeight,
-                                 VK_FORMAT_R8G8B8A8_SRGB,
-                                 1,
-                                 VK_IMAGE_TILING_OPTIMAL,
-                                 VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                                   VK_IMAGE_USAGE_SAMPLED_BIT,
-                                 allocation);
+  m_image = m_vkContext->createImage(texWidth,
+                                     texHeight,
+                                     VK_FORMAT_R8G8B8A8_SRGB,
+                                     1,
+                                     VK_IMAGE_TILING_OPTIMAL,
+                                     VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                                       VK_IMAGE_USAGE_SAMPLED_BIT,
+                                     m_allocation);
 
   // Copy data from staging buffer to image
   transitionImageLayout(
-    image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    m_image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
   copyBufferToImage(stagingBuffer,
-                    image,
+                    m_image,
                     static_cast<uint32_t>(texWidth),
                     static_cast<uint32_t>(texHeight));
-  transitionImageLayout(image,
+  transitionImageLayout(m_image,
                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-  vkContext->destroyBuffer(stagingBuffer, stagingBufferAllocation);
+  m_vkContext->destroyBuffer(stagingBuffer, stagingBufferAllocation);
 }
 
 void
@@ -109,7 +109,7 @@ Texture::transitionImageLayout(VkImage image,
                                VkImageLayout oldLayout,
                                VkImageLayout newLayout)
 {
-  VkCommandBuffer commandBuffer = vkContext->beginSingleTimeCommands();
+  VkCommandBuffer commandBuffer = m_vkContext->beginSingleTimeCommands();
 
   // -------------------- TRANSITION LAYOUT --------------------
   VkImageMemoryBarrier barrier{};
@@ -158,7 +158,7 @@ Texture::transitionImageLayout(VkImage image,
                        1,
                        &barrier);
 
-  vkContext->endSingleTimeCommands(commandBuffer);
+  m_vkContext->endSingleTimeCommands(commandBuffer);
 }
 
 void
@@ -167,7 +167,7 @@ Texture::copyBufferToImage(VkBuffer buffer,
                            uint32_t width,
                            uint32_t height)
 {
-  VkCommandBuffer commandBuffer = vkContext->beginSingleTimeCommands();
+  VkCommandBuffer commandBuffer = m_vkContext->beginSingleTimeCommands();
 
   VkBufferImageCopy region{};
   region.bufferOffset = 0;
@@ -187,21 +187,21 @@ Texture::copyBufferToImage(VkBuffer buffer,
                          1,
                          &region);
 
-  vkContext->endSingleTimeCommands(commandBuffer);
+  m_vkContext->endSingleTimeCommands(commandBuffer);
 }
 
 void
 Texture::cleanup()
 {
-  if (view != VK_NULL_HANDLE && sampler != VK_NULL_HANDLE &&
-      image != VK_NULL_HANDLE) {
-    vkContext->destroyImageView(view);
-    vkContext->destroyImage(image, allocation);
+  if (m_view != VK_NULL_HANDLE && m_sampler != VK_NULL_HANDLE &&
+      m_image != VK_NULL_HANDLE) {
+    m_vkContext->destroyImageView(m_view);
+    m_vkContext->destroyImage(m_image, m_allocation);
 
-    view = VK_NULL_HANDLE;
-    sampler = VK_NULL_HANDLE;
-    image = VK_NULL_HANDLE;
-    allocation = VK_NULL_HANDLE;
-    vkContext = nullptr;
+    m_view = VK_NULL_HANDLE;
+    m_sampler = VK_NULL_HANDLE;
+    m_image = VK_NULL_HANDLE;
+    m_allocation = VK_NULL_HANDLE;
+    m_vkContext = nullptr;
   }
 }

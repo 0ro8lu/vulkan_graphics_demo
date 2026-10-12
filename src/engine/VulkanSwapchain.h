@@ -56,19 +56,19 @@ private:
   static void framebufferResizeCallback(GLFWwindow* window,
                                         int width,
                                         int height);
-  VulkanContext* vkContext;
+  VulkanContext* m_vkContext;
 
-  VkSurfaceKHR surface;
+  VkSurfaceKHR m_surface;
   void createSurface(GLFWwindow* window);
 
   SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
 
-  VkImage depthImage;
-  VmaAllocation depthAllocation;
+  VkImage m_depthImage;
+  VmaAllocation m_depthAllocation;
 
-  VkSwapchainKHR swapChain;
-  std::vector<VkImage> swapChainImages;
-  std::vector<VkImageView> swapChainImageViews;
+  VkSwapchainKHR m_swapChain;
+  std::vector<VkImage> m_swapChainImages;
+  std::vector<VkImageView> m_swapChainImageViews;
   void createVulkanSwapChain(GLFWwindow* window);
   void cleanSwapChain();
 
@@ -85,7 +85,7 @@ private:
 
   std::vector<VkSemaphore> m_imageAvailableSemaphores;
   std::vector<VkSemaphore> m_renderFinishedSemaphores;
-  VkFence inFlightFence;
+  VkFence m_inFlightFence;
   void createSyncObjects();
 };
 
