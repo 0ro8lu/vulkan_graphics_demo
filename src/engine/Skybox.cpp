@@ -48,15 +48,11 @@ Skybox::Skybox(VulkanContext* vkContext, std::span<const std::string, 6> filePat
 
   const VkDeviceSize imageSize = static_cast<VkDeviceSize>(texWidth) * texHeight * 4;
 
-  VkBuffer stagingBuffer;
-  VmaAllocation stagingBufferAllocation;
-
-  char* data =
-    static_cast<char*>(m_vkContext->createBuffer(imageSize * 6,
-                                                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                                 BufferType::STAGING_BUFFER,
-                                                 stagingBuffer,
-                                                 stagingBufferAllocation));
+  VulkanBuffer stagingBuffer = m_vkContext->createBuffer(
+    imageSize * 6,
+    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+    BufferType::STAGING_BUFFER);
+  char* data = static_cast<char*>(stagingBuffer.mapped);
 
   std::array<size_t, 6> byteOffsets{};
   for (size_t i = 0; i < 6; ++i) {
@@ -101,7 +97,7 @@ Skybox::Skybox(VulkanContext* vkContext, std::span<const std::string, 6> filePat
   // -------------------- CREATE SAMPLER --------------------
   m_sampler = m_vkContext->getSampler(SamplerType::LinearClampToEdge);
 
-  m_vkContext->destroyBuffer(stagingBuffer, stagingBufferAllocation);
+  m_vkContext->destroyBuffer(stagingBuffer);
 
   setupDescriptors();
 }

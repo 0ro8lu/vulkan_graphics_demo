@@ -1,9 +1,8 @@
 #pragma once
 
 #include "engine/FramebufferAttachment.h"
-#include "engine/VulkanSwapchain.h"
 
-class Scene;
+struct SceneRenderData;
 
 #include <memory>
 
@@ -23,8 +22,9 @@ public:
   BlinnPhongPass& operator=(const BlinnPhongPass&) = delete;
   BlinnPhongPass& operator=(BlinnPhongPass&&) = delete;
 
-  void draw(VulkanSwapchain* vkSwapchain,
-            const Scene& scene,
+  void draw(VkCommandBuffer commandBuffer,
+            VkExtent2D extent,
+            const SceneRenderData& scene,
             VkDescriptorSet cameraUBODescriptorset,
             VkDescriptorSet lightsUBODescriptorset,
             VkDescriptorSet shadowMapDescriptorSet);

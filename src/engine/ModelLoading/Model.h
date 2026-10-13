@@ -1,8 +1,8 @@
 #pragma once
 
 #include "engine/ModelLoading/Mesh.h"
-
 #include "engine/Vertex.h"
+#include "engine/VulkanTypes.h"
 #include <glm/mat4x4.hpp>
 
 #include <memory>
@@ -51,10 +51,10 @@ public:
   std::vector<MeshInstance> m_meshInstances;
 
   std::vector<Vertex> m_vertices;
-  VkBuffer m_vertexBuffer = VK_NULL_HANDLE;
+  VulkanBuffer m_vertexBuffer{};
 
   std::vector<uint32_t> m_indices;
-  VkBuffer m_indexBuffer = VK_NULL_HANDLE;
+  VulkanBuffer m_indexBuffer{};
 
   static VkDescriptorSetLayout s_textureLayout;
 
@@ -81,10 +81,7 @@ private:
                    const aiScene* scene,
                    int type);
 
-  VmaAllocation m_vertexBufferAllocation;
   void createVertexBuffer(VkDeviceSize bufferSize);
-
-  VmaAllocation m_indexBufferAllocation;
   void createIndexBuffer(VkDeviceSize bufferSize);
 
   void cleanup();

@@ -58,11 +58,9 @@ public:
                               VkImageAspectFlags aspectFlags,
                               VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D);
 
-  void* createBuffer(VkDeviceSize size,
-                     VkBufferUsageFlags usage,
-                     BufferType bufferType,
-                     VkBuffer& buffer,
-                     VmaAllocation& allocation);
+  [[nodiscard]] VulkanBuffer createBuffer(VkDeviceSize size,
+                                          VkBufferUsageFlags usage,
+                                          BufferType bufferType);
 
   VkCommandBuffer beginSingleTimeCommands();
   void endSingleTimeCommands(VkCommandBuffer commandBuffer);
@@ -73,6 +71,7 @@ public:
   // destroy vulkan primitives
   void destroyImage(VkImage image, VmaAllocation allocation) noexcept;
   void destroyImageView(VkImageView view) noexcept;
+  void destroyBuffer(VulkanBuffer& buffer) noexcept;
   void destroyBuffer(VkBuffer buffer, VmaAllocation allocation) noexcept;
 
   [[nodiscard]] VkSampler getSampler(SamplerType type) const noexcept

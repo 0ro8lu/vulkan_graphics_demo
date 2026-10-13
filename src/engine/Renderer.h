@@ -3,11 +3,11 @@
 #include "engine/Passes/BlinnPhongPass.h"
 #include "engine/Passes/HDRPass.h"
 #include "engine/Passes/ShadowMapPass.h"
-#include "engine/Scene.h"
+#include "engine/SceneRenderData.h"
 #include "engine/VulkanContext.h"
 #include "engine/VulkanSwapchain.h"
 
-#include "engine/RenderUtils.h"
+#include "engine/FrameUniforms.h"
 #include <memory>
 
 class Renderer
@@ -17,8 +17,7 @@ public:
 
   ~Renderer();
 
-  void update(const Scene& scene);
-  void draw(const Scene& scene, GLFWwindow* window);
+  void draw(const SceneRenderData& sceneRenderData, GLFWwindow* window);
   void waitIdle() const;
 
   // TODO: re-make this private one day, after having built the asset manager
@@ -35,7 +34,7 @@ public:
 private:
   std::unique_ptr<VulkanContext> m_contextOwner;
   std::unique_ptr<VulkanSwapchain> m_vkSwapchain;
-  CamLightShadowBundle m_camLightShadowBundle;
+  std::unique_ptr<FrameUniforms> m_frameUniforms;
 
   std::unique_ptr<ShadowMapPass> m_shadowMapPass;
   std::unique_ptr<BlinnPhongPass> m_blinnPhongPass;

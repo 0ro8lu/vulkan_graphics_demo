@@ -527,20 +527,21 @@ VulkanContext::copyBuffer(VkBuffer srcBuffer,
   endSingleTimeCommands(commandBuffer);
 }
 
-void*
+VulkanBuffer
 VulkanContext::createBuffer(VkDeviceSize size,
                             VkBufferUsageFlags usage,
-                            BufferType bufferType,
-                            VkBuffer& buffer,
-                            VmaAllocation& allocation)
+                            BufferType bufferType)
 {
+  VulkanBuffer result{};
+  result.size = size;
+
   VkBufferCreateInfo bufferInfo{};
   bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufferInfo.size = size;
   bufferInfo.usage = usage;
   bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-  VmaAllocationCreateInfo allocCreateInfo = {};
+  VmaAllocationCreateInfo allocCreateInfo{};
   allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
   switch (bufferType) {
@@ -555,16 +556,17 @@ VulkanContext::createBuffer(VkDeviceSize size,
       break;
   }
 
-  VmaAllocationInfo allocInfo;
+  VmaAllocationInfo allocInfo{};
   VK_CHECK(vmaCreateBuffer(allocator,
                            &bufferInfo,
                            &allocCreateInfo,
-                           &buffer,
-                           &allocation,
+                           &result.buffer,
+                           &result.allocation,
                            &allocInfo));
 
-  vmaSetAllocationName(allocator, allocation, "bufferAllocation");
-  return allocInfo.pMappedData;
+  vmaSetAllocationName(allocator, result.allocation, "bufferAllocation");
+  result.mapped = allocInfo.pMappedData;
+  return result;
 }
 
 VkCommandBuffer
@@ -616,9 +618,23 @@ VulkanContext::destroyImageView(VkImageView view) noexcept
 }
 
 void
+VulkanContext::destroyBuffer(VulkanBuffer& buffer) noexcept
+{
+  if (buffer.buffer != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(allocator, buffer.buffer, buffer.allocation);
+    buffer.buffer = VK_NULL_HANDLE;
+    buffer.allocation = VK_NULL_HANDLE;
+    buffer.mapped = nullptr;
+    buffer.size = 0;
+  }
+}
+
+void
 VulkanContext::destroyBuffer(VkBuffer buffer, VmaAllocation allocation) noexcept
 {
-  vmaDestroyBuffer(allocator, buffer, allocation);
+  if (buffer != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(allocator, buffer, allocation);
+  }
 }
 
 void

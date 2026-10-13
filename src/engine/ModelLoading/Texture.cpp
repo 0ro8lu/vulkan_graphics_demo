@@ -1,5 +1,6 @@
 #include "engine/ModelLoading/Texture.h"
 #include "engine/VulkanCheck.h"
+#include <iostream>
 #include <stb_image.h>
 
 Texture::Texture()
@@ -19,6 +20,8 @@ Texture::Texture(VulkanContext* vkContext, unsigned char* data, size_t size)
   stbi_uc* pixels = stbi_load_from_memory(
     data, size, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
   if (!pixels) {
+    std::cerr << "[Texture]: Failed to load image from memory: "
+              << stbi_failure_reason() << '\n';
     ENGINE_DEBUG_BREAK();
     std::abort();
   }
@@ -42,6 +45,8 @@ Texture::Texture(VulkanContext* vkContext, std::string filePath)
   stbi_uc* pixels = stbi_load(
     filePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
   if (!pixels) {
+    std::cerr << "[Texture]: Failed to load image file '" << filePath
+              << "': " << stbi_failure_reason() << '\n';
     ENGINE_DEBUG_BREAK();
     std::abort();
   }
@@ -69,16 +74,12 @@ Texture::createTextureImageFromPixels(unsigned char* pixels,
   VkDeviceSize imageSize = texWidth * texHeight * 4;
 
   // -------------------- STAGING BUFFER --------------------
-  VkBuffer stagingBuffer;
-  VmaAllocation stagingBufferAllocation;
+  VulkanBuffer stagingBuffer = m_vkContext->createBuffer(
+    imageSize,
+    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+    BufferType::STAGING_BUFFER);
 
-  void* data = m_vkContext->createBuffer(imageSize,
-                                         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                         BufferType::STAGING_BUFFER,
-                                         stagingBuffer,
-                                         stagingBufferAllocation);
-
-  memcpy(data, pixels, static_cast<size_t>(imageSize));
+  memcpy(stagingBuffer.mapped, pixels, static_cast<size_t>(imageSize));
 
   // Create the Vulkan image
   m_image = m_vkContext->createImage(texWidth,
@@ -101,7 +102,7 @@ Texture::createTextureImageFromPixels(unsigned char* pixels,
                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-  m_vkContext->destroyBuffer(stagingBuffer, stagingBufferAllocation);
+  m_vkContext->destroyBuffer(stagingBuffer);
 }
 
 void
@@ -143,6 +144,8 @@ Texture::transitionImageLayout(VkImage image,
     sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
     destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
   } else {
+    std::cerr << "[Texture]: Unsupported image layout transition from "
+              << oldLayout << " to " << newLayout << '\n';
     ENGINE_DEBUG_BREAK();
     std::abort();
   }

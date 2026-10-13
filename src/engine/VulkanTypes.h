@@ -8,10 +8,30 @@ VK_DEFINE_HANDLE(VmaAllocation);
 VK_DEFINE_HANDLE(VmaAllocator);
 using VmaAllocationCreateFlags = VkFlags;
 
+inline constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+
 enum BufferType
 {
   STAGING_BUFFER,
   GPU_BUFFER,
+};
+
+struct VulkanBuffer
+{
+  VkBuffer buffer{ VK_NULL_HANDLE };
+  VmaAllocation allocation{ VK_NULL_HANDLE };
+  void* mapped{ nullptr };
+  VkDeviceSize size{ 0 };
+
+  [[nodiscard]] constexpr bool isValid() const noexcept
+  {
+    return buffer != VK_NULL_HANDLE;
+  }
+
+  [[nodiscard]] constexpr operator VkBuffer() const noexcept
+  {
+    return buffer;
+  }
 };
 
 enum class SamplerType : uint8_t

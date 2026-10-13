@@ -1,7 +1,8 @@
 #include "engine/Passes/HDRPass.h"
 #include "engine/VulkanCheck.h"
 
-#include "engine/RenderUtils.h"
+#include "engine/PipelineBuilder.h"
+#include "engine/VulkanContext.h"
 
 HDRPass::HDRPass(VulkanContext* vkContext,
                  const AttachmentConfig& attachmentConfig)
@@ -50,7 +51,7 @@ HDRPass::~HDRPass()
 }
 
 void
-HDRPass::draw(VulkanSwapchain* vkSwapchain)
+HDRPass::draw(const FrameContext& frameContext)
 {
   // extract colors first!
   VkRenderPassBeginInfo renderPassInfo{};
@@ -58,7 +59,7 @@ HDRPass::draw(VulkanSwapchain* vkSwapchain)
   renderPassInfo.renderPass = m_bloomRenderPass;
   renderPassInfo.framebuffer = m_bloomFramebuffer;
   renderPassInfo.renderArea.offset = { 0, 0 };
-  renderPassInfo.renderArea.extent = vkSwapchain->swapChainExtent;
+  renderPassInfo.renderArea.extent = frameContext.extent;
 
   std::array<VkClearValue, 2> clearValues{};
   clearValues[0].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
@@ -68,27 +69,27 @@ HDRPass::draw(VulkanSwapchain* vkSwapchain)
   renderPassInfo.pClearValues = clearValues.data();
 
   vkCmdBeginRenderPass(
-    vkSwapchain->commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    frameContext.commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-  vkCmdBindPipeline(vkSwapchain->commandBuffer,
+  vkCmdBindPipeline(frameContext.commandBuffer,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
                     m_brightPointExtractionPipeline);
 
   VkViewport viewport{};
   viewport.x = 0.0f;
   viewport.y = 0.0f;
-  viewport.width = (float)vkSwapchain->swapChainExtent.width;
-  viewport.height = (float)vkSwapchain->swapChainExtent.height;
+  viewport.width = (float)frameContext.extent.width;
+  viewport.height = (float)frameContext.extent.height;
   viewport.minDepth = 0.0f;
   viewport.maxDepth = 1.0f;
-  vkCmdSetViewport(vkSwapchain->commandBuffer, 0, 1, &viewport);
+  vkCmdSetViewport(frameContext.commandBuffer, 0, 1, &viewport);
 
   VkRect2D scissor{};
   scissor.offset = { 0, 0 };
-  scissor.extent = vkSwapchain->swapChainExtent;
-  vkCmdSetScissor(vkSwapchain->commandBuffer, 0, 1, &scissor);
+  scissor.extent = frameContext.extent;
+  vkCmdSetScissor(frameContext.commandBuffer, 0, 1, &scissor);
 
-  vkCmdBindDescriptorSets(vkSwapchain->commandBuffer,
+  vkCmdBindDescriptorSets(frameContext.commandBuffer,
                           VK_PIPELINE_BIND_POINT_GRAPHICS,
                           m_brightPointExtractionPipelineLayout,
                           0,
@@ -96,20 +97,20 @@ HDRPass::draw(VulkanSwapchain* vkSwapchain)
                           &m_brightPointDescriptorSet,
                           0,
                           nullptr);
-  vkCmdDraw(vkSwapchain->commandBuffer, 3, 1, 0, 0);
+  vkCmdDraw(frameContext.commandBuffer, 3, 1, 0, 0);
 
   // we now do out first horizontal bloom pass
-  vkCmdNextSubpass(vkSwapchain->commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+  vkCmdNextSubpass(frameContext.commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
 
-  vkCmdBindPipeline(vkSwapchain->commandBuffer,
+  vkCmdBindPipeline(frameContext.commandBuffer,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
                     m_horizontalBloomPipeline);
 
-  vkCmdSetViewport(vkSwapchain->commandBuffer, 0, 1, &viewport);
+  vkCmdSetViewport(frameContext.commandBuffer, 0, 1, &viewport);
 
-  vkCmdSetScissor(vkSwapchain->commandBuffer, 0, 1, &scissor);
+  vkCmdSetScissor(frameContext.commandBuffer, 0, 1, &scissor);
 
-  vkCmdBindDescriptorSets(vkSwapchain->commandBuffer,
+  vkCmdBindDescriptorSets(frameContext.commandBuffer,
                           VK_PIPELINE_BIND_POINT_GRAPHICS,
                           m_horizontalBloomPipelineLayout,
                           0,
@@ -117,31 +118,30 @@ HDRPass::draw(VulkanSwapchain* vkSwapchain)
                           &m_horizontalBloomDescriptorSet,
                           0,
                           nullptr);
-  vkCmdDraw(vkSwapchain->commandBuffer, 3, 1, 0, 0);
+  vkCmdDraw(frameContext.commandBuffer, 3, 1, 0, 0);
 
   // now we combine it inside the swapchain!
   renderPassInfo.renderPass = m_presentationRenderPass;
-  renderPassInfo.framebuffer =
-    vkSwapchain->swapChainFramebuffers[vkSwapchain->imageIndex];
+  renderPassInfo.framebuffer = frameContext.backbuffer;
   renderPassInfo.renderArea.offset = { 0, 0 };
-  renderPassInfo.renderArea.extent = vkSwapchain->swapChainExtent;
+  renderPassInfo.renderArea.extent = frameContext.extent;
 
   renderPassInfo.clearValueCount = 1;
   renderPassInfo.pClearValues = &clearValues[0];
 
-  vkCmdEndRenderPass(vkSwapchain->commandBuffer);
+  vkCmdEndRenderPass(frameContext.commandBuffer);
   vkCmdBeginRenderPass(
-    vkSwapchain->commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    frameContext.commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-  vkCmdBindPipeline(vkSwapchain->commandBuffer,
+  vkCmdBindPipeline(frameContext.commandBuffer,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
                     m_compositionPipeline);
 
-  vkCmdSetViewport(vkSwapchain->commandBuffer, 0, 1, &viewport);
+  vkCmdSetViewport(frameContext.commandBuffer, 0, 1, &viewport);
 
-  vkCmdSetScissor(vkSwapchain->commandBuffer, 0, 1, &scissor);
+  vkCmdSetScissor(frameContext.commandBuffer, 0, 1, &scissor);
 
-  vkCmdBindDescriptorSets(vkSwapchain->commandBuffer,
+  vkCmdBindDescriptorSets(frameContext.commandBuffer,
                           VK_PIPELINE_BIND_POINT_GRAPHICS,
                           m_compositionPipelineLayout,
                           0,
@@ -149,13 +149,13 @@ HDRPass::draw(VulkanSwapchain* vkSwapchain)
                           &m_brightPointDescriptorSet,
                           0,
                           nullptr);
-  vkCmdDraw(vkSwapchain->commandBuffer, 3, 1, 0, 0);
+  vkCmdDraw(frameContext.commandBuffer, 3, 1, 0, 0);
 
-  vkCmdBindPipeline(vkSwapchain->commandBuffer,
+  vkCmdBindPipeline(frameContext.commandBuffer,
                     VK_PIPELINE_BIND_POINT_GRAPHICS,
                     m_verticalBloomPipeline);
 
-  vkCmdBindDescriptorSets(vkSwapchain->commandBuffer,
+  vkCmdBindDescriptorSets(frameContext.commandBuffer,
                           VK_PIPELINE_BIND_POINT_GRAPHICS,
                           m_verticalBloomPipelineLayout,
                           0,
@@ -163,9 +163,9 @@ HDRPass::draw(VulkanSwapchain* vkSwapchain)
                           &m_verticalBloomDescriptorSet,
                           0,
                           nullptr);
-  vkCmdDraw(vkSwapchain->commandBuffer, 3, 1, 0, 0);
+  vkCmdDraw(frameContext.commandBuffer, 3, 1, 0, 0);
 
-  vkCmdEndRenderPass(vkSwapchain->commandBuffer);
+  vkCmdEndRenderPass(frameContext.commandBuffer);
 }
 
 void
@@ -507,129 +507,97 @@ HDRPass::createPipelines()
 {
   // Bright point extraction pipeline
   {
-    GraphicsPipelineConfig config{};
-    config.vertShaderName = "bloom/bloom_vert.spv";
-    config.useVertexInput = false;
-    config.fragShaderName = "bloom/bright_point_extraction_frag.spv";
+    auto result = PipelineBuilder{}
+                    .setVertexShader("bloom/bloom_vert.spv")
+                    .setFragmentShader("bloom/bright_point_extraction_frag.spv")
+                    .disableVertexInput()
+                    .setCullMode(VK_CULL_MODE_NONE)
+                    .setDepthTest(VK_FALSE, VK_FALSE)
+                    .setDescriptorSetLayouts(
+                      std::span(&m_bloomDescriptorSetLayout, 1))
+                    .setRenderPass(m_bloomRenderPass, 0)
+                    .build(m_vkContext->logicalDevice);
 
-    config.cullMode = VK_CULL_MODE_NONE;
-
-    config.depthTestEnable = VK_FALSE;
-    config.depthWriteEnable = VK_FALSE;
-
-    // Layout & Renderpass
-    config.descriptorSetLayouts = { m_bloomDescriptorSetLayout };
-    config.pushConstantRanges = {};
-    config.renderPass = m_bloomRenderPass;
-    config.subpass = 0;
-
-    auto result = createPipeline(m_vkContext, config);
     m_brightPointExtractionPipeline = result.pipeline;
     m_brightPointExtractionPipelineLayout = result.layout;
   }
 
   // Horizontal bloom pipeline
   {
-    VkSpecializationMapEntry specEntry{};
-    specEntry.constantID = 0;
-    specEntry.offset = 0;
-    specEntry.size = sizeof(uint32_t);
+    VkSpecializationMapEntry specEntry{
+      .constantID = 0,
+      .offset = 0,
+      .size = sizeof(uint32_t),
+    };
 
     uint32_t dir = 0; // horizontal
-    VkSpecializationInfo specInfo{};
-    specInfo.mapEntryCount = 1;
-    specInfo.pMapEntries = &specEntry;
-    specInfo.dataSize = sizeof(uint32_t);
-    specInfo.pData = &dir;
+    VkSpecializationInfo specInfo{
+      .mapEntryCount = 1,
+      .pMapEntries = &specEntry,
+      .dataSize = sizeof(uint32_t),
+      .pData = &dir,
+    };
 
-    GraphicsPipelineConfig config{};
+    auto result = PipelineBuilder{}
+                    .setVertexShader("bloom/bloom_vert.spv")
+                    .setFragmentShader("bloom/bloom_frag.spv", &specInfo)
+                    .disableVertexInput()
+                    .setCullMode(VK_CULL_MODE_NONE)
+                    .setDepthTest(VK_FALSE, VK_FALSE)
+                    .setDescriptorSetLayouts(
+                      std::span(&m_bloomDescriptorSetLayout, 1))
+                    .setRenderPass(m_bloomRenderPass, 1)
+                    .build(m_vkContext->logicalDevice);
 
-    config.fragSpecialization = &specInfo;
-
-    config.vertShaderName = "bloom/bloom_vert.spv";
-    config.fragShaderName = "bloom/bloom_frag.spv";
-    config.useVertexInput = false;
-
-    config.cullMode = VK_CULL_MODE_NONE;
-
-    config.depthTestEnable = VK_FALSE;
-    config.depthWriteEnable = VK_FALSE;
-
-    config.descriptorSetLayouts = { m_bloomDescriptorSetLayout };
-    config.pushConstantRanges = {};
-    config.renderPass = m_bloomRenderPass;
-    config.subpass = 1;
-
-    auto result = createPipeline(m_vkContext, config);
     m_horizontalBloomPipeline = result.pipeline;
     m_horizontalBloomPipelineLayout = result.layout;
   }
 
   // Vertical bloom pipeline
   {
-    VkSpecializationMapEntry specEntry{};
-    specEntry.constantID = 0;
-    specEntry.offset = 0;
-    specEntry.size = sizeof(uint32_t);
+    VkSpecializationMapEntry specEntry{
+      .constantID = 0,
+      .offset = 0,
+      .size = sizeof(uint32_t),
+    };
 
     uint32_t dir = 1; // vertical
-    VkSpecializationInfo specInfo{};
-    specInfo.mapEntryCount = 1;
-    specInfo.pMapEntries = &specEntry;
-    specInfo.dataSize = sizeof(uint32_t);
-    specInfo.pData = &dir;
+    VkSpecializationInfo specInfo{
+      .mapEntryCount = 1,
+      .pMapEntries = &specEntry,
+      .dataSize = sizeof(uint32_t),
+      .pData = &dir,
+    };
 
-    GraphicsPipelineConfig config{};
-    config.fragSpecialization = &specInfo;
+    auto result = PipelineBuilder{}
+                    .setVertexShader("bloom/bloom_vert.spv")
+                    .setFragmentShader("bloom/bloom_frag.spv", &specInfo)
+                    .disableVertexInput()
+                    .setCullMode(VK_CULL_MODE_NONE)
+                    .setDepthTest(VK_FALSE, VK_FALSE)
+                    .addAdditiveBlendAttachment()
+                    .setDescriptorSetLayouts(
+                      std::span(&m_bloomDescriptorSetLayout, 1))
+                    .setRenderPass(m_presentationRenderPass, 0)
+                    .build(m_vkContext->logicalDevice);
 
-    config.vertShaderName = "bloom/bloom_vert.spv";
-    config.fragShaderName = "bloom/bloom_frag.spv";
-    config.useVertexInput = false;
-
-    config.cullMode = VK_CULL_MODE_NONE;
-
-    config.depthTestEnable = VK_FALSE;
-    config.depthWriteEnable = VK_FALSE;
-
-    config.blendEnable = VK_TRUE;
-    config.colorBlendOp = VK_BLEND_OP_ADD;
-    config.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-    config.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
-    config.alphaBlendOp = VK_BLEND_OP_ADD;
-    config.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-    config.dstAlphaBlendFactor = VK_BLEND_FACTOR_DST_ALPHA;
-
-    config.descriptorSetLayouts = { m_bloomDescriptorSetLayout };
-    config.pushConstantRanges = {};
-    config.renderPass = m_presentationRenderPass;
-    config.subpass = 0;
-
-    auto result = createPipeline(m_vkContext, config);
     m_verticalBloomPipeline = result.pipeline;
     m_verticalBloomPipelineLayout = result.layout;
   }
 
   // Composition Pipeline
   {
-    GraphicsPipelineConfig config{};
+    auto result = PipelineBuilder{}
+                    .setVertexShader("bloom/bloom_vert.spv")
+                    .setFragmentShader("bloom/composition_frag.spv")
+                    .disableVertexInput()
+                    .setCullMode(VK_CULL_MODE_NONE)
+                    .setDepthTest(VK_FALSE, VK_FALSE)
+                    .setDescriptorSetLayouts(
+                      std::span(&m_bloomDescriptorSetLayout, 1))
+                    .setRenderPass(m_presentationRenderPass, 0)
+                    .build(m_vkContext->logicalDevice);
 
-    config.vertShaderName = "bloom/bloom_vert.spv";
-    config.fragShaderName = "bloom/composition_frag.spv";
-    config.useVertexInput = false;
-
-    config.cullMode = VK_CULL_MODE_NONE;
-
-    config.depthTestEnable = VK_FALSE;
-    config.depthWriteEnable = VK_FALSE;
-
-    config.blendEnable = VK_FALSE;
-
-    config.descriptorSetLayouts = { m_bloomDescriptorSetLayout };
-    config.pushConstantRanges = {};
-    config.renderPass = m_presentationRenderPass;
-    config.subpass = 0;
-
-    auto result = createPipeline(m_vkContext, config);
     m_compositionPipeline = result.pipeline;
     m_compositionPipelineLayout = result.layout;
   }

@@ -3,8 +3,12 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include <array>
 #include <functional>
+#include <optional>
+#include <vector>
 
+#include "engine/FrameContext.h"
 #include "engine/VulkanContext.h"
 
 class Renderer;
@@ -31,11 +35,8 @@ public:
   void recreateSwapChain(GLFWwindow* window);
   void createSwapChainFrameBuffer();
 
-  VkCommandBuffer commandBuffer;
-  void createCommandBuffer();
-
-  void prepareFrame(GLFWwindow* window);
-  void submitFrame(GLFWwindow* window);
+  [[nodiscard]] std::optional<FrameContext> beginFrame(GLFWwindow* window);
+  void submitFrame(const FrameContext& frameContext, GLFWwindow* window);
 
   bool resized;
   int width;
@@ -44,15 +45,28 @@ public:
   VkRenderPass drawingPass;
 
   VkImageView depthImageView;
-
-  uint32_t imageIndex;
-  uint32_t currentFrame = 0;
-  std::vector<VkFramebuffer> swapChainFramebuffers;
-  VkExtent2D swapChainExtent;
   VkFormat depthFormat;
   VkFormat swapChainImageFormat;
 
 private:
+  struct FrameSyncData
+  {
+    VkSemaphore imageAvailableSemaphore{ VK_NULL_HANDLE };
+    VkFence inFlightFence{ VK_NULL_HANDLE };
+    VkCommandBuffer commandBuffer{ VK_NULL_HANDLE };
+  };
+
+  void createCommandBuffers();
+  void createSyncObjects();
+
+  uint32_t imageIndex = 0;
+  uint32_t currentFrame = 0;
+  std::vector<VkFramebuffer> swapChainFramebuffers;
+  VkExtent2D swapChainExtent{};
+
+  std::array<FrameSyncData, MAX_FRAMES_IN_FLIGHT> m_frameSync{};
+  std::vector<VkSemaphore> m_renderFinishedSemaphores;
+
   static void framebufferResizeCallback(GLFWwindow* window,
                                         int width,
                                         int height);
@@ -82,11 +96,6 @@ private:
   VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
                                VkImageTiling tiling,
                                VkFormatFeatureFlags features);
-
-  std::vector<VkSemaphore> m_imageAvailableSemaphores;
-  std::vector<VkSemaphore> m_renderFinishedSemaphores;
-  VkFence m_inFlightFence;
-  void createSyncObjects();
 };
 
 struct SwapChainSupportDetails

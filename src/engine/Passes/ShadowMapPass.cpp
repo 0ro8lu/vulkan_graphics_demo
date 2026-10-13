@@ -1,8 +1,8 @@
 #include "engine/Passes/ShadowMapPass.h"
 #include "engine/VulkanCheck.h"
 
-#include "engine/RenderUtils.h"
-#include "engine/Scene.h"
+#include "engine/PipelineBuilder.h"
+#include "engine/SceneRenderData.h"
 
 ShadowMapPass::ShadowMapPass(VulkanContext* vkContext,
                              const AttachmentConfig& attachmentConfig)
@@ -61,10 +61,10 @@ ShadowMapPass::createShadowMaps(VkFormat depthImageFormat)
 }
 
 void
-ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
+ShadowMapPass::draw(VkCommandBuffer commandBuffer, const SceneRenderData& scene)
 {
   // directional shadow
-  if (scene.m_directionalLight->castsShadow()) {
+  if (scene.directionalLight != nullptr && scene.directionalLight->castsShadow()) {
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassInfo.renderPass = m_shadowMapRenderPass;
@@ -80,10 +80,10 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     renderPassInfo.pClearValues = &depthClearValue;
 
     vkCmdBeginRenderPass(
-      vkSwapchain->commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+      commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     // -------------------- bind main pipeline --------------------
-    vkCmdBindPipeline(vkSwapchain->commandBuffer,
+    vkCmdBindPipeline(commandBuffer,
                       VK_PIPELINE_BIND_POINT_GRAPHICS,
                       m_shadowMapPipeline);
 
@@ -94,7 +94,7 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     viewport.height = m_directionalShadowMap->getHeight();
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(vkSwapchain->commandBuffer, 0, 1, &viewport);
+    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
     VkRect2D scissor{};
     scissor.extent.width = m_directionalShadowMap->getWidth();
@@ -102,36 +102,36 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     scissor.offset.x = 0;
     scissor.offset.y = 0;
 
-    vkCmdSetScissor(vkSwapchain->commandBuffer, 0, 1, &scissor);
+    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     struct PushConstant
     {
       glm::mat4 lightSpaceMatrix;
     };
 
-    for (auto& model : scene.m_models) {
+    for (const auto& model : scene.models) {
 
       VkBuffer vertexBuffers[] = { model.m_vertexBuffer };
       VkDeviceSize offsets[] = { 0 };
       vkCmdBindVertexBuffers(
-        vkSwapchain->commandBuffer, 0, 1, vertexBuffers, offsets);
+        commandBuffer, 0, 1, vertexBuffers, offsets);
 
       vkCmdBindIndexBuffer(
-        vkSwapchain->commandBuffer, model.m_indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        commandBuffer, model.m_indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
       for (const auto& instance : model.m_meshInstances) {
         PushConstant pc;
         pc.lightSpaceMatrix =
-          scene.m_directionalLight->getTransform() * instance.transformation;
+          scene.directionalLight->getTransform() * instance.transformation;
 
-        vkCmdPushConstants(vkSwapchain->commandBuffer,
+        vkCmdPushConstants(commandBuffer,
                            m_shadowMapPipelineLayout,
                            VK_SHADER_STAGE_VERTEX_BIT,
                            0,
                            sizeof(PushConstant),
                            &pc);
 
-        vkCmdDrawIndexed(vkSwapchain->commandBuffer,
+        vkCmdDrawIndexed(commandBuffer,
                          instance.mesh->m_indexCount,
                          1,
                          instance.mesh->m_startIndex,
@@ -139,7 +139,7 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
                          0);
       }
     }
-    vkCmdEndRenderPass(vkSwapchain->commandBuffer);
+    vkCmdEndRenderPass(commandBuffer);
   } else {
     // this is imprtant! we still have to transition the image layout even tho
     // we don't use it later on! Thanks daddy Vulkan :3
@@ -158,8 +158,8 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     renderPassInfo.pClearValues = &depthClearValue;
 
     vkCmdBeginRenderPass(
-      vkSwapchain->commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-    vkCmdEndRenderPass(vkSwapchain->commandBuffer);
+      commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdEndRenderPass(commandBuffer);
   }
 
   // spotlight and pointlight shadows
@@ -179,14 +179,14 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
     renderPassInfo.pClearValues = &depthClearValue;
 
     vkCmdBeginRenderPass(
-      vkSwapchain->commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+      commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     // -------------------- bind main pipeline --------------------
-    vkCmdBindPipeline(vkSwapchain->commandBuffer,
+    vkCmdBindPipeline(commandBuffer,
                       VK_PIPELINE_BIND_POINT_GRAPHICS,
                       m_shadowMapPipeline);
 
-    for (const auto& spotlight : scene.m_spotLights) {
+    for (const auto& spotlight : scene.spotLights) {
 
       if (!spotlight.castsShadow()) {
         continue;
@@ -199,7 +199,7 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
       viewport.height = spotlight.getAtlasCoordinatesPixel().w;
       viewport.minDepth = 0.0f;
       viewport.maxDepth = 1.0f;
-      vkCmdSetViewport(vkSwapchain->commandBuffer, 0, 1, &viewport);
+      vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
       VkRect2D scissor{};
       scissor.offset.x = spotlight.getAtlasCoordinatesPixel().x;
@@ -207,24 +207,24 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
       scissor.extent.width = spotlight.getAtlasCoordinatesPixel().z;
       scissor.extent.height = spotlight.getAtlasCoordinatesPixel().w;
 
-      vkCmdSetScissor(vkSwapchain->commandBuffer, 0, 1, &scissor);
+      vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-      // vkCmdSetDepthBias(vkSwapchain->commandBuffer, 1.5f, 0.0f, 2.0f);
-      // vkCmdSetDepthBias(vkSwapchain->commandBuffer, 1.25f, 0.0f, 1.75f);
+      // vkCmdSetDepthBias(commandBuffer, 1.5f, 0.0f, 2.0f);
+      // vkCmdSetDepthBias(commandBuffer, 1.25f, 0.0f, 1.75f);
 
       struct PushConstant
       {
         glm::mat4 lightSpaceMatrix;
       };
 
-      for (auto& model : scene.m_models) {
+      for (const auto& model : scene.models) {
 
         VkBuffer vertexBuffers[] = { model.m_vertexBuffer };
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(
-          vkSwapchain->commandBuffer, 0, 1, vertexBuffers, offsets);
+          commandBuffer, 0, 1, vertexBuffers, offsets);
 
-        vkCmdBindIndexBuffer(vkSwapchain->commandBuffer,
+        vkCmdBindIndexBuffer(commandBuffer,
                              model.m_indexBuffer,
                              0,
                              VK_INDEX_TYPE_UINT32);
@@ -234,14 +234,14 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
           pc.lightSpaceMatrix =
             spotlight.getTransform() * instance.transformation;
 
-          vkCmdPushConstants(vkSwapchain->commandBuffer,
+          vkCmdPushConstants(commandBuffer,
                              m_shadowMapPipelineLayout,
                              VK_SHADER_STAGE_VERTEX_BIT,
                              0,
                              sizeof(PushConstant),
                              &pc);
 
-          vkCmdDrawIndexed(vkSwapchain->commandBuffer,
+          vkCmdDrawIndexed(commandBuffer,
                            instance.mesh->m_indexCount,
                            1,
                            instance.mesh->m_startIndex,
@@ -250,7 +250,7 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
         }
       }
     }
-    for (const auto& pointlight : scene.m_pointLights) {
+    for (const auto& pointlight : scene.pointLights) {
       if (!pointlight.castsShadow()) {
         continue;
       }
@@ -265,7 +265,7 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
         viewport.height = pointlight.getAtlasCoordinatesPixel(side).w;
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(vkSwapchain->commandBuffer, 0, 1, &viewport);
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
         VkRect2D scissor{};
         scissor.offset.x = pointlight.getAtlasCoordinatesPixel(side).x;
@@ -273,24 +273,24 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
         scissor.extent.width = pointlight.getAtlasCoordinatesPixel(side).z;
         scissor.extent.height = pointlight.getAtlasCoordinatesPixel(side).w;
 
-        vkCmdSetScissor(vkSwapchain->commandBuffer, 0, 1, &scissor);
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        // vkCmdSetDepthBias(vkSwapchain->commandBuffer, 1.5f, 0.0f, 2.0f);
-        // vkCmdSetDepthBias(vkSwapchain->commandBuffer, 1.25f, 0.0f, 1.75f);
+        // vkCmdSetDepthBias(commandBuffer, 1.5f, 0.0f, 2.0f);
+        // vkCmdSetDepthBias(commandBuffer, 1.25f, 0.0f, 1.75f);
 
         struct PushConstant
         {
           glm::mat4 lightSpaceMatrix;
         };
 
-        for (auto& model : scene.m_models) {
+        for (const auto& model : scene.models) {
 
           VkBuffer vertexBuffers[] = { model.m_vertexBuffer };
           VkDeviceSize offsets[] = { 0 };
           vkCmdBindVertexBuffers(
-            vkSwapchain->commandBuffer, 0, 1, vertexBuffers, offsets);
+            commandBuffer, 0, 1, vertexBuffers, offsets);
 
-          vkCmdBindIndexBuffer(vkSwapchain->commandBuffer,
+          vkCmdBindIndexBuffer(commandBuffer,
                                model.m_indexBuffer,
                                0,
                                VK_INDEX_TYPE_UINT32);
@@ -300,14 +300,14 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
             pc.lightSpaceMatrix =
               pointlight.getTransform(side) * instance.transformation;
 
-            vkCmdPushConstants(vkSwapchain->commandBuffer,
+            vkCmdPushConstants(commandBuffer,
                                m_shadowMapPipelineLayout,
                                VK_SHADER_STAGE_VERTEX_BIT,
                                0,
                                sizeof(PushConstant),
                                &pc);
 
-            vkCmdDrawIndexed(vkSwapchain->commandBuffer,
+            vkCmdDrawIndexed(commandBuffer,
                              instance.mesh->m_indexCount,
                              1,
                              instance.mesh->m_startIndex,
@@ -317,7 +317,7 @@ ShadowMapPass::draw(VulkanSwapchain* vkSwapchain, const Scene& scene)
         }
       }
     }
-    vkCmdEndRenderPass(vkSwapchain->commandBuffer);
+    vkCmdEndRenderPass(commandBuffer);
   }
 }
 
@@ -419,19 +419,21 @@ ShadowMapPass::createDirectionalRenderPass()
 void
 ShadowMapPass::createShadowMapPipeline()
 {
-  VkPushConstantRange lightSpaceMatrixPCRange{};
-  lightSpaceMatrixPCRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-  lightSpaceMatrixPCRange.offset = 0;
-  lightSpaceMatrixPCRange.size = 64;
+  VkPushConstantRange lightSpaceMatrixPCRange{
+    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+    .offset = 0,
+    .size = 64,
+  };
 
-  GraphicsPipelineConfig config{};
-  config.vertShaderName = "shadows/directional_shadow_vert.spv";
-  config.cullMode = VK_CULL_MODE_FRONT_BIT;
-  config.depthBiasEnable = VK_TRUE;
-  config.pushConstantRanges = { lightSpaceMatrixPCRange };
-  config.renderPass = m_shadowMapRenderPass;
+  auto result = PipelineBuilder{}
+                  .setVertexShader("shadows/directional_shadow_vert.spv")
+                  .withDefaultMeshVertexInput()
+                  .setCullMode(VK_CULL_MODE_FRONT_BIT)
+                  .setDepthBias(VK_TRUE)
+                  .setPushConstantRanges(std::span(&lightSpaceMatrixPCRange, 1))
+                  .setRenderPass(m_shadowMapRenderPass)
+                  .build(m_vkContext->logicalDevice);
 
-  auto result = createPipeline(m_vkContext, config);
   m_shadowMapPipeline = result.pipeline;
   m_shadowMapPipelineLayout = result.layout;
 }

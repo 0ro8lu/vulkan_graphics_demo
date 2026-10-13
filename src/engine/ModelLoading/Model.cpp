@@ -54,21 +54,13 @@ Model::Model(Model&& other) noexcept
   m_uniqueMeshes = std::move(other.m_uniqueMeshes);
 
   m_vertices = std::move(other.m_vertices);
-  m_vertexBuffer = other.m_vertexBuffer;
-  m_vertexBufferAllocation = other.m_vertexBufferAllocation;
+  m_vertexBuffer = std::exchange(other.m_vertexBuffer, {});
 
   m_indices = std::move(other.m_indices);
-  m_indexBuffer = other.m_indexBuffer;
-  m_indexBufferAllocation = other.m_indexBufferAllocation;
+  m_indexBuffer = std::exchange(other.m_indexBuffer, {});
 
   m_vkContext = other.m_vkContext;
   m_descriptorPool = other.m_descriptorPool;
-
-  other.m_vertexBuffer = VK_NULL_HANDLE;
-  other.m_vertexBufferAllocation = VK_NULL_HANDLE;
-
-  other.m_indexBuffer = VK_NULL_HANDLE;
-  other.m_indexBufferAllocation = VK_NULL_HANDLE;
 
   other.m_descriptorPool = VK_NULL_HANDLE;
   other.m_vkContext = nullptr;
@@ -85,20 +77,14 @@ Model::operator=(Model&& other) noexcept
     m_uniqueMeshes = std::move(other.m_uniqueMeshes);
 
     m_vertices = std::move(other.m_vertices);
-    m_vertexBuffer = other.m_vertexBuffer;
-    m_vertexBufferAllocation = other.m_vertexBufferAllocation;
+    m_vertexBuffer = std::exchange(other.m_vertexBuffer, {});
 
     m_indices = std::move(other.m_indices);
-    m_indexBuffer = other.m_indexBuffer;
-    m_indexBufferAllocation = other.m_indexBufferAllocation;
+    m_indexBuffer = std::exchange(other.m_indexBuffer, {});
 
     m_vkContext = other.m_vkContext;
     m_descriptorPool = other.m_descriptorPool;
 
-    other.m_vertexBuffer = VK_NULL_HANDLE;
-    other.m_vertexBufferAllocation = VK_NULL_HANDLE;
-    other.m_indexBuffer = VK_NULL_HANDLE;
-    other.m_indexBufferAllocation = VK_NULL_HANDLE;
     other.m_descriptorPool = VK_NULL_HANDLE;
     other.m_vkContext = nullptr;
   }
@@ -379,61 +365,51 @@ Model::setupDescriptors()
 void
 Model::createVertexBuffer(VkDeviceSize bufferSize)
 {
-  VkBuffer stagingBuffer;
-  VmaAllocation stagingBufferAllocation;
-  void* data = m_vkContext->createBuffer(bufferSize,
-                                         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                         BufferType::STAGING_BUFFER,
-                                         stagingBuffer,
-                                         stagingBufferAllocation);
+  VulkanBuffer stagingBuffer = m_vkContext->createBuffer(
+    bufferSize,
+    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+    BufferType::STAGING_BUFFER);
 
-  memcpy(data, m_vertices.data(), (size_t)bufferSize);
+  memcpy(stagingBuffer.mapped, m_vertices.data(), static_cast<size_t>(bufferSize));
 
-  m_vkContext->createBuffer(bufferSize,
-                            VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                              VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                            BufferType::GPU_BUFFER,
-                            m_vertexBuffer,
-                            m_vertexBufferAllocation);
+  m_vertexBuffer = m_vkContext->createBuffer(
+    bufferSize,
+    VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+    BufferType::GPU_BUFFER);
 
   m_vkContext->copyBuffer(stagingBuffer, m_vertexBuffer, bufferSize);
-
-  m_vkContext->destroyBuffer(stagingBuffer, stagingBufferAllocation);
+  m_vkContext->destroyBuffer(stagingBuffer);
 }
 
 void
 Model::createIndexBuffer(VkDeviceSize bufferSize)
 {
-  VkBuffer stagingBuffer;
-  VmaAllocation stagingBufferAllocation;
-  void* data = m_vkContext->createBuffer(bufferSize,
-                                         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                         BufferType::STAGING_BUFFER,
-                                         stagingBuffer,
-                                         stagingBufferAllocation);
+  VulkanBuffer stagingBuffer = m_vkContext->createBuffer(
+    bufferSize,
+    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+    BufferType::STAGING_BUFFER);
 
-  memcpy(data, m_indices.data(), (size_t)bufferSize);
+  memcpy(stagingBuffer.mapped, m_indices.data(), static_cast<size_t>(bufferSize));
 
-  m_vkContext->createBuffer(bufferSize,
-                            VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                              VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                            BufferType::GPU_BUFFER,
-                            m_indexBuffer,
-                            m_indexBufferAllocation);
+  m_indexBuffer = m_vkContext->createBuffer(
+    bufferSize,
+    VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+    BufferType::GPU_BUFFER);
 
   m_vkContext->copyBuffer(stagingBuffer, m_indexBuffer, bufferSize);
-
-  m_vkContext->destroyBuffer(stagingBuffer, stagingBufferAllocation);
+  m_vkContext->destroyBuffer(stagingBuffer);
 }
 
 void
 Model::cleanup()
 {
-  if (m_vertexBuffer != VK_NULL_HANDLE && m_indexBuffer != VK_NULL_HANDLE &&
-      m_descriptorPool != VK_NULL_HANDLE) {
-    m_vkContext->destroyBuffer(m_vertexBuffer, m_vertexBufferAllocation);
-    m_vkContext->destroyBuffer(m_indexBuffer, m_indexBufferAllocation);
+  if (m_vkContext) {
+    m_vkContext->destroyBuffer(m_vertexBuffer);
+    m_vkContext->destroyBuffer(m_indexBuffer);
 
-    vkDestroyDescriptorPool(m_vkContext->logicalDevice, m_descriptorPool, nullptr);
+    if (m_descriptorPool != VK_NULL_HANDLE) {
+      vkDestroyDescriptorPool(m_vkContext->logicalDevice, m_descriptorPool, nullptr);
+      m_descriptorPool = VK_NULL_HANDLE;
+    }
   }
 }

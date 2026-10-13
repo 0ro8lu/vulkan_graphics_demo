@@ -1,9 +1,7 @@
 #pragma once
 
 #include "engine/FramebufferAttachment.h"
-#include "engine/VulkanSwapchain.h"
-
-class Scene;
+#include "engine/FrameContext.h"
 
 #include <memory>
 
@@ -20,7 +18,7 @@ public:
   HDRPass& operator=(const HDRPass&) = delete;
   HDRPass& operator=(HDRPass&&) = delete;
 
-  void draw(VulkanSwapchain* vkSwapchain);
+  void draw(const FrameContext& frameContext);
   void recreateAttachments(int width, int height);
   void updateDescriptors(
     const std::unique_ptr<FramebufferAttachment>& blinnPhongAttachment);

@@ -1,9 +1,8 @@
 #pragma once
 
 #include "engine/FramebufferAttachment.h"
-#include "engine/VulkanSwapchain.h"
 
-class Scene;
+struct SceneRenderData;
 
 #include <memory>
 
@@ -23,7 +22,7 @@ public:
   ShadowMapPass& operator=(const ShadowMapPass&) = delete;
   ShadowMapPass& operator=(ShadowMapPass&&) = delete;
 
-  void draw(VulkanSwapchain* vkSwapchain, const Scene& scene);
+  void draw(VkCommandBuffer commandBuffer, const SceneRenderData& scene);
 
   std::unique_ptr<FramebufferAttachment> m_directionalShadowMap = nullptr;
   std::unique_ptr<FramebufferAttachment> m_spotPointShadowAtlas = nullptr;

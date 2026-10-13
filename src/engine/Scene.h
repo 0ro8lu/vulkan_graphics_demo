@@ -4,6 +4,7 @@
 #include "engine/Input.h"
 #include "engine/LightManager.h"
 #include "engine/ModelLoading/Model.h"
+#include "engine/SceneRenderData.h"
 #include "engine/Skybox.h"
 #include "engine/VulkanContext.h"
 
@@ -17,6 +18,20 @@ public:
   ~Scene();
 
   void update(float deltaTime, const GameEvent& events) noexcept;
+
+  [[nodiscard]] SceneRenderData getRenderData() const noexcept
+  {
+    return SceneRenderData{
+      .models = m_models,
+      .lightCubes = m_lightCubes,
+      .skybox = m_skybox.get(),
+      .camera = m_camera.get(),
+      .pointLights = m_pointLights,
+      .directionalLight =
+        m_directionalLight.has_value() ? &m_directionalLight.value() : nullptr,
+      .spotLights = m_spotLights,
+    };
+  }
 
   std::vector<Model> m_models;
   std::vector<Model> m_lightCubes;

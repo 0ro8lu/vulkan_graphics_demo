@@ -96,8 +96,7 @@ Application::run()
 
     GameEvent::pollGameEvents(m_window, gameEvents);
     m_scene->update(deltaTime, gameEvents);
-    m_renderer->update(*m_scene);
-    m_renderer->draw(*m_scene, m_window);
+    m_renderer->draw(m_scene->getRenderData(), m_window);
 
     // FPS Counter via std::format
     frameCount++;
