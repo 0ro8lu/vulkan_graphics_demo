@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glm/glm.hpp>
+#include <utility>
 
 class LightManager;
 
@@ -67,23 +68,18 @@ private:
     switch (side) {
       case UP:
         return 0;
-        break;
       case DOWN:
         return 1;
-        break;
       case LEFT:
         return 2;
-        break;
       case RIGHT:
         return 3;
-        break;
       case FORWARD:
         return 4;
-        break;
       case BACK:
         return 5;
-        break;
     }
+    std::unreachable();
   }
 
   alignas(16) glm::vec4 position;

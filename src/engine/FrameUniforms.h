@@ -5,12 +5,14 @@
 #include "engine/VulkanTypes.h"
 
 struct SceneRenderData;
-class VulkanContext;
+class GpuDevice;
+class GpuAllocator;
 
 class FrameUniforms
 {
 public:
-  explicit FrameUniforms(VulkanContext* vkContext);
+  explicit FrameUniforms(const GpuDevice& device,
+                         const GpuAllocator& allocator);
   ~FrameUniforms();
 
   FrameUniforms(const FrameUniforms&) = delete;
@@ -67,7 +69,8 @@ private:
                                                 VkBufferUsageFlags usage);
   void destroyBuffer(VulkanBuffer& buffer) noexcept;
 
-  VulkanContext* m_vkContext{ nullptr };
+  const GpuDevice& m_device;
+  const GpuAllocator& m_allocator;
 
   VkDescriptorPool m_descriptorPool{ VK_NULL_HANDLE };
   VkDescriptorSetLayout m_cameraLayout{ VK_NULL_HANDLE };

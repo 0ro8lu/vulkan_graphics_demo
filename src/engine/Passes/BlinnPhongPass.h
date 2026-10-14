@@ -6,13 +6,19 @@ struct SceneRenderData;
 
 #include <memory>
 
+class GpuDevice;
+class GpuAllocator;
+class SamplerCache;
+
 class BlinnPhongPass
 {
 public:
   struct AttachmentConfig;
   struct LayoutConfig;
 
-  BlinnPhongPass(VulkanContext* vkContext,
+  BlinnPhongPass(const GpuDevice& device,
+                 const GpuAllocator& allocator,
+                 const SamplerCache& samplerCache,
                  const AttachmentConfig& attachmentConfig,
                  const LayoutConfig& layoutConfig);
   ~BlinnPhongPass();
@@ -73,5 +79,7 @@ private:
 
   void createPipelines(const LayoutConfig& layoutConfig);
 
-  VulkanContext* m_vkContext;
+  const GpuDevice& m_device;
+  const GpuAllocator& m_allocator;
+  const SamplerCache& m_samplerCache;
 };

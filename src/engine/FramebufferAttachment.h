@@ -3,7 +3,9 @@
 #include <memory>
 #include "engine/VulkanTypes.h"
 
-class VulkanContext;
+class GpuDevice;
+class GpuAllocator;
+class SamplerCache;
 
 class FramebufferAttachment
 {
@@ -15,7 +17,9 @@ public:
     VkFormat format = VK_FORMAT_UNDEFINED;
     uint32_t layerCount = 1;
     VkImageUsageFlags usage = 0;
-    VulkanContext* vkContext = nullptr;
+    const GpuDevice* device = nullptr;
+    const GpuAllocator* allocator = nullptr;
+    const SamplerCache* samplerCache = nullptr;
     VkSamplerAddressMode samplerAddressMode =
       VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   };
@@ -37,7 +41,10 @@ public:
   [[nodiscard]] VkImage getImage() const noexcept { return m_image; }
   [[nodiscard]] VkImageView getView() const noexcept { return m_view; }
   [[nodiscard]] VkSampler getSampler() const noexcept { return m_sampler; }
-  [[nodiscard]] bool hasSampler() const noexcept { return m_sampler != VK_NULL_HANDLE; }
+  [[nodiscard]] bool hasSampler() const noexcept
+  {
+    return m_sampler != VK_NULL_HANDLE;
+  }
   [[nodiscard]] uint32_t getWidth() const noexcept { return m_width; }
   [[nodiscard]] uint32_t getHeight() const noexcept { return m_height; }
   [[nodiscard]] uint32_t getLayerCount() const noexcept { return m_layerCount; }
@@ -61,10 +68,13 @@ private:
   VmaAllocation m_allocation = VK_NULL_HANDLE;
   VkImageUsageFlags m_usage = 0;
 
-  VulkanContext* m_vkContext = nullptr;
+  const GpuDevice* m_device = nullptr;
+  const GpuAllocator* m_allocator = nullptr;
+  const SamplerCache* m_samplerCache = nullptr;
 
   uint32_t m_width = 0;
   uint32_t m_height = 0;
   uint32_t m_layerCount = 0;
+  VkSamplerAddressMode m_samplerAddressMode =
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 };
-

@@ -1,12 +1,17 @@
 #include "engine/Passes/HDRPass.h"
+#include "engine/GpuAllocator.h"
+#include "engine/GpuDevice.h"
+#include "engine/PipelineBuilder.h"
+#include "engine/SamplerCache.h"
 #include "engine/VulkanCheck.h"
 
-#include "engine/PipelineBuilder.h"
-#include "engine/VulkanContext.h"
-
-HDRPass::HDRPass(VulkanContext* vkContext,
+HDRPass::HDRPass(const GpuDevice& device,
+                 const GpuAllocator& allocator,
+                 const SamplerCache& samplerCache,
                  const AttachmentConfig& attachmentConfig)
-  : m_vkContext(vkContext)
+  : m_device(device)
+  , m_allocator(allocator)
+  , m_samplerCache(samplerCache)
 {
   createAttachments(attachmentConfig.width, attachmentConfig.height);
 
@@ -22,150 +27,162 @@ HDRPass::HDRPass(VulkanContext* vkContext,
 HDRPass::~HDRPass()
 {
   vkDestroyDescriptorPool(
-    m_vkContext->logicalDevice, m_mainDescriptorPool, nullptr);
+    m_device.device(), m_mainDescriptorPool, nullptr);
   vkDestroyDescriptorSetLayout(
-    m_vkContext->logicalDevice, m_bloomDescriptorSetLayout, nullptr);
+    m_device.device(), m_bloomDescriptorSetLayout, nullptr);
 
   vkDestroyPipeline(
-    m_vkContext->logicalDevice, m_brightPointExtractionPipeline, nullptr);
+    m_device.device(), m_brightPointExtractionPipeline, nullptr);
   vkDestroyPipelineLayout(
-    m_vkContext->logicalDevice, m_brightPointExtractionPipelineLayout, nullptr);
+    m_device.device(), m_brightPointExtractionPipelineLayout, nullptr);
 
-  vkDestroyPipeline(m_vkContext->logicalDevice, m_horizontalBloomPipeline, nullptr);
+  vkDestroyPipeline(m_device.device(), m_horizontalBloomPipeline, nullptr);
   vkDestroyPipelineLayout(
-    m_vkContext->logicalDevice, m_horizontalBloomPipelineLayout, nullptr);
+    m_device.device(), m_horizontalBloomPipelineLayout, nullptr);
 
-  vkDestroyPipeline(m_vkContext->logicalDevice, m_verticalBloomPipeline, nullptr);
+  vkDestroyPipeline(m_device.device(), m_verticalBloomPipeline, nullptr);
   vkDestroyPipelineLayout(
-    m_vkContext->logicalDevice, m_verticalBloomPipelineLayout, nullptr);
+    m_device.device(), m_verticalBloomPipelineLayout, nullptr);
 
-  vkDestroyPipeline(m_vkContext->logicalDevice, m_compositionPipeline, nullptr);
+  vkDestroyPipeline(m_device.device(), m_compositionPipeline, nullptr);
   vkDestroyPipelineLayout(
-    m_vkContext->logicalDevice, m_compositionPipelineLayout, nullptr);
+    m_device.device(), m_compositionPipelineLayout, nullptr);
 
-  vkDestroyRenderPass(m_vkContext->logicalDevice, m_bloomRenderPass, nullptr);
+  vkDestroyRenderPass(m_device.device(), m_brightPointRenderPass, nullptr);
+  vkDestroyRenderPass(m_device.device(), m_horizontalBloomRenderPass, nullptr);
   vkDestroyRenderPass(
-    m_vkContext->logicalDevice, m_presentationRenderPass, nullptr);
+    m_device.device(), m_presentationRenderPass, nullptr);
 
-  vkDestroyFramebuffer(m_vkContext->logicalDevice, m_bloomFramebuffer, nullptr);
+  vkDestroyFramebuffer(m_device.device(), m_brightPointFramebuffer, nullptr);
+  vkDestroyFramebuffer(m_device.device(), m_horizontalBloomFramebuffer, nullptr);
 }
 
 void
 HDRPass::draw(const FrameContext& frameContext)
 {
-  // extract colors first!
-  VkRenderPassBeginInfo renderPassInfo{};
-  renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-  renderPassInfo.renderPass = m_bloomRenderPass;
-  renderPassInfo.framebuffer = m_bloomFramebuffer;
-  renderPassInfo.renderArea.offset = { 0, 0 };
-  renderPassInfo.renderArea.extent = frameContext.extent;
-
-  std::array<VkClearValue, 2> clearValues{};
-  clearValues[0].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
-  clearValues[1].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
-
-  renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-  renderPassInfo.pClearValues = clearValues.data();
-
-  vkCmdBeginRenderPass(
-    frameContext.commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-  vkCmdBindPipeline(frameContext.commandBuffer,
-                    VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    m_brightPointExtractionPipeline);
-
   VkViewport viewport{};
   viewport.x = 0.0f;
   viewport.y = 0.0f;
-  viewport.width = (float)frameContext.extent.width;
-  viewport.height = (float)frameContext.extent.height;
+  viewport.width = static_cast<float>(frameContext.extent.width);
+  viewport.height = static_cast<float>(frameContext.extent.height);
   viewport.minDepth = 0.0f;
   viewport.maxDepth = 1.0f;
-  vkCmdSetViewport(frameContext.commandBuffer, 0, 1, &viewport);
 
   VkRect2D scissor{};
   scissor.offset = { 0, 0 };
   scissor.extent = frameContext.extent;
-  vkCmdSetScissor(frameContext.commandBuffer, 0, 1, &scissor);
 
-  vkCmdBindDescriptorSets(frameContext.commandBuffer,
-                          VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          m_brightPointExtractionPipelineLayout,
-                          0,
-                          1,
-                          &m_brightPointDescriptorSet,
-                          0,
-                          nullptr);
-  vkCmdDraw(frameContext.commandBuffer, 3, 1, 0, 0);
+  VkClearValue clearColor{};
+  clearColor.color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
 
-  // we now do out first horizontal bloom pass
-  vkCmdNextSubpass(frameContext.commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+  // 1. Bright point extraction pass
+  {
+    VkRenderPassBeginInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass = m_brightPointRenderPass;
+    renderPassInfo.framebuffer = m_brightPointFramebuffer;
+    renderPassInfo.renderArea.offset = { 0, 0 };
+    renderPassInfo.renderArea.extent = frameContext.extent;
+    renderPassInfo.clearValueCount = 1;
+    renderPassInfo.pClearValues = &clearColor;
 
-  vkCmdBindPipeline(frameContext.commandBuffer,
-                    VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    m_horizontalBloomPipeline);
+    vkCmdBeginRenderPass(
+      frameContext.commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-  vkCmdSetViewport(frameContext.commandBuffer, 0, 1, &viewport);
+    vkCmdBindPipeline(frameContext.commandBuffer,
+                      VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      m_brightPointExtractionPipeline);
+    vkCmdSetViewport(frameContext.commandBuffer, 0, 1, &viewport);
+    vkCmdSetScissor(frameContext.commandBuffer, 0, 1, &scissor);
+    vkCmdBindDescriptorSets(frameContext.commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            m_brightPointExtractionPipelineLayout,
+                            0,
+                            1,
+                            &m_brightPointDescriptorSet,
+                            0,
+                            nullptr);
+    vkCmdDraw(frameContext.commandBuffer, 3, 1, 0, 0);
 
-  vkCmdSetScissor(frameContext.commandBuffer, 0, 1, &scissor);
+    vkCmdEndRenderPass(frameContext.commandBuffer);
+  }
 
-  vkCmdBindDescriptorSets(frameContext.commandBuffer,
-                          VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          m_horizontalBloomPipelineLayout,
-                          0,
-                          1,
-                          &m_horizontalBloomDescriptorSet,
-                          0,
-                          nullptr);
-  vkCmdDraw(frameContext.commandBuffer, 3, 1, 0, 0);
+  // 2. Horizontal bloom pass
+  {
+    VkRenderPassBeginInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass = m_horizontalBloomRenderPass;
+    renderPassInfo.framebuffer = m_horizontalBloomFramebuffer;
+    renderPassInfo.renderArea.offset = { 0, 0 };
+    renderPassInfo.renderArea.extent = frameContext.extent;
+    renderPassInfo.clearValueCount = 1;
+    renderPassInfo.pClearValues = &clearColor;
 
-  // now we combine it inside the swapchain!
-  renderPassInfo.renderPass = m_presentationRenderPass;
-  renderPassInfo.framebuffer = frameContext.backbuffer;
-  renderPassInfo.renderArea.offset = { 0, 0 };
-  renderPassInfo.renderArea.extent = frameContext.extent;
+    vkCmdBeginRenderPass(
+      frameContext.commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-  renderPassInfo.clearValueCount = 1;
-  renderPassInfo.pClearValues = &clearValues[0];
+    vkCmdBindPipeline(frameContext.commandBuffer,
+                      VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      m_horizontalBloomPipeline);
+    vkCmdSetViewport(frameContext.commandBuffer, 0, 1, &viewport);
+    vkCmdSetScissor(frameContext.commandBuffer, 0, 1, &scissor);
+    vkCmdBindDescriptorSets(frameContext.commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            m_horizontalBloomPipelineLayout,
+                            0,
+                            1,
+                            &m_horizontalBloomDescriptorSet,
+                            0,
+                            nullptr);
+    vkCmdDraw(frameContext.commandBuffer, 3, 1, 0, 0);
 
-  vkCmdEndRenderPass(frameContext.commandBuffer);
-  vkCmdBeginRenderPass(
-    frameContext.commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdEndRenderPass(frameContext.commandBuffer);
+  }
 
-  vkCmdBindPipeline(frameContext.commandBuffer,
-                    VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    m_compositionPipeline);
+  // 3. Presentation pass (composition + vertical bloom additive blend)
+  {
+    VkRenderPassBeginInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass = m_presentationRenderPass;
+    renderPassInfo.framebuffer = frameContext.backbuffer;
+    renderPassInfo.renderArea.offset = { 0, 0 };
+    renderPassInfo.renderArea.extent = frameContext.extent;
+    renderPassInfo.clearValueCount = 1;
+    renderPassInfo.pClearValues = &clearColor;
 
-  vkCmdSetViewport(frameContext.commandBuffer, 0, 1, &viewport);
+    vkCmdBeginRenderPass(
+      frameContext.commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-  vkCmdSetScissor(frameContext.commandBuffer, 0, 1, &scissor);
+    vkCmdBindPipeline(frameContext.commandBuffer,
+                      VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      m_compositionPipeline);
+    vkCmdSetViewport(frameContext.commandBuffer, 0, 1, &viewport);
+    vkCmdSetScissor(frameContext.commandBuffer, 0, 1, &scissor);
+    vkCmdBindDescriptorSets(frameContext.commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            m_compositionPipelineLayout,
+                            0,
+                            1,
+                            &m_brightPointDescriptorSet,
+                            0,
+                            nullptr);
+    vkCmdDraw(frameContext.commandBuffer, 3, 1, 0, 0);
 
-  vkCmdBindDescriptorSets(frameContext.commandBuffer,
-                          VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          m_compositionPipelineLayout,
-                          0,
-                          1,
-                          &m_brightPointDescriptorSet,
-                          0,
-                          nullptr);
-  vkCmdDraw(frameContext.commandBuffer, 3, 1, 0, 0);
+    vkCmdBindPipeline(frameContext.commandBuffer,
+                      VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      m_verticalBloomPipeline);
+    vkCmdBindDescriptorSets(frameContext.commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            m_verticalBloomPipelineLayout,
+                            0,
+                            1,
+                            &m_verticalBloomDescriptorSet,
+                            0,
+                            nullptr);
+    vkCmdDraw(frameContext.commandBuffer, 3, 1, 0, 0);
 
-  vkCmdBindPipeline(frameContext.commandBuffer,
-                    VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    m_verticalBloomPipeline);
-
-  vkCmdBindDescriptorSets(frameContext.commandBuffer,
-                          VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          m_verticalBloomPipelineLayout,
-                          0,
-                          1,
-                          &m_verticalBloomDescriptorSet,
-                          0,
-                          nullptr);
-  vkCmdDraw(frameContext.commandBuffer, 3, 1, 0, 0);
-
-  vkCmdEndRenderPass(frameContext.commandBuffer);
+    vkCmdEndRenderPass(frameContext.commandBuffer);
+  }
 }
 
 void
@@ -174,7 +191,8 @@ HDRPass::recreateAttachments(int width, int height)
   m_brightSpotsAttachment->resize(width, height);
   m_intermediateBloomAttachment->resize(width, height);
 
-  vkDestroyFramebuffer(m_vkContext->logicalDevice, m_bloomFramebuffer, nullptr);
+  vkDestroyFramebuffer(m_device.device(), m_brightPointFramebuffer, nullptr);
+  vkDestroyFramebuffer(m_device.device(), m_horizontalBloomFramebuffer, nullptr);
 
   createFrameBuffers();
 }
@@ -200,7 +218,7 @@ HDRPass::updateDescriptors(
     descriptorWrite.pImageInfo = &imageInfo;
 
     vkUpdateDescriptorSets(
-      m_vkContext->logicalDevice, 1, &descriptorWrite, 0, nullptr);
+      m_device.device(), 1, &descriptorWrite, 0, nullptr);
   }
 
   {
@@ -219,7 +237,7 @@ HDRPass::updateDescriptors(
     descriptorWrite.pImageInfo = &imageInfo;
 
     vkUpdateDescriptorSets(
-      m_vkContext->logicalDevice, 1, &descriptorWrite, 0, nullptr);
+      m_device.device(), 1, &descriptorWrite, 0, nullptr);
   }
 
   {
@@ -237,28 +255,44 @@ HDRPass::updateDescriptors(
     descriptorWrite.pImageInfo = &imageInfo;
 
     vkUpdateDescriptorSets(
-      m_vkContext->logicalDevice, 1, &descriptorWrite, 0, nullptr);
+      m_device.device(), 1, &descriptorWrite, 0, nullptr);
   }
 }
 
 void
 HDRPass::createFrameBuffers()
 {
-  std::array<VkImageView, 2> attachments = {
-    m_brightSpotsAttachment->getView(), m_intermediateBloomAttachment->getView()
-  };
+  // 1. Bright point framebuffer
+  {
+    VkImageView attachment = m_brightSpotsAttachment->getView();
+    VkFramebufferCreateInfo framebufferInfo{};
+    framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebufferInfo.renderPass = m_brightPointRenderPass;
+    framebufferInfo.attachmentCount = 1;
+    framebufferInfo.pAttachments = &attachment;
+    framebufferInfo.width = m_brightSpotsAttachment->getWidth();
+    framebufferInfo.height = m_brightSpotsAttachment->getHeight();
+    framebufferInfo.layers = 1;
 
-  VkFramebufferCreateInfo framebufferInfo{};
-  framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-  framebufferInfo.renderPass = m_bloomRenderPass;
-  framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-  framebufferInfo.pAttachments = attachments.data();
-  framebufferInfo.width = m_brightSpotsAttachment->getWidth();
-  framebufferInfo.height = m_brightSpotsAttachment->getHeight();
-  framebufferInfo.layers = 1;
+    VK_CHECK(vkCreateFramebuffer(
+      m_device.device(), &framebufferInfo, nullptr, &m_brightPointFramebuffer));
+  }
 
-  VK_CHECK(vkCreateFramebuffer(
-    m_vkContext->logicalDevice, &framebufferInfo, nullptr, &m_bloomFramebuffer));
+  // 2. Horizontal bloom framebuffer
+  {
+    VkImageView attachment = m_intermediateBloomAttachment->getView();
+    VkFramebufferCreateInfo framebufferInfo{};
+    framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebufferInfo.renderPass = m_horizontalBloomRenderPass;
+    framebufferInfo.attachmentCount = 1;
+    framebufferInfo.pAttachments = &attachment;
+    framebufferInfo.width = m_intermediateBloomAttachment->getWidth();
+    framebufferInfo.height = m_intermediateBloomAttachment->getHeight();
+    framebufferInfo.layers = 1;
+
+    VK_CHECK(vkCreateFramebuffer(
+      m_device.device(), &framebufferInfo, nullptr, &m_horizontalBloomFramebuffer));
+  }
 }
 
 void
@@ -271,7 +305,10 @@ HDRPass::createAttachments(uint32_t width, uint32_t height)
   brightInfo.layerCount = 1;
   brightInfo.usage =
     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-  brightInfo.vkContext = m_vkContext;
+  brightInfo.device = &m_device;
+  brightInfo.allocator = &m_allocator;
+  brightInfo.samplerCache = &m_samplerCache;
+  brightInfo.samplerAddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   m_brightSpotsAttachment = FramebufferAttachment::create(brightInfo);
 
   FramebufferAttachment::CreateInfo intermInfo{};
@@ -281,15 +318,17 @@ HDRPass::createAttachments(uint32_t width, uint32_t height)
   intermInfo.layerCount = 1;
   intermInfo.usage =
     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-  intermInfo.vkContext = m_vkContext;
+  intermInfo.device = &m_device;
+  intermInfo.allocator = &m_allocator;
+  intermInfo.samplerCache = &m_samplerCache;
+  intermInfo.samplerAddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   m_intermediateBloomAttachment = FramebufferAttachment::create(intermInfo);
 }
 
 void
 HDRPass::createRenderPass(VkFormat swapchainImageFormat)
 {
-  // bloom render pass
-  // two attachments. two subpasses.
+  // 1. Bright points render pass
   {
     VkAttachmentDescription brightSpotsAttachmentDescriptor{};
     brightSpotsAttachmentDescriptor.format =
@@ -305,6 +344,48 @@ HDRPass::createRenderPass(VkFormat swapchainImageFormat)
     brightSpotsAttachmentDescriptor.finalLayout =
       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
+    VkAttachmentReference colorAttachmentRef{};
+    colorAttachmentRef.attachment = 0;
+    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorAttachmentRef;
+
+    std::array<VkSubpassDependency, 2> dependencies{};
+    dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[0].dstSubpass = 0;
+    dependencies[0].srcStageMask =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[0].srcAccessMask = 0;
+    dependencies[0].dstStageMask =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    dependencies[1].srcSubpass = 0;
+    dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[1].srcStageMask =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    VkRenderPassCreateInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount = 1;
+    renderPassInfo.pAttachments = &brightSpotsAttachmentDescriptor;
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpass;
+    renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+    renderPassInfo.pDependencies = dependencies.data();
+
+    VK_CHECK(vkCreateRenderPass(
+      m_device.device(), &renderPassInfo, nullptr, &m_brightPointRenderPass));
+  }
+
+  // 2. Horizontal bloom render pass
+  {
     VkAttachmentDescription intermediateBloomAttachmentDescriptor{};
     intermediateBloomAttachmentDescriptor.format =
       m_intermediateBloomAttachment->getFormat();
@@ -321,89 +402,47 @@ HDRPass::createRenderPass(VkFormat swapchainImageFormat)
     intermediateBloomAttachmentDescriptor.finalLayout =
       VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-    VkAttachmentReference brightSpotsAttachmentOutputReference;
-    brightSpotsAttachmentOutputReference.attachment = 0;
-    brightSpotsAttachmentOutputReference.layout =
-      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    VkAttachmentReference colorAttachmentRef{};
+    colorAttachmentRef.attachment = 0;
+    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-    VkAttachmentReference brightSpotsAttachmentInputReference;
-    brightSpotsAttachmentInputReference.attachment = 0;
-    brightSpotsAttachmentInputReference.layout =
-      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorAttachmentRef;
 
-    VkAttachmentReference intermediateBloomAttachmentReference;
-    intermediateBloomAttachmentReference.attachment = 1;
-    intermediateBloomAttachmentReference.layout =
-      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    std::array<VkSubpassDescription, 2> subPassDescriptions{};
-    subPassDescriptions[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subPassDescriptions[0].colorAttachmentCount = 1;
-    subPassDescriptions[0].pColorAttachments =
-      &brightSpotsAttachmentOutputReference;
-
-    subPassDescriptions[1].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subPassDescriptions[1].colorAttachmentCount = 1;
-    subPassDescriptions[1].pColorAttachments =
-      &intermediateBloomAttachmentReference;
-    subPassDescriptions[1].inputAttachmentCount = 1;
-    subPassDescriptions[1].pInputAttachments =
-      &brightSpotsAttachmentInputReference;
-
-    std::array<VkSubpassDependency, 3> dependencies;
-
+    std::array<VkSubpassDependency, 2> dependencies{};
     dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
     dependencies[0].dstSubpass = 0;
     dependencies[0].srcStageMask =
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[0].srcAccessMask = 0;
     dependencies[0].dstStageMask =
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-                                    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-    // This dependency transitions the input attachment from color attachment to
-    // shader read
     dependencies[1].srcSubpass = 0;
-    dependencies[1].dstSubpass = 1;
+    dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
     dependencies[1].srcStageMask =
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
     dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependencies[1].dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
-    dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-    dependencies[2].srcSubpass = 1;
-    dependencies[2].dstSubpass = VK_SUBPASS_EXTERNAL;
-    dependencies[2].srcStageMask =
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[2].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-    dependencies[2].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-                                    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependencies[2].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-    dependencies[2].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-    std::array<VkAttachmentDescription, 2> attachments = {
-      brightSpotsAttachmentDescriptor,
-      intermediateBloomAttachmentDescriptor,
-    };
+    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
     VkRenderPassCreateInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-    renderPassInfo.pAttachments = attachments.data();
-    renderPassInfo.subpassCount =
-      static_cast<uint32_t>(subPassDescriptions.size());
-    renderPassInfo.pSubpasses = subPassDescriptions.data();
+    renderPassInfo.attachmentCount = 1;
+    renderPassInfo.pAttachments = &intermediateBloomAttachmentDescriptor;
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpass;
     renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
     renderPassInfo.pDependencies = dependencies.data();
 
     VK_CHECK(vkCreateRenderPass(
-      m_vkContext->logicalDevice, &renderPassInfo, nullptr, &m_bloomRenderPass));
+      m_device.device(), &renderPassInfo, nullptr, &m_horizontalBloomRenderPass));
   }
 
-  // render pass for presentation
+  // 3. Presentation render pass (with fragment shader read dependency for sampled inputs)
   {
     VkAttachmentDescription swapchainAttachment{};
     swapchainAttachment.format = swapchainImageFormat;
@@ -424,16 +463,27 @@ HDRPass::createRenderPass(VkFormat swapchainImageFormat)
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &colorAttachmentRef;
 
-    VkSubpassDependency dependency{};
-    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                              VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependency.srcAccessMask = 0;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                              VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                               VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    std::array<VkSubpassDependency, 2> dependencies{};
+    // Incoming: wait for previous passes' sampled image writes to be visible
+    dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[0].dstSubpass = 0;
+    dependencies[0].srcStageMask =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[0].dstStageMask =
+      VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[0].dstAccessMask =
+      VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    // Outgoing: ensure our writes complete before present
+    dependencies[1].srcSubpass = 0;
+    dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[1].srcStageMask =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    dependencies[1].dstAccessMask = 0;
 
     VkRenderPassCreateInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -441,10 +491,10 @@ HDRPass::createRenderPass(VkFormat swapchainImageFormat)
     renderPassInfo.pAttachments = &swapchainAttachment;
     renderPassInfo.subpassCount = 1;
     renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = 1;
-    renderPassInfo.pDependencies = &dependency;
+    renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+    renderPassInfo.pDependencies = dependencies.data();
 
-    VK_CHECK(vkCreateRenderPass(m_vkContext->logicalDevice,
+    VK_CHECK(vkCreateRenderPass(m_device.device(),
                                 &renderPassInfo,
                                 nullptr,
                                 &m_presentationRenderPass));
@@ -466,7 +516,7 @@ HDRPass::createDescriptors()
   poolInfo.maxSets = 3;
 
   VK_CHECK(vkCreateDescriptorPool(
-    m_vkContext->logicalDevice, &poolInfo, nullptr, &m_mainDescriptorPool));
+    m_device.device(), &poolInfo, nullptr, &m_mainDescriptorPool));
 
   // create descr layout
   std::array<VkDescriptorSetLayoutBinding, 1> bindings;
@@ -483,7 +533,7 @@ HDRPass::createDescriptors()
     static_cast<uint32_t>(bindings.size());
   layoutInfoAttachmentWrite.pBindings = bindings.data();
 
-  VK_CHECK(vkCreateDescriptorSetLayout(m_vkContext->logicalDevice,
+  VK_CHECK(vkCreateDescriptorSetLayout(m_device.device(),
                                        &layoutInfoAttachmentWrite,
                                        nullptr,
                                        &m_bloomDescriptorSetLayout));
@@ -495,11 +545,11 @@ HDRPass::createDescriptors()
   allocInfo.pSetLayouts = &m_bloomDescriptorSetLayout;
 
   VK_CHECK(vkAllocateDescriptorSets(
-    m_vkContext->logicalDevice, &allocInfo, &m_brightPointDescriptorSet));
+    m_device.device(), &allocInfo, &m_brightPointDescriptorSet));
   VK_CHECK(vkAllocateDescriptorSets(
-    m_vkContext->logicalDevice, &allocInfo, &m_horizontalBloomDescriptorSet));
+    m_device.device(), &allocInfo, &m_horizontalBloomDescriptorSet));
   VK_CHECK(vkAllocateDescriptorSets(
-    m_vkContext->logicalDevice, &allocInfo, &m_verticalBloomDescriptorSet));
+    m_device.device(), &allocInfo, &m_verticalBloomDescriptorSet));
 }
 
 void
@@ -515,8 +565,8 @@ HDRPass::createPipelines()
                     .setDepthTest(VK_FALSE, VK_FALSE)
                     .setDescriptorSetLayouts(
                       std::span(&m_bloomDescriptorSetLayout, 1))
-                    .setRenderPass(m_bloomRenderPass, 0)
-                    .build(m_vkContext->logicalDevice);
+                    .setRenderPass(m_brightPointRenderPass, 0)
+                    .build(m_device.device());
 
     m_brightPointExtractionPipeline = result.pipeline;
     m_brightPointExtractionPipelineLayout = result.layout;
@@ -546,8 +596,8 @@ HDRPass::createPipelines()
                     .setDepthTest(VK_FALSE, VK_FALSE)
                     .setDescriptorSetLayouts(
                       std::span(&m_bloomDescriptorSetLayout, 1))
-                    .setRenderPass(m_bloomRenderPass, 1)
-                    .build(m_vkContext->logicalDevice);
+                    .setRenderPass(m_horizontalBloomRenderPass, 0)
+                    .build(m_device.device());
 
     m_horizontalBloomPipeline = result.pipeline;
     m_horizontalBloomPipelineLayout = result.layout;
@@ -579,7 +629,7 @@ HDRPass::createPipelines()
                     .setDescriptorSetLayouts(
                       std::span(&m_bloomDescriptorSetLayout, 1))
                     .setRenderPass(m_presentationRenderPass, 0)
-                    .build(m_vkContext->logicalDevice);
+                    .build(m_device.device());
 
     m_verticalBloomPipeline = result.pipeline;
     m_verticalBloomPipelineLayout = result.layout;
@@ -596,7 +646,7 @@ HDRPass::createPipelines()
                     .setDescriptorSetLayouts(
                       std::span(&m_bloomDescriptorSetLayout, 1))
                     .setRenderPass(m_presentationRenderPass, 0)
-                    .build(m_vkContext->logicalDevice);
+                    .build(m_device.device());
 
     m_compositionPipeline = result.pipeline;
     m_compositionPipelineLayout = result.layout;

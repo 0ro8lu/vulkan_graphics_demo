@@ -1,21 +1,22 @@
 #include "engine/FrameUniforms.h"
 
 #include "engine/Camera3D.h"
+#include "engine/GpuAllocator.h"
+#include "engine/GpuDevice.h"
 #include "engine/LightManager.h"
 #include "engine/SceneRenderData.h"
 #include "engine/VulkanCheck.h"
-#include "engine/VulkanContext.h"
 
 #include <algorithm>
 #include <cassert>
 #include <cstring>
-#include <iostream>
+#include <format>
 
-FrameUniforms::FrameUniforms(VulkanContext* vkContext)
-  : m_vkContext(vkContext)
+FrameUniforms::FrameUniforms(const GpuDevice& device,
+                             const GpuAllocator& allocator)
+  : m_device(device)
+  , m_allocator(allocator)
 {
-  assert(m_vkContext != nullptr);
-
   createDescriptorPool();
   createLayouts();
   createFrameResources();
@@ -24,10 +25,6 @@ FrameUniforms::FrameUniforms(VulkanContext* vkContext)
 
 FrameUniforms::~FrameUniforms()
 {
-  if (!m_vkContext || m_vkContext->logicalDevice == VK_NULL_HANDLE) {
-    return;
-  }
-
   for (auto& frame : m_frames) {
     destroyBuffer(frame.cameraBuffer);
     destroyBuffer(frame.directionalLightBuffer);
@@ -36,24 +33,21 @@ FrameUniforms::~FrameUniforms()
   }
 
   if (m_descriptorPool != VK_NULL_HANDLE) {
-    vkDestroyDescriptorPool(
-      m_vkContext->logicalDevice, m_descriptorPool, nullptr);
+    vkDestroyDescriptorPool(m_device.device(), m_descriptorPool, nullptr);
     m_descriptorPool = VK_NULL_HANDLE;
   }
 
   if (m_cameraLayout != VK_NULL_HANDLE) {
-    vkDestroyDescriptorSetLayout(
-      m_vkContext->logicalDevice, m_cameraLayout, nullptr);
+    vkDestroyDescriptorSetLayout(m_device.device(), m_cameraLayout, nullptr);
     m_cameraLayout = VK_NULL_HANDLE;
   }
   if (m_lightsLayout != VK_NULL_HANDLE) {
-    vkDestroyDescriptorSetLayout(
-      m_vkContext->logicalDevice, m_lightsLayout, nullptr);
+    vkDestroyDescriptorSetLayout(m_device.device(), m_lightsLayout, nullptr);
     m_lightsLayout = VK_NULL_HANDLE;
   }
   if (m_shadowMapLayout != VK_NULL_HANDLE) {
     vkDestroyDescriptorSetLayout(
-      m_vkContext->logicalDevice, m_shadowMapLayout, nullptr);
+      m_device.device(), m_shadowMapLayout, nullptr);
     m_shadowMapLayout = VK_NULL_HANDLE;
   }
 }
@@ -61,13 +55,13 @@ FrameUniforms::~FrameUniforms()
 VulkanBuffer
 FrameUniforms::createMappedBuffer(VkDeviceSize size, VkBufferUsageFlags usage)
 {
-  return m_vkContext->createBuffer(size, usage, BufferType::STAGING_BUFFER);
+  return m_allocator.createBuffer(size, usage, BufferType::STAGING_BUFFER);
 }
 
 void
 FrameUniforms::destroyBuffer(VulkanBuffer& buffer) noexcept
 {
-  m_vkContext->destroyBuffer(buffer);
+  m_allocator.destroyBuffer(buffer);
 }
 
 void
@@ -91,7 +85,7 @@ FrameUniforms::createDescriptorPool()
   };
 
   VK_CHECK(vkCreateDescriptorPool(
-    m_vkContext->logicalDevice, &poolInfo, nullptr, &m_descriptorPool));
+    m_device.device(), &poolInfo, nullptr, &m_descriptorPool));
 }
 
 void
@@ -114,7 +108,7 @@ FrameUniforms::createLayouts()
     };
 
     VK_CHECK(vkCreateDescriptorSetLayout(
-      m_vkContext->logicalDevice, &layoutInfo, nullptr, &m_cameraLayout));
+      m_device.device(), &layoutInfo, nullptr, &m_cameraLayout));
   }
 
   // 2. Lights Layout (binding 0: Directional, 1: Point, 2: Spot)
@@ -137,7 +131,7 @@ FrameUniforms::createLayouts()
     };
 
     VK_CHECK(vkCreateDescriptorSetLayout(
-      m_vkContext->logicalDevice, &layoutInfo, nullptr, &m_lightsLayout));
+      m_device.device(), &layoutInfo, nullptr, &m_lightsLayout));
   }
 
   // 3. Shadow Map Layout (binding 0: Directional, binding 1: Spot/Point Atlas)
@@ -165,7 +159,7 @@ FrameUniforms::createLayouts()
     };
 
     VK_CHECK(vkCreateDescriptorSetLayout(
-      m_vkContext->logicalDevice, &layoutInfo, nullptr, &m_shadowMapLayout));
+      m_device.device(), &layoutInfo, nullptr, &m_shadowMapLayout));
   }
 }
 
@@ -195,7 +189,7 @@ FrameUniforms::createFrameResources()
         .pSetLayouts = &m_cameraLayout,
       };
       VK_CHECK(vkAllocateDescriptorSets(
-        m_vkContext->logicalDevice, &allocInfo, &frame.cameraDescriptorSet));
+        m_device.device(), &allocInfo, &frame.cameraDescriptorSet));
 
       VkDescriptorBufferInfo bufferInfo{
         .buffer = frame.cameraBuffer.buffer,
@@ -213,7 +207,7 @@ FrameUniforms::createFrameResources()
         .pBufferInfo = &bufferInfo,
       };
 
-      vkUpdateDescriptorSets(m_vkContext->logicalDevice, 1, &write, 0, nullptr);
+      vkUpdateDescriptorSets(m_device.device(), 1, &write, 0, nullptr);
     }
 
     // Allocate & populate Lights descriptor set
@@ -225,7 +219,7 @@ FrameUniforms::createFrameResources()
         .pSetLayouts = &m_lightsLayout,
       };
       VK_CHECK(vkAllocateDescriptorSets(
-        m_vkContext->logicalDevice, &allocInfo, &frame.lightsDescriptorSet));
+        m_device.device(), &allocInfo, &frame.lightsDescriptorSet));
 
       VkDescriptorBufferInfo dirLightInfo{
         .buffer = frame.directionalLightBuffer.buffer,
@@ -272,7 +266,7 @@ FrameUniforms::createFrameResources()
         .pBufferInfo = &spotLightInfo,
       };
 
-      vkUpdateDescriptorSets(m_vkContext->logicalDevice,
+      vkUpdateDescriptorSets(m_device.device(),
                              static_cast<uint32_t>(writes.size()),
                              writes.data(),
                              0,
@@ -291,7 +285,7 @@ FrameUniforms::createShadowMapDescriptorSet()
     .pSetLayouts = &m_shadowMapLayout,
   };
   VK_CHECK(vkAllocateDescriptorSets(
-    m_vkContext->logicalDevice, &allocInfo, &m_shadowMapDescriptorSet));
+    m_device.device(), &allocInfo, &m_shadowMapDescriptorSet));
 }
 
 void
@@ -299,25 +293,22 @@ FrameUniforms::update(uint32_t frameIndex,
                       const SceneRenderData& sceneRenderData)
 {
   if (frameIndex >= MAX_FRAMES_IN_FLIGHT) {
-    std::cerr << "[FrameUniforms]: Error: frameIndex " << frameIndex
-              << " exceeds MAX_FRAMES_IN_FLIGHT (" << MAX_FRAMES_IN_FLIGHT
-              << ")\n";
-    ENGINE_DEBUG_BREAK();
-    std::abort();
+    ReportFatalError(
+      std::format("frameIndex {} exceeds MAX_FRAMES_IN_FLIGHT ({})",
+                  frameIndex,
+                  MAX_FRAMES_IN_FLIGHT));
   }
   if (sceneRenderData.spotLights.size() > MAX_SPOT_LIGHTS) {
-    std::cerr << "[FrameUniforms]: Error: spot light count "
-              << sceneRenderData.spotLights.size()
-              << " exceeds MAX_SPOT_LIGHTS (" << MAX_SPOT_LIGHTS << ")\n";
-    ENGINE_DEBUG_BREAK();
-    std::abort();
+    ReportFatalError(
+      std::format("spot light count {} exceeds MAX_SPOT_LIGHTS ({})",
+                  sceneRenderData.spotLights.size(),
+                  MAX_SPOT_LIGHTS));
   }
   if (sceneRenderData.pointLights.size() > MAX_POINT_LIGHTS) {
-    std::cerr << "[FrameUniforms]: Error: point light count "
-              << sceneRenderData.pointLights.size()
-              << " exceeds MAX_POINT_LIGHTS (" << MAX_POINT_LIGHTS << ")\n";
-    ENGINE_DEBUG_BREAK();
-    std::abort();
+    ReportFatalError(
+      std::format("point light count {} exceeds MAX_POINT_LIGHTS ({})",
+                  sceneRenderData.pointLights.size(),
+                  MAX_POINT_LIGHTS));
   }
 
   auto& frame = m_frames[frameIndex];

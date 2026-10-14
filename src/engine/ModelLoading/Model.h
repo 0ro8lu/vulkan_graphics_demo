@@ -20,19 +20,24 @@ struct MeshInstance
   Mesh* mesh;
 };
 
-class VulkanContext;
+class GpuDevice;
+class GpuAllocator;
+class SamplerCache;
+class ImmediateCommands;
 
 class Model final
 {
 public:
   Model(const std::string& filePath,
-        VulkanContext* vulkanContext,
+        const GpuDevice& device,
+        const GpuAllocator& allocator,
+        const SamplerCache& samplerCache,
+        const ImmediateCommands& immediateCommands,
         glm::vec3 pos = glm::vec3(0),
         glm::vec3 rotationAxis = glm::vec3(0),
         float rotationAngle = 0.0f,
         glm::vec3 scale = glm::vec3(1));
 
-  // find a way to copy this efficiently
   Model(const Model&) = delete;
   Model& operator=(const Model&) = delete;
 
@@ -59,7 +64,10 @@ public:
   static VkDescriptorSetLayout s_textureLayout;
 
 private:
-  VulkanContext* m_vkContext;
+  const GpuDevice* m_device = nullptr;
+  const GpuAllocator* m_allocator = nullptr;
+  const SamplerCache* m_samplerCache = nullptr;
+  const ImmediateCommands* m_immediateCommands = nullptr;
 
   glm::mat4 m_modelMatrix = glm::mat4(1.0);
   inline void applyTransform(const glm::mat4& transform);

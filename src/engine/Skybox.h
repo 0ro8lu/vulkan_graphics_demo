@@ -8,12 +8,19 @@
 #include <glm/glm.hpp>
 
 class Model;
-class VulkanContext;
+class GpuDevice;
+class GpuAllocator;
+class SamplerCache;
+class ImmediateCommands;
 
 class Skybox
 {
 public:
-  Skybox(VulkanContext* vkContext, std::span<const std::string, 6> filePaths);
+  Skybox(const GpuDevice& device,
+         const GpuAllocator& allocator,
+         const SamplerCache& samplerCache,
+         const ImmediateCommands& immediateCommands,
+         std::span<const std::string, 6> filePaths);
   ~Skybox();
 
   // Non-copyable and non-movable to safely manage Vulkan resources
@@ -29,7 +36,10 @@ public:
   std::unique_ptr<Model> m_cube;
 
 private:
-  VulkanContext* m_vkContext;
+  const GpuDevice& m_device;
+  const GpuAllocator& m_allocator;
+  const SamplerCache& m_samplerCache;
+  const ImmediateCommands& m_immediateCommands;
 
   VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
 

@@ -1,10 +1,10 @@
 #include "engine/ModelLoading/Mesh.h"
+#include "engine/GpuDevice.h"
 #include "engine/VulkanCheck.h"
-#include "engine/VulkanContext.h"
 
 #include <array>
 
-Mesh::Mesh(VulkanContext* vkContext,
+Mesh::Mesh(const GpuDevice& device,
            size_t indexCount,
            size_t startIndex,
            Texture&& diffuseTexture,
@@ -13,7 +13,7 @@ Mesh::Mesh(VulkanContext* vkContext,
   , m_specularTexture(std::move(specularTexture))
   , m_indexCount(indexCount)
   , m_startIndex(startIndex)
-  , m_vkContext(vkContext)
+  , m_device(&device)
 {
 }
 
@@ -30,7 +30,7 @@ Mesh::createDescriptorSet(VkDescriptorPool descriptorPool,
   allocInfo.pSetLayouts = &descriptorLayout;
 
   VK_CHECK(vkAllocateDescriptorSets(
-    m_vkContext->logicalDevice, &allocInfo, &m_descriptorSet));
+    m_device->device(), &allocInfo, &m_descriptorSet));
 
   VkDescriptorImageInfo diffuseImageInfo{};
   diffuseImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -62,7 +62,7 @@ Mesh::createDescriptorSet(VkDescriptorPool descriptorPool,
   descriptorWrites[1].descriptorCount = 1;
   descriptorWrites[1].pImageInfo = &specularImageInfo;
 
-  vkUpdateDescriptorSets(m_vkContext->logicalDevice,
+  vkUpdateDescriptorSets(m_device->device(),
                          static_cast<uint32_t>(descriptorWrites.size()),
                          descriptorWrites.data(),
                          0,

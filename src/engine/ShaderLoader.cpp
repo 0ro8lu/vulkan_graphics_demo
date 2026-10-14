@@ -2,8 +2,8 @@
 #include "engine/VulkanCheck.h"
 
 #include <filesystem>
+#include <format>
 #include <fstream>
-#include <iostream>
 
 namespace ShaderLoader {
 
@@ -26,13 +26,7 @@ readSPIRV(const std::string& filepath)
   std::ifstream file(filepath, std::ios::ate | std::ios::binary);
 
   if (!file.is_open()) {
-    std::cerr << "\n========================================\n"
-              << "[FATAL SHADER ERROR]: Failed to open shader file!\n"
-              << "  File: " << filepath << "\n"
-              << "========================================\n"
-              << std::flush;
-    ENGINE_DEBUG_BREAK();
-    std::abort();
+    ReportFatalError(std::format("Failed to open shader file: {}", filepath));
   }
 
   const auto fileSize = static_cast<size_t>(file.tellg());

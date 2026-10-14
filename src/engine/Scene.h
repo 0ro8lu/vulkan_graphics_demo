@@ -6,15 +6,22 @@
 #include "engine/ModelLoading/Model.h"
 #include "engine/SceneRenderData.h"
 #include "engine/Skybox.h"
-#include "engine/VulkanContext.h"
 
 #include <memory>
 #include <optional>
 
+class GpuDevice;
+class GpuAllocator;
+class SamplerCache;
+class ImmediateCommands;
+
 class Scene final
 {
 public:
-  Scene(VulkanContext* vkContext);
+  Scene(const GpuDevice& device,
+        const GpuAllocator& allocator,
+        const SamplerCache& samplerCache,
+        const ImmediateCommands& immediateCommands);
   ~Scene();
 
   void update(float deltaTime, const GameEvent& events) noexcept;
@@ -49,5 +56,8 @@ public:
   Scene& operator=(const Scene&) = delete;
 
 private:
-  VulkanContext* m_vkContext;
+  const GpuDevice& m_device;
+  const GpuAllocator& m_allocator;
+  const SamplerCache& m_samplerCache;
+  const ImmediateCommands& m_immediateCommands;
 };

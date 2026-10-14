@@ -5,12 +5,19 @@
 
 #include <memory>
 
+class GpuDevice;
+class GpuAllocator;
+class SamplerCache;
+
 class HDRPass
 {
 public:
   struct AttachmentConfig;
 
-  HDRPass(VulkanContext* vkContext, const AttachmentConfig& attachmentConfig);
+  HDRPass(const GpuDevice& device,
+          const GpuAllocator& allocator,
+          const SamplerCache& samplerCache,
+          const AttachmentConfig& attachmentConfig);
   ~HDRPass();
 
   HDRPass(const HDRPass&) = delete;
@@ -26,10 +33,12 @@ public:
   std::unique_ptr<FramebufferAttachment> m_brightSpotsAttachment;
   std::unique_ptr<FramebufferAttachment> m_intermediateBloomAttachment;
 
-  VkFramebuffer m_bloomFramebuffer;
+  VkFramebuffer m_brightPointFramebuffer{ VK_NULL_HANDLE };
+  VkFramebuffer m_horizontalBloomFramebuffer{ VK_NULL_HANDLE };
 
-  VkRenderPass m_bloomRenderPass;
-  VkRenderPass m_presentationRenderPass;
+  VkRenderPass m_brightPointRenderPass{ VK_NULL_HANDLE };
+  VkRenderPass m_horizontalBloomRenderPass{ VK_NULL_HANDLE };
+  VkRenderPass m_presentationRenderPass{ VK_NULL_HANDLE };
 
   struct AttachmentConfig
   {
@@ -64,5 +73,7 @@ private:
   VkPipelineLayout m_compositionPipelineLayout;
   void createPipelines();
 
-  VulkanContext* m_vkContext;
+  const GpuDevice& m_device;
+  const GpuAllocator& m_allocator;
+  const SamplerCache& m_samplerCache;
 };

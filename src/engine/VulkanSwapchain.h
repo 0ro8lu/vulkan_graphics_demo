@@ -1,20 +1,23 @@
 #pragma once
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
-#include <array>
-#include <functional>
 #include <optional>
+#include <span>
 #include <vector>
+#include <vulkan/vulkan.h>
 
-#include "engine/FrameContext.h"
-#include "engine/VulkanContext.h"
+#include "engine/GpuAllocator.h"
+#include "engine/GpuDevice.h"
 
 class Renderer;
-struct SwapChainSupportDetails;
 
-class VulkanSwapchain
+struct SwapChainSupportDetails
+{
+  VkSurfaceCapabilitiesKHR capabilities{};
+  std::vector<VkSurfaceFormatKHR> formats{};
+  std::vector<VkPresentModeKHR> presentModes{};
+};
+
+class VulkanSwapchain final
 {
 public:
   class Key
@@ -23,7 +26,11 @@ public:
     Key() = default;
   };
 
-  explicit VulkanSwapchain(Key, VulkanContext* vkContext, GLFWwindow* window);
+  explicit VulkanSwapchain(Key,
+                           const GpuDevice& device,
+                           const GpuAllocator& allocator,
+                           VkSurfaceKHR surface,
+                           VkExtent2D initialExtent);
   ~VulkanSwapchain();
 
   VulkanSwapchain(const VulkanSwapchain&) = delete;
@@ -31,76 +38,61 @@ public:
   VulkanSwapchain(VulkanSwapchain&&) = delete;
   VulkanSwapchain& operator=(VulkanSwapchain&&) = delete;
 
-  std::function<void(int, int)> onResize;
-  void recreateSwapChain(GLFWwindow* window);
+  void recreateSwapChain(VkExtent2D newExtent);
   void createSwapChainFrameBuffer();
 
-  [[nodiscard]] std::optional<FrameContext> beginFrame(GLFWwindow* window);
-  void submitFrame(const FrameContext& frameContext, GLFWwindow* window);
+  [[nodiscard]] std::optional<uint32_t> acquireNextImage(
+    VkSemaphore imageAvailableSemaphore);
 
-  bool resized;
-  int width;
-  int height;
+  [[nodiscard]] bool present(uint32_t imageIndex, VkSemaphore waitSemaphore);
 
-  VkRenderPass drawingPass;
+  [[nodiscard]] VkFramebuffer framebuffer(uint32_t imageIndex) const noexcept
+  {
+    return swapChainFramebuffers[imageIndex];
+  }
 
-  VkImageView depthImageView;
-  VkFormat depthFormat;
-  VkFormat swapChainImageFormat;
+  [[nodiscard]] size_t imageCount() const noexcept
+  {
+    return m_swapChainImages.size();
+  }
+
+  [[nodiscard]] VkExtent2D extent() const noexcept { return swapChainExtent; }
+  [[nodiscard]] uint32_t width() const noexcept { return swapChainExtent.width; }
+  [[nodiscard]] uint32_t height() const noexcept { return swapChainExtent.height; }
+
+  VkRenderPass drawingPass{ VK_NULL_HANDLE };
+
+  VkImageView depthImageView{ VK_NULL_HANDLE };
+  VkFormat depthFormat{ VK_FORMAT_UNDEFINED };
+  VkFormat swapChainImageFormat{ VK_FORMAT_UNDEFINED };
 
 private:
-  struct FrameSyncData
-  {
-    VkSemaphore imageAvailableSemaphore{ VK_NULL_HANDLE };
-    VkFence inFlightFence{ VK_NULL_HANDLE };
-    VkCommandBuffer commandBuffer{ VK_NULL_HANDLE };
-  };
-
-  void createCommandBuffers();
-  void createSyncObjects();
-
-  uint32_t imageIndex = 0;
-  uint32_t currentFrame = 0;
-  std::vector<VkFramebuffer> swapChainFramebuffers;
+  std::vector<VkFramebuffer> swapChainFramebuffers{};
   VkExtent2D swapChainExtent{};
 
-  std::array<FrameSyncData, MAX_FRAMES_IN_FLIGHT> m_frameSync{};
-  std::vector<VkSemaphore> m_renderFinishedSemaphores;
+  const GpuDevice& m_device;
+  const GpuAllocator& m_allocator;
+  VkSurfaceKHR m_surface{ VK_NULL_HANDLE };
 
-  static void framebufferResizeCallback(GLFWwindow* window,
-                                        int width,
-                                        int height);
-  VulkanContext* m_vkContext;
+  [[nodiscard]] SwapChainSupportDetails querySwapChainSupport(
+    VkPhysicalDevice device) const;
 
-  VkSurfaceKHR m_surface;
-  void createSurface(GLFWwindow* window);
+  VkImage m_depthImage{ VK_NULL_HANDLE };
+  VmaAllocation m_depthAllocation{ VK_NULL_HANDLE };
 
-  SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
+  VkSwapchainKHR m_swapChain{ VK_NULL_HANDLE };
+  std::vector<VkImage> m_swapChainImages{};
+  std::vector<VkImageView> m_swapChainImageViews{};
 
-  VkImage m_depthImage;
-  VmaAllocation m_depthAllocation;
+  void createVulkanSwapChain(VkExtent2D extent,
+                             VkSwapchainKHR oldSwapchain = VK_NULL_HANDLE);
+  void cleanTransientResources();
 
-  VkSwapchainKHR m_swapChain;
-  std::vector<VkImage> m_swapChainImages;
-  std::vector<VkImageView> m_swapChainImageViews;
-  void createVulkanSwapChain(GLFWwindow* window);
-  void cleanSwapChain();
-
-  VkSurfaceFormatKHR chooseSwapSurfaceFormat(
-    const std::vector<VkSurfaceFormatKHR>& availableFormats);
-  VkPresentModeKHR chooseSwapPresentMode(
-    const std::vector<VkPresentModeKHR>& availablePresentModes);
-  VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities,
-                              GLFWwindow* window);
-
-  VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
-                               VkImageTiling tiling,
-                               VkFormatFeatureFlags features);
-};
-
-struct SwapChainSupportDetails
-{
-  VkSurfaceCapabilitiesKHR capabilities;
-  std::vector<VkSurfaceFormatKHR> formats;
-  std::vector<VkPresentModeKHR> presentModes;
+  [[nodiscard]] static VkSurfaceFormatKHR chooseSwapSurfaceFormat(
+    std::span<const VkSurfaceFormatKHR> availableFormats);
+  [[nodiscard]] static VkPresentModeKHR chooseSwapPresentMode(
+    std::span<const VkPresentModeKHR> availablePresentModes);
+  [[nodiscard]] static VkExtent2D chooseSwapExtent(
+    const VkSurfaceCapabilitiesKHR& capabilities,
+    VkExtent2D requestedExtent);
 };

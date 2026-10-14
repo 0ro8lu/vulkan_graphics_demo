@@ -2,12 +2,10 @@
 #include "engine/Input.h"
 #include "engine/Renderer.h"
 #include "engine/Scene.h"
-#include "engine/VulkanCheck.h"
+#include "engine/Window.h"
 
 #include <chrono>
-#include <cstdlib>
 #include <format>
-#include <iostream>
 
 Application::Application(uint32_t width,
                          uint32_t height,
@@ -16,41 +14,29 @@ Application::Application(uint32_t width,
   , m_height(height)
   , m_title(appTitle)
 {
-  if (!glfwInit()) {
-    std::cerr << "\n========================================\n"
-              << "[FATAL ERROR]: Failed to initialize GLFW!\n"
-              << "========================================\n"
-              << std::flush;
-    ENGINE_DEBUG_BREAK();
-    std::abort();
-  }
+  m_window = std::make_unique<Window>(Window::Config{
+    .width = m_width,
+    .height = m_height,
+    .title = m_title,
+  });
 
-  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-
-  m_window = glfwCreateWindow(static_cast<int>(m_width),
-                              static_cast<int>(m_height),
-                              m_title.c_str(),
-                              nullptr,
-                              nullptr);
-
-  if (!m_window) {
-    std::cerr << "\n========================================\n"
-              << "[FATAL ERROR]: Failed to create GLFW window!\n"
-              << "========================================\n"
-              << std::flush;
-    glfwTerminate();
-    ENGINE_DEBUG_BREAK();
-    std::abort();
-  }
-
-  m_renderer = std::make_unique<Renderer>(m_window);
-  m_scene = std::make_unique<Scene>(m_renderer->m_vkContext);
+  m_renderer = std::make_unique<Renderer>(*m_window);
+  m_scene = std::make_unique<Scene>(m_renderer->device(),
+                                    m_renderer->allocator(),
+                                    m_renderer->samplerCache(),
+                                    m_renderer->immediateCommands());
   m_renderer->buildRenderGraph();
 
-  int framebufferWidth, framebufferHeight;
-  glfwGetFramebufferSize(m_window, &framebufferWidth, &framebufferHeight);
+  const auto initialSize = m_window->framebufferSize();
+  m_scene->m_camera->resizeCamera(initialSize.width, initialSize.height);
 
-  m_scene->m_camera->resizeCamera(framebufferWidth, framebufferHeight);
+  m_window->setResizeCallback([this](uint32_t w, uint32_t h) {
+    if (w == 0 || h == 0) {
+      return;
+    }
+    m_scene->m_camera->resizeCamera(w, h);
+    m_renderer->onResize(w, h);
+  });
 }
 
 Application::~Application()
@@ -61,13 +47,7 @@ Application::~Application()
 
   m_scene.reset();
   m_renderer.reset();
-
-  if (m_window) {
-    glfwDestroyWindow(m_window);
-    m_window = nullptr;
-  }
-
-  glfwTerminate();
+  m_window.reset();
 }
 
 void
@@ -80,7 +60,22 @@ Application::run()
 
   GameEvent gameEvents = {};
 
-  while (!glfwWindowShouldClose(m_window)) {
+  while (!m_window->shouldClose()) {
+    m_window->pollEvents();
+
+    if (m_window->shouldClose()) {
+      break;
+    }
+
+    if (m_window->isMinimized()) {
+      m_window->waitEventsWhileMinimized();
+      const auto resumeTime = std::chrono::steady_clock::now();
+      lastFrameTime = resumeTime;
+      lastFpsUpdateTime = resumeTime;
+      frameCount = 0;
+      continue;
+    }
+
     const auto frameStart = std::chrono::steady_clock::now();
     const std::chrono::duration<float> rawDelta = frameStart - lastFrameTime;
     lastFrameTime = frameStart;
@@ -88,15 +83,13 @@ Application::run()
     // Clamp delta time to 100ms max to prevent simulation tunneling/spikes
     const float deltaTime = std::min(rawDelta.count(), 0.1f);
 
-    glfwPollEvents();
-
-    if (glfwGetKey(m_window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-      glfwSetWindowShouldClose(m_window, GLFW_TRUE);
+    if (m_window->isKeyPressed(KeyCode::Escape)) {
+      m_window->setShouldClose(true);
     }
 
-    GameEvent::pollGameEvents(m_window, gameEvents);
+    GameEvent::pollGameEvents(*m_window, gameEvents);
     m_scene->update(deltaTime, gameEvents);
-    m_renderer->draw(m_scene->getRenderData(), m_window);
+    m_renderer->draw(m_scene->getRenderData());
 
     // FPS Counter via std::format
     frameCount++;
@@ -108,7 +101,7 @@ Application::run()
       const double currentFps = frameCount / elapsedSinceFpsUpdate;
       const std::string newTitle =
         std::format("{} | FPS: {:.0f}", m_title, currentFps);
-      glfwSetWindowTitle(m_window, newTitle.c_str());
+      m_window->setTitle(newTitle);
 
       frameCount = 0;
       lastFpsUpdateTime = now;

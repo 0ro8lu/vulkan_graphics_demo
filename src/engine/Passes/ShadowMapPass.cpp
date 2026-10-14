@@ -1,14 +1,21 @@
 #include "engine/Passes/ShadowMapPass.h"
+#include "engine/GpuAllocator.h"
+#include "engine/GpuDevice.h"
+#include "engine/SamplerCache.h"
 #include "engine/VulkanCheck.h"
 
 #include "engine/PipelineBuilder.h"
 #include "engine/SceneRenderData.h"
 
-ShadowMapPass::ShadowMapPass(VulkanContext* vkContext,
+ShadowMapPass::ShadowMapPass(const GpuDevice& device,
+                             const GpuAllocator& allocator,
+                             const SamplerCache& samplerCache,
                              const AttachmentConfig& attachmentConfig)
   : m_directionalShadowmapSize(attachmentConfig.directionalAtlasSize)
   , m_spotPointShadowmapSize(attachmentConfig.spotPointAtlasSize)
-  , m_vkContext(vkContext)
+  , m_device(device)
+  , m_allocator(allocator)
+  , m_samplerCache(samplerCache)
 {
   createShadowMaps(attachmentConfig.depthFormat);
 
@@ -22,16 +29,16 @@ ShadowMapPass::ShadowMapPass(VulkanContext* vkContext,
 ShadowMapPass::~ShadowMapPass()
 {
   vkDestroyFramebuffer(
-    m_vkContext->logicalDevice, m_directionalShadowMapFramebuffer, nullptr);
+    m_device.device(), m_directionalShadowMapFramebuffer, nullptr);
   vkDestroyFramebuffer(
-    m_vkContext->logicalDevice, m_spotShadowMapFramebuffer, nullptr);
+    m_device.device(), m_spotShadowMapFramebuffer, nullptr);
 
   vkDestroyRenderPass(
-    m_vkContext->logicalDevice, m_shadowMapRenderPass, nullptr);
+    m_device.device(), m_shadowMapRenderPass, nullptr);
 
-  vkDestroyPipeline(m_vkContext->logicalDevice, m_shadowMapPipeline, nullptr);
+  vkDestroyPipeline(m_device.device(), m_shadowMapPipeline, nullptr);
   vkDestroyPipelineLayout(
-    m_vkContext->logicalDevice, m_shadowMapPipelineLayout, nullptr);
+    m_device.device(), m_shadowMapPipelineLayout, nullptr);
 }
 
 void
@@ -44,7 +51,9 @@ ShadowMapPass::createShadowMaps(VkFormat depthImageFormat)
   dirInfo.layerCount = 1;
   dirInfo.usage =
     VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-  dirInfo.vkContext = m_vkContext;
+  dirInfo.device = &m_device;
+  dirInfo.allocator = &m_allocator;
+  dirInfo.samplerCache = &m_samplerCache;
   dirInfo.samplerAddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
   m_directionalShadowMap = FramebufferAttachment::create(dirInfo);
 
@@ -56,7 +65,10 @@ ShadowMapPass::createShadowMaps(VkFormat depthImageFormat)
   spotInfo.layerCount = 1;
   spotInfo.usage =
     VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-  spotInfo.vkContext = m_vkContext;
+  spotInfo.device = &m_device;
+  spotInfo.allocator = &m_allocator;
+  spotInfo.samplerCache = &m_samplerCache;
+  spotInfo.samplerAddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
   m_spotPointShadowAtlas = FramebufferAttachment::create(spotInfo);
 }
 
@@ -336,7 +348,7 @@ ShadowMapPass::createFrameBuffers()
     framebufferInfo.height = m_directionalShadowmapSize;
     framebufferInfo.layers = 1;
 
-    VK_CHECK(vkCreateFramebuffer(m_vkContext->logicalDevice,
+    VK_CHECK(vkCreateFramebuffer(m_device.device(),
                                  &framebufferInfo,
                                  nullptr,
                                  &m_directionalShadowMapFramebuffer));
@@ -353,7 +365,7 @@ ShadowMapPass::createFrameBuffers()
     framebufferInfo.height = m_spotPointShadowmapSize;
     framebufferInfo.layers = 1;
 
-    VK_CHECK(vkCreateFramebuffer(m_vkContext->logicalDevice,
+    VK_CHECK(vkCreateFramebuffer(m_device.device(),
                                  &framebufferInfo,
                                  nullptr,
                                  &m_spotShadowMapFramebuffer));
@@ -410,7 +422,7 @@ ShadowMapPass::createDirectionalRenderPass()
   renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
   renderPassInfo.pDependencies = dependencies.data();
 
-  VK_CHECK(vkCreateRenderPass(m_vkContext->logicalDevice,
+  VK_CHECK(vkCreateRenderPass(m_device.device(),
                               &renderPassInfo,
                               nullptr,
                               &m_shadowMapRenderPass));
@@ -432,7 +444,7 @@ ShadowMapPass::createShadowMapPipeline()
                   .setDepthBias(VK_TRUE)
                   .setPushConstantRanges(std::span(&lightSpaceMatrixPCRange, 1))
                   .setRenderPass(m_shadowMapRenderPass)
-                  .build(m_vkContext->logicalDevice);
+                  .build(m_device.device());
 
   m_shadowMapPipeline = result.pipeline;
   m_shadowMapPipelineLayout = result.layout;

@@ -5,7 +5,7 @@
 #include <string>
 #include <string_view>
 
-struct GLFWwindow;
+class Window;
 class Renderer;
 class Scene;
 
@@ -26,8 +26,8 @@ private:
   uint32_t m_width{ 800 };
   uint32_t m_height{ 600 };
   std::string m_title;
-  GLFWwindow* m_window{ nullptr };
 
+  std::unique_ptr<Window> m_window;
   std::unique_ptr<Renderer> m_renderer;
   std::unique_ptr<Scene> m_scene;
 };

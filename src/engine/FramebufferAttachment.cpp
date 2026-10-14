@@ -1,12 +1,14 @@
 #include "engine/FramebufferAttachment.h"
-#include "engine/VulkanContext.h"
+#include "engine/GpuAllocator.h"
+#include "engine/GpuDevice.h"
+#include "engine/SamplerCache.h"
 
 #include <utility>
 
 std::unique_ptr<FramebufferAttachment>
 FramebufferAttachment::create(const CreateInfo& info)
 {
-  if (!info.vkContext) {
+  if (!info.device || !info.allocator) {
     return nullptr;
   }
   if (info.width == 0 || info.height == 0 || info.layerCount == 0) {
@@ -25,7 +27,7 @@ FramebufferAttachment::create(const CreateInfo& info)
   VkImageView view = VK_NULL_HANDLE;
   VkSampler sampler = VK_NULL_HANDLE;
 
-  image = info.vkContext->createImage(info.width,
+  image = info.allocator->createImage(info.width,
                                       info.height,
                                       info.format,
                                       info.layerCount,
@@ -33,18 +35,18 @@ FramebufferAttachment::create(const CreateInfo& info)
                                       imageUsage,
                                       allocation);
 
-  view = info.vkContext->createImageView(
+  view = info.device->createImageView(
     image, info.format, info.layerCount, aspectMask);
 
-  // Only create a sampler if the attachment is actually sampled
-  if (info.usage & VK_IMAGE_USAGE_SAMPLED_BIT) {
+  // Only query a sampler if the attachment is actually sampled and samplerCache is provided
+  if ((info.usage & VK_IMAGE_USAGE_SAMPLED_BIT) && info.samplerCache) {
     if (info.samplerAddressMode == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE) {
-      sampler = info.vkContext->getSampler(SamplerType::LinearClampToEdge);
+      sampler = info.samplerCache->get(SamplerType::LinearClampToEdge);
     } else if (info.samplerAddressMode ==
                VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER) {
-      sampler = info.vkContext->getSampler(SamplerType::LinearClampToBorder);
+      sampler = info.samplerCache->get(SamplerType::LinearClampToBorder);
     } else {
-      sampler = info.vkContext->getSampler(SamplerType::LinearRepeat);
+      sampler = info.samplerCache->get(SamplerType::LinearRepeat);
     }
   }
 
@@ -63,10 +65,13 @@ FramebufferAttachment::FramebufferAttachment(const CreateInfo& info,
   , m_sampler(sampler)
   , m_allocation(allocation)
   , m_usage(info.usage)
-  , m_vkContext(info.vkContext)
+  , m_device(info.device)
+  , m_allocator(info.allocator)
+  , m_samplerCache(info.samplerCache)
   , m_width(info.width)
   , m_height(info.height)
   , m_layerCount(info.layerCount)
+  , m_samplerAddressMode(info.samplerAddressMode)
 {
 }
 
@@ -78,17 +83,15 @@ FramebufferAttachment::~FramebufferAttachment() noexcept
 void
 FramebufferAttachment::destroyResources() noexcept
 {
-  if (m_vkContext) {
-    m_sampler = VK_NULL_HANDLE; // We don't own the sampler anymore
-    if (m_view != VK_NULL_HANDLE) {
-      m_vkContext->destroyImageView(m_view);
-      m_view = VK_NULL_HANDLE;
-    }
-    if (m_image != VK_NULL_HANDLE) {
-      m_vkContext->destroyImage(m_image, m_allocation);
-      m_image = VK_NULL_HANDLE;
-      m_allocation = VK_NULL_HANDLE;
-    }
+  m_sampler = VK_NULL_HANDLE; // Owned by SamplerCache
+  if (m_view != VK_NULL_HANDLE && m_device) {
+    m_device->destroyImageView(m_view);
+    m_view = VK_NULL_HANDLE;
+  }
+  if (m_image != VK_NULL_HANDLE && m_allocator) {
+    m_allocator->destroyImage(m_image, m_allocation);
+    m_image = VK_NULL_HANDLE;
+    m_allocation = VK_NULL_HANDLE;
   }
 }
 
@@ -113,10 +116,14 @@ FramebufferAttachment::FramebufferAttachment(
   , m_sampler(std::exchange(other.m_sampler, VK_NULL_HANDLE))
   , m_allocation(std::exchange(other.m_allocation, VK_NULL_HANDLE))
   , m_usage(std::exchange(other.m_usage, 0))
-  , m_vkContext(std::exchange(other.m_vkContext, nullptr))
+  , m_device(std::exchange(other.m_device, nullptr))
+  , m_allocator(std::exchange(other.m_allocator, nullptr))
+  , m_samplerCache(std::exchange(other.m_samplerCache, nullptr))
   , m_width(std::exchange(other.m_width, 0))
   , m_height(std::exchange(other.m_height, 0))
   , m_layerCount(std::exchange(other.m_layerCount, 0))
+  , m_samplerAddressMode(std::exchange(other.m_samplerAddressMode,
+                                       VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE))
 {
 }
 
@@ -132,10 +139,14 @@ FramebufferAttachment::operator=(FramebufferAttachment&& other) noexcept
     m_sampler = std::exchange(other.m_sampler, VK_NULL_HANDLE);
     m_allocation = std::exchange(other.m_allocation, VK_NULL_HANDLE);
     m_usage = std::exchange(other.m_usage, 0);
-    m_vkContext = std::exchange(other.m_vkContext, nullptr);
+    m_device = std::exchange(other.m_device, nullptr);
+    m_allocator = std::exchange(other.m_allocator, nullptr);
+    m_samplerCache = std::exchange(other.m_samplerCache, nullptr);
     m_width = std::exchange(other.m_width, 0);
     m_height = std::exchange(other.m_height, 0);
     m_layerCount = std::exchange(other.m_layerCount, 0);
+    m_samplerAddressMode = std::exchange(other.m_samplerAddressMode,
+                                         VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
   }
   return *this;
 }
@@ -147,7 +158,7 @@ FramebufferAttachment::resize(uint32_t width, uint32_t height)
     return true;
   }
 
-  if (width == 0 || height == 0 || !m_vkContext) {
+  if (width == 0 || height == 0 || !m_device || !m_allocator) {
     return false;
   }
 
@@ -158,27 +169,24 @@ FramebufferAttachment::resize(uint32_t width, uint32_t height)
     imageUsage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
   }
 
-  VkImage newImage = VK_NULL_HANDLE;
   VmaAllocation newAllocation = VK_NULL_HANDLE;
-  VkImageView newView = VK_NULL_HANDLE;
+  VkImage newImage = m_allocator->createImage(width,
+                                              height,
+                                              m_format,
+                                              m_layerCount,
+                                              VK_IMAGE_TILING_OPTIMAL,
+                                              imageUsage,
+                                              newAllocation);
 
-  newImage = m_vkContext->createImage(width,
-                                      height,
-                                      m_format,
-                                      m_layerCount,
-                                      VK_IMAGE_TILING_OPTIMAL,
-                                      imageUsage,
-                                      newAllocation);
-
-  newView = m_vkContext->createImageView(
+  VkImageView newView = m_device->createImageView(
     newImage, m_format, m_layerCount, aspectMask);
 
   // Destroy old resources in correct Vulkan order: View before Image!
   if (m_view != VK_NULL_HANDLE) {
-    m_vkContext->destroyImageView(m_view);
+    m_device->destroyImageView(m_view);
   }
   if (m_image != VK_NULL_HANDLE) {
-    m_vkContext->destroyImage(m_image, m_allocation);
+    m_allocator->destroyImage(m_image, m_allocation);
   }
 
   m_image = newImage;

@@ -3,6 +3,7 @@
 #include <array>
 #include <cassert>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vulkan/vulkan.h>
 
@@ -12,6 +13,8 @@ struct PipelineResult
   VkPipelineLayout layout = VK_NULL_HANDLE;
 };
 
+// TODO: move this somewhere else in the future
+// TODO: find somewhere else in the codebase where this might be useful
 template<typename T, size_t Capacity>
 class FixedVector
 {
@@ -34,7 +37,8 @@ public:
   constexpr void assign(InputIt first, InputIt last)
   {
     m_size = 0;
-    for (auto it = first; it != last && m_size < Capacity; ++it) {
+    for (auto it = first; it != last; ++it) {
+      assert(m_size < Capacity && "FixedVector::assign capacity exceeded!");
       m_data[m_size++] = *it;
     }
   }
@@ -43,9 +47,15 @@ public:
 
   [[nodiscard]] constexpr size_t size() const noexcept { return m_size; }
   [[nodiscard]] constexpr bool empty() const noexcept { return m_size == 0; }
-  [[nodiscard]] constexpr const T* data() const noexcept { return m_data.data(); }
+  [[nodiscard]] constexpr const T* data() const noexcept
+  {
+    return m_data.data();
+  }
   [[nodiscard]] constexpr T* data() noexcept { return m_data.data(); }
-  [[nodiscard]] constexpr const T& operator[](size_t i) const noexcept { return m_data[i]; }
+  [[nodiscard]] constexpr const T& operator[](size_t i) const noexcept
+  {
+    return m_data[i];
+  }
   [[nodiscard]] constexpr T& operator[](size_t i) noexcept { return m_data[i]; }
 
   constexpr auto begin() noexcept { return m_data.begin(); }
@@ -74,7 +84,10 @@ public:
 
   // Vertex Input
   PipelineBuilder& withDefaultMeshVertexInput();
-  PipelineBuilder& setDefaultVertexInput() { return withDefaultMeshVertexInput(); }
+  PipelineBuilder& setDefaultVertexInput()
+  {
+    return withDefaultMeshVertexInput();
+  }
   PipelineBuilder& disableVertexInput();
   PipelineBuilder& setVertexInput(
     std::span<const VkVertexInputBindingDescription> bindings,
@@ -140,7 +153,7 @@ public:
 private:
   struct ShaderStage
   {
-    std::string_view name;
+    std::string name;
     VkShaderStageFlagBits stage;
     const VkSpecializationInfo* specialization = nullptr;
   };

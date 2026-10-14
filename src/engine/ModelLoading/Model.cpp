@@ -1,6 +1,9 @@
+#include "engine/GpuAllocator.h"
+#include "engine/GpuDevice.h"
+#include "engine/ImmediateCommands.h"
 #include "engine/ModelLoading/Model.h"
+#include "engine/SamplerCache.h"
 #include "engine/VulkanCheck.h"
-#include "engine/VulkanContext.h"
 
 #include <assimp/Importer.hpp>
 #include <assimp/material.h>
@@ -16,12 +19,18 @@ AssimpToGlmMatrix(const aiMatrix4x4& from);
 VkDescriptorSetLayout Model::s_textureLayout = VK_NULL_HANDLE;
 
 Model::Model(const std::string& filePath,
-             VulkanContext* vkContext,
+             const GpuDevice& device,
+             const GpuAllocator& allocator,
+             const SamplerCache& samplerCache,
+             const ImmediateCommands& immediateCommands,
              glm::vec3 pos,
              glm::vec3 rotationAxis,
              float rotationAngle,
              glm::vec3 scale)
-  : m_vkContext(vkContext)
+  : m_device(&device)
+  , m_allocator(&allocator)
+  , m_samplerCache(&samplerCache)
+  , m_immediateCommands(&immediateCommands)
 {
   m_modelMatrix = glm::translate(m_modelMatrix, pos);
   if (rotationAngle != 0) {
@@ -59,11 +68,11 @@ Model::Model(Model&& other) noexcept
   m_indices = std::move(other.m_indices);
   m_indexBuffer = std::exchange(other.m_indexBuffer, {});
 
-  m_vkContext = other.m_vkContext;
-  m_descriptorPool = other.m_descriptorPool;
-
-  other.m_descriptorPool = VK_NULL_HANDLE;
-  other.m_vkContext = nullptr;
+  m_device = std::exchange(other.m_device, nullptr);
+  m_allocator = std::exchange(other.m_allocator, nullptr);
+  m_samplerCache = std::exchange(other.m_samplerCache, nullptr);
+  m_immediateCommands = std::exchange(other.m_immediateCommands, nullptr);
+  m_descriptorPool = std::exchange(other.m_descriptorPool, VK_NULL_HANDLE);
 }
 
 Model&
@@ -82,11 +91,11 @@ Model::operator=(Model&& other) noexcept
     m_indices = std::move(other.m_indices);
     m_indexBuffer = std::exchange(other.m_indexBuffer, {});
 
-    m_vkContext = other.m_vkContext;
-    m_descriptorPool = other.m_descriptorPool;
-
-    other.m_descriptorPool = VK_NULL_HANDLE;
-    other.m_vkContext = nullptr;
+    m_device = std::exchange(other.m_device, nullptr);
+    m_allocator = std::exchange(other.m_allocator, nullptr);
+    m_samplerCache = std::exchange(other.m_samplerCache, nullptr);
+    m_immediateCommands = std::exchange(other.m_immediateCommands, nullptr);
+    m_descriptorPool = std::exchange(other.m_descriptorPool, VK_NULL_HANDLE);
   }
   return *this;
 }
@@ -246,13 +255,21 @@ Model::processMesh(aiMesh* mesh,
 
   std::string path = TEXTURE_PATH;
   if (diffuseTexture.m_view == VK_NULL_HANDLE) {
-    diffuseTexture = Texture(m_vkContext, path + "empty_diffuse.png");
+    diffuseTexture = Texture(*m_device,
+                             *m_allocator,
+                             *m_samplerCache,
+                             *m_immediateCommands,
+                             path + "empty_diffuse.png");
   }
   if (specularTexture.m_view == VK_NULL_HANDLE) {
-    specularTexture = Texture(m_vkContext, path + "empty_specular.png");
+    specularTexture = Texture(*m_device,
+                              *m_allocator,
+                              *m_samplerCache,
+                              *m_immediateCommands,
+                              path + "empty_specular.png");
   }
 
-  auto newMesh = std::make_unique<Mesh>(m_vkContext,
+  auto newMesh = std::make_unique<Mesh>(*m_device,
                                         mesh->mNumFaces * 3,
                                         startIndex,
                                         std::move(diffuseTexture),
@@ -288,7 +305,10 @@ Model::loadTexture(aiMaterial* material,
       // mHeight == 0 means the texture is compressed
       if (aiTexture->mHeight == 0) {
         // Compressed texture data
-        texture = Texture(m_vkContext,
+        texture = Texture(*m_device,
+                          *m_allocator,
+                          *m_samplerCache,
+                          *m_immediateCommands,
                           reinterpret_cast<unsigned char*>(aiTexture->pcData),
                           aiTexture->mWidth);
       } else {
@@ -300,7 +320,11 @@ Model::loadTexture(aiMaterial* material,
       }
     } else {
       // Load texture from file path
-      texture = Texture(m_vkContext, str.C_Str());
+      texture = Texture(*m_device,
+                        *m_allocator,
+                        *m_samplerCache,
+                        *m_immediateCommands,
+                        str.C_Str());
     }
   }
 }
@@ -321,7 +345,7 @@ Model::setupDescriptors()
   poolInfo.maxSets = m_meshInstances.size();
 
   VK_CHECK(vkCreateDescriptorPool(
-    m_vkContext->logicalDevice, &poolInfo, nullptr, &m_descriptorPool));
+    m_device->device(), &poolInfo, nullptr, &m_descriptorPool));
 
   // -------------------- DESCRIPTOR LAYOUT --------------------
   if (Model::s_textureLayout == VK_NULL_HANDLE) {
@@ -352,7 +376,7 @@ Model::setupDescriptors()
     layoutInfo.pBindings = bindings.data();
 
     VK_CHECK(vkCreateDescriptorSetLayout(
-      m_vkContext->logicalDevice, &layoutInfo, nullptr, &Model::s_textureLayout));
+      m_device->device(), &layoutInfo, nullptr, &Model::s_textureLayout));
   }
 
   // -------------------- DESCRIPTOR ALLOCATION --------------------
@@ -365,51 +389,51 @@ Model::setupDescriptors()
 void
 Model::createVertexBuffer(VkDeviceSize bufferSize)
 {
-  VulkanBuffer stagingBuffer = m_vkContext->createBuffer(
-    bufferSize,
-    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-    BufferType::STAGING_BUFFER);
+  VulkanBuffer stagingBuffer = m_allocator->createBuffer(
+    bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, BufferType::STAGING_BUFFER);
 
-  memcpy(stagingBuffer.mapped, m_vertices.data(), static_cast<size_t>(bufferSize));
+  memcpy(
+    stagingBuffer.mapped, m_vertices.data(), static_cast<size_t>(bufferSize));
 
-  m_vertexBuffer = m_vkContext->createBuffer(
+  m_vertexBuffer = m_allocator->createBuffer(
     bufferSize,
     VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
     BufferType::GPU_BUFFER);
 
-  m_vkContext->copyBuffer(stagingBuffer, m_vertexBuffer, bufferSize);
-  m_vkContext->destroyBuffer(stagingBuffer);
+  m_immediateCommands->copyBuffer(
+    stagingBuffer.buffer, m_vertexBuffer.buffer, bufferSize);
+  m_allocator->destroyBuffer(stagingBuffer);
 }
 
 void
 Model::createIndexBuffer(VkDeviceSize bufferSize)
 {
-  VulkanBuffer stagingBuffer = m_vkContext->createBuffer(
-    bufferSize,
-    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-    BufferType::STAGING_BUFFER);
+  VulkanBuffer stagingBuffer = m_allocator->createBuffer(
+    bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, BufferType::STAGING_BUFFER);
 
-  memcpy(stagingBuffer.mapped, m_indices.data(), static_cast<size_t>(bufferSize));
+  memcpy(
+    stagingBuffer.mapped, m_indices.data(), static_cast<size_t>(bufferSize));
 
-  m_indexBuffer = m_vkContext->createBuffer(
-    bufferSize,
-    VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-    BufferType::GPU_BUFFER);
+  m_indexBuffer = m_allocator->createBuffer(bufferSize,
+                                            VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                                              VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                                            BufferType::GPU_BUFFER);
 
-  m_vkContext->copyBuffer(stagingBuffer, m_indexBuffer, bufferSize);
-  m_vkContext->destroyBuffer(stagingBuffer);
+  m_immediateCommands->copyBuffer(
+    stagingBuffer.buffer, m_indexBuffer.buffer, bufferSize);
+  m_allocator->destroyBuffer(stagingBuffer);
 }
 
 void
 Model::cleanup()
 {
-  if (m_vkContext) {
-    m_vkContext->destroyBuffer(m_vertexBuffer);
-    m_vkContext->destroyBuffer(m_indexBuffer);
+  if (m_allocator) {
+    m_allocator->destroyBuffer(m_vertexBuffer);
+    m_allocator->destroyBuffer(m_indexBuffer);
+  }
 
-    if (m_descriptorPool != VK_NULL_HANDLE) {
-      vkDestroyDescriptorPool(m_vkContext->logicalDevice, m_descriptorPool, nullptr);
-      m_descriptorPool = VK_NULL_HANDLE;
-    }
+  if (m_device && m_descriptorPool != VK_NULL_HANDLE) {
+    vkDestroyDescriptorPool(m_device->device(), m_descriptorPool, nullptr);
+    m_descriptorPool = VK_NULL_HANDLE;
   }
 }

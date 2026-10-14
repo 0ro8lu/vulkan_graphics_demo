@@ -2,12 +2,12 @@
 
 #include "engine/ModelLoading/Texture.h"
 
-class VulkanContext;
+class GpuDevice;
 
 class Mesh final
 {
 public:
-  Mesh(VulkanContext* vkContext,
+  Mesh(const GpuDevice& device,
        size_t indexCount,
        size_t startIndex,
        Texture&& diffuseTexture,
@@ -34,5 +34,5 @@ public:
   size_t m_startIndex;
 
 private:
-  VulkanContext* m_vkContext;
+  const GpuDevice* m_device = nullptr;
 };

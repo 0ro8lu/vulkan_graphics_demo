@@ -49,8 +49,8 @@ PipelineBuilder&
 PipelineBuilder::setVertexShader(std::string_view shaderName,
                                  const VkSpecializationInfo* specialization)
 {
-  m_shaderStages.push_back({
-    .name = shaderName,
+  m_shaderStages.push_back(ShaderStage{
+    .name = std::string(shaderName),
     .stage = VK_SHADER_STAGE_VERTEX_BIT,
     .specialization = specialization,
   });
@@ -61,8 +61,8 @@ PipelineBuilder&
 PipelineBuilder::setFragmentShader(std::string_view shaderName,
                                    const VkSpecializationInfo* specialization)
 {
-  m_shaderStages.push_back({
-    .name = shaderName,
+  m_shaderStages.push_back(ShaderStage{
+    .name = std::string(shaderName),
     .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
     .specialization = specialization,
   });

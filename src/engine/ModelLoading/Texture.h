@@ -1,33 +1,44 @@
 #pragma once
 
 #include <string>
+#include <utility>
 
-#include "engine/VulkanContext.h"
+#include "engine/VulkanTypes.h"
+
+class GpuDevice;
+class GpuAllocator;
+class SamplerCache;
+class ImmediateCommands;
 
 class Texture final
 {
 public:
-  Texture();
-  Texture(VulkanContext* vkContext, unsigned char* data, size_t size);
-  Texture(VulkanContext* vkContext, std::string filePath);
+  Texture() = default;
+  Texture(const GpuDevice& device,
+          const GpuAllocator& allocator,
+          const SamplerCache& samplerCache,
+          const ImmediateCommands& immediateCommands,
+          unsigned char* data,
+          size_t size);
+  Texture(const GpuDevice& device,
+          const GpuAllocator& allocator,
+          const SamplerCache& samplerCache,
+          const ImmediateCommands& immediateCommands,
+          std::string filePath);
 
   Texture(const Texture&) = delete;
   Texture& operator=(const Texture&) = delete;
 
   // Move constructor
   Texture(Texture&& other) noexcept
+    : m_view(std::exchange(other.m_view, VK_NULL_HANDLE))
+    , m_sampler(std::exchange(other.m_sampler, VK_NULL_HANDLE))
+    , m_image(std::exchange(other.m_image, VK_NULL_HANDLE))
+    , m_allocation(std::exchange(other.m_allocation, VK_NULL_HANDLE))
+    , m_device(std::exchange(other.m_device, nullptr))
+    , m_allocator(std::exchange(other.m_allocator, nullptr))
+    , m_immediateCommands(std::exchange(other.m_immediateCommands, nullptr))
   {
-    m_view = other.m_view;
-    m_sampler = other.m_sampler;
-    m_image = other.m_image;
-    m_allocation = other.m_allocation;
-    m_vkContext = other.m_vkContext;
-
-    other.m_view = VK_NULL_HANDLE;
-    other.m_sampler = VK_NULL_HANDLE;
-    other.m_image = VK_NULL_HANDLE;
-    other.m_allocation = VK_NULL_HANDLE;
-    other.m_vkContext = nullptr;
   }
 
   // Move assignment operator
@@ -36,17 +47,14 @@ public:
     if (this != &other) {
       cleanup();
 
-      m_view = other.m_view;
-      m_sampler = other.m_sampler;
-      m_image = other.m_image;
-      m_allocation = other.m_allocation;
-      m_vkContext = other.m_vkContext;
-
-      other.m_view = VK_NULL_HANDLE;
-      other.m_sampler = VK_NULL_HANDLE;
-      other.m_image = VK_NULL_HANDLE;
-      other.m_allocation = VK_NULL_HANDLE;
-      other.m_vkContext = nullptr;
+      m_view = std::exchange(other.m_view, VK_NULL_HANDLE);
+      m_sampler = std::exchange(other.m_sampler, VK_NULL_HANDLE);
+      m_image = std::exchange(other.m_image, VK_NULL_HANDLE);
+      m_allocation = std::exchange(other.m_allocation, VK_NULL_HANDLE);
+      m_device = std::exchange(other.m_device, nullptr);
+      m_allocator = std::exchange(other.m_allocator, nullptr);
+      m_immediateCommands =
+        std::exchange(other.m_immediateCommands, nullptr);
     }
     return *this;
   }
@@ -60,7 +68,9 @@ private:
   VkImage m_image = VK_NULL_HANDLE;
   VmaAllocation m_allocation = VK_NULL_HANDLE;
 
-  VulkanContext* m_vkContext;
+  const GpuDevice* m_device = nullptr;
+  const GpuAllocator* m_allocator = nullptr;
+  const ImmediateCommands* m_immediateCommands = nullptr;
 
   void cleanup();
 

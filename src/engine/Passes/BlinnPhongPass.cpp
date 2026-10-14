@@ -1,13 +1,21 @@
 #include "engine/Passes/BlinnPhongPass.h"
+#include "engine/GpuAllocator.h"
+#include "engine/GpuDevice.h"
+#include "engine/ModelLoading/Model.h"
+#include "engine/PipelineBuilder.h"
+#include "engine/SamplerCache.h"
+#include "engine/SceneRenderData.h"
+#include "engine/Skybox.h"
 #include "engine/VulkanCheck.h"
 
-#include "engine/PipelineBuilder.h"
-#include "engine/SceneRenderData.h"
-
-BlinnPhongPass::BlinnPhongPass(VulkanContext* vkContext,
+BlinnPhongPass::BlinnPhongPass(const GpuDevice& device,
+                               const GpuAllocator& allocator,
+                               const SamplerCache& samplerCache,
                                const AttachmentConfig& attachmentConfig,
                                const LayoutConfig& layoutConfig)
-  : m_vkContext(vkContext)
+  : m_device(device)
+  , m_allocator(allocator)
+  , m_samplerCache(samplerCache)
 {
   createAttachments(attachmentConfig.width, attachmentConfig.height);
 
@@ -20,21 +28,21 @@ BlinnPhongPass::BlinnPhongPass(VulkanContext* vkContext,
 
 BlinnPhongPass::~BlinnPhongPass()
 {
-  vkDestroyRenderPass(m_vkContext->logicalDevice, m_renderPass, nullptr);
+  vkDestroyRenderPass(m_device.device(), m_renderPass, nullptr);
 
-  vkDestroyPipeline(m_vkContext->logicalDevice, m_blinnPhongPipeline, nullptr);
+  vkDestroyPipeline(m_device.device(), m_blinnPhongPipeline, nullptr);
   vkDestroyPipelineLayout(
-    m_vkContext->logicalDevice, m_blinnPhongPipelineLayout, nullptr);
+    m_device.device(), m_blinnPhongPipelineLayout, nullptr);
 
-  vkDestroyPipeline(m_vkContext->logicalDevice, m_skyboxPipeline, nullptr);
+  vkDestroyPipeline(m_device.device(), m_skyboxPipeline, nullptr);
   vkDestroyPipelineLayout(
-    m_vkContext->logicalDevice, m_skyboxPipelineLayout, nullptr);
+    m_device.device(), m_skyboxPipelineLayout, nullptr);
 
-  vkDestroyPipeline(m_vkContext->logicalDevice, m_lightCubesPipeline, nullptr);
+  vkDestroyPipeline(m_device.device(), m_lightCubesPipeline, nullptr);
   vkDestroyPipelineLayout(
-    m_vkContext->logicalDevice, m_lightCubesPipelineLayout, nullptr);
+    m_device.device(), m_lightCubesPipelineLayout, nullptr);
 
-  vkDestroyFramebuffer(m_vkContext->logicalDevice, m_hdrFramebuffer, nullptr);
+  vkDestroyFramebuffer(m_device.device(), m_hdrFramebuffer, nullptr);
 }
 
 void
@@ -63,15 +71,14 @@ BlinnPhongPass::draw(VkCommandBuffer commandBuffer,
     commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
   // -------------------- bind main pipeline --------------------
-  vkCmdBindPipeline(commandBuffer,
-                    VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    m_blinnPhongPipeline);
+  vkCmdBindPipeline(
+    commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_blinnPhongPipeline);
 
   VkViewport viewport{};
   viewport.x = 0.0f;
   viewport.y = 0.0f;
-  viewport.width = (float)extent.width;
-  viewport.height = (float)extent.height;
+  viewport.width = static_cast<float>(extent.width);
+  viewport.height = static_cast<float>(extent.height);
   viewport.minDepth = 0.0f;
   viewport.maxDepth = 1.0f;
   vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -219,9 +226,6 @@ BlinnPhongPass::draw(VkCommandBuffer commandBuffer,
                       VK_PIPELINE_BIND_POINT_GRAPHICS,
                       m_skyboxPipeline);
 
-    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
     vkCmdBindDescriptorSets(commandBuffer,
                             VK_PIPELINE_BIND_POINT_GRAPHICS,
                             m_skyboxPipelineLayout,
@@ -240,6 +244,15 @@ BlinnPhongPass::draw(VkCommandBuffer commandBuffer,
                             0,
                             nullptr);
 
+    PushConstant pc;
+    pc.model = glm::mat4(1.0);
+    vkCmdPushConstants(commandBuffer,
+                       m_skyboxPipelineLayout,
+                       VK_SHADER_STAGE_VERTEX_BIT,
+                       0,
+                       sizeof(PushConstant),
+                       &pc);
+
     VkBuffer vertexBuffers[] = { scene.skybox->m_cube->m_vertexBuffer };
     VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(
@@ -250,23 +263,13 @@ BlinnPhongPass::draw(VkCommandBuffer commandBuffer,
                          0,
                          VK_INDEX_TYPE_UINT32);
 
-    for (const auto& instance : scene.skybox->m_cube->m_meshInstances) {
-      PushConstant pc;
-      pc.model = instance.transformation;
-      vkCmdPushConstants(commandBuffer,
-                         m_skyboxPipelineLayout,
-                         VK_SHADER_STAGE_VERTEX_BIT,
-                         0,
-                         sizeof(PushConstant),
-                         &pc);
-
-      vkCmdDrawIndexed(commandBuffer,
-                       instance.mesh->m_indexCount,
-                       1,
-                       instance.mesh->m_startIndex,
-                       0,
-                       0);
-    }
+    vkCmdDrawIndexed(commandBuffer,
+                     scene.skybox->m_cube->m_uniqueMeshes.begin()
+                       ->second->m_indexCount,
+                     1,
+                     0,
+                     0,
+                     0);
   }
 
   vkCmdEndRenderPass(commandBuffer);
@@ -278,7 +281,7 @@ BlinnPhongPass::recreateAttachments(int width,
                                     VkImageView depthImageView)
 {
   m_hdrAttachment->resize(width, height);
-  vkDestroyFramebuffer(m_vkContext->logicalDevice, m_hdrFramebuffer, nullptr);
+  vkDestroyFramebuffer(m_device.device(), m_hdrFramebuffer, nullptr);
   createFrameBuffer(depthImageView);
 }
 
@@ -307,7 +310,7 @@ BlinnPhongPass::updateDescriptors(
     descriptorWrites[0].descriptorCount = 1;
     descriptorWrites[0].pImageInfo = &shadowMapImageInfo;
 
-    vkUpdateDescriptorSets(m_vkContext->logicalDevice,
+    vkUpdateDescriptorSets(m_device.device(),
                            static_cast<uint32_t>(descriptorWrites.size()),
                            descriptorWrites.data(),
                            0,
@@ -332,7 +335,7 @@ BlinnPhongPass::updateDescriptors(
     descriptorWrites[0].descriptorCount = 1;
     descriptorWrites[0].pImageInfo = &shadowAtlasImageInfo;
 
-    vkUpdateDescriptorSets(m_vkContext->logicalDevice,
+    vkUpdateDescriptorSets(m_device.device(),
                            static_cast<uint32_t>(descriptorWrites.size()),
                            descriptorWrites.data(),
                            0,
@@ -356,7 +359,7 @@ BlinnPhongPass::createFrameBuffer(VkImageView depthImageView)
   framebufferInfo.layers = 1;
 
   VK_CHECK(vkCreateFramebuffer(
-    m_vkContext->logicalDevice, &framebufferInfo, nullptr, &m_hdrFramebuffer));
+    m_device.device(), &framebufferInfo, nullptr, &m_hdrFramebuffer));
 }
 
 void
@@ -369,7 +372,10 @@ BlinnPhongPass::createAttachments(uint32_t width, uint32_t height)
   hdrInfo.layerCount = 1;
   hdrInfo.usage =
     VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-  hdrInfo.vkContext = m_vkContext;
+  hdrInfo.device = &m_device;
+  hdrInfo.allocator = &m_allocator;
+  hdrInfo.samplerCache = &m_samplerCache;
+  hdrInfo.samplerAddressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   m_hdrAttachment = FramebufferAttachment::create(hdrInfo);
 }
 
@@ -439,7 +445,7 @@ BlinnPhongPass::createRenderPass(VkFormat depthFormat)
   renderPassInfo.pDependencies = &dependency;
 
   VK_CHECK(vkCreateRenderPass(
-    m_vkContext->logicalDevice, &renderPassInfo, nullptr, &m_renderPass));
+    m_device.device(), &renderPassInfo, nullptr, &m_renderPass));
 }
 
 void
@@ -465,7 +471,7 @@ BlinnPhongPass::createPipelines(const LayoutConfig& layoutConfig)
                     .setDescriptorSetLayouts(layouts)
                     .setPushConstantRanges(std::span(&modelPC, 1))
                     .setRenderPass(m_renderPass)
-                    .build(m_vkContext->logicalDevice);
+                    .build(m_device.device());
 
     m_blinnPhongPipeline = result.pipeline;
     m_blinnPhongPipelineLayout = result.layout;
@@ -483,7 +489,7 @@ BlinnPhongPass::createPipelines(const LayoutConfig& layoutConfig)
                     .setDescriptorSetLayouts(layouts)
                     .setPushConstantRanges(std::span(&modelPC, 1))
                     .setRenderPass(m_renderPass)
-                    .build(m_vkContext->logicalDevice);
+                    .build(m_device.device());
 
     m_skyboxPipeline = result.pipeline;
     m_skyboxPipelineLayout = result.layout;
@@ -506,7 +512,7 @@ BlinnPhongPass::createPipelines(const LayoutConfig& layoutConfig)
                     .setDescriptorSetLayouts(layouts)
                     .setPushConstantRanges(pushConstants)
                     .setRenderPass(m_renderPass)
-                    .build(m_vkContext->logicalDevice);
+                    .build(m_device.device());
 
     m_lightCubesPipeline = result.pipeline;
     m_lightCubesPipelineLayout = result.layout;

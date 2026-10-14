@@ -1,7 +1,14 @@
 #include "Scene.h"
+#include "engine/GpuDevice.h"
 
-Scene::Scene(VulkanContext* vkContext)
-  : m_vkContext(vkContext)
+Scene::Scene(const GpuDevice& device,
+             const GpuAllocator& allocator,
+             const SamplerCache& samplerCache,
+             const ImmediateCommands& immediateCommands)
+  : m_device(device)
+  , m_allocator(allocator)
+  , m_samplerCache(samplerCache)
+  , m_immediateCommands(immediateCommands)
 {
   // --------------------- Init Scene ---------------------
   m_directionalLight = LightManager::createDirectionalLight(
@@ -35,7 +42,10 @@ Scene::Scene(VulkanContext* vkContext)
   std::string modelPath = MODEL_PATH;
   for (auto& pointLight : m_pointLights) {
     Model cube = Model(modelPath + "cube.glb",
-                       vkContext,
+                       m_device,
+                       m_allocator,
+                       m_samplerCache,
+                       m_immediateCommands,
                        pointLight.getPosition(),
                        glm::vec3(0.0),
                        0,
@@ -53,42 +63,51 @@ Scene::Scene(VulkanContext* vkContext)
     texturePath + "skybox/top.jpg",   texturePath + "skybox/bottom.jpg",
     texturePath + "skybox/front.jpg", texturePath + "skybox/back.jpg"
   };
-  m_skybox = std::make_unique<Skybox>(vkContext, files);
+  m_skybox = std::make_unique<Skybox>(
+    m_device, m_allocator, m_samplerCache, m_immediateCommands, files);
 
   // finish initializing models and loading them, setup camera etc.
   Model plane = Model(modelPath + "for_demo/plane.glb",
-                      vkContext,
+                      m_device,
+                      m_allocator,
+                      m_samplerCache,
+                      m_immediateCommands,
                       glm::vec3(0, 1, 0),
                       glm::vec3(0),
                       0,
                       glm::vec3(50));
   m_models.push_back(std::move(plane));
-  Model cube = Model(modelPath + "cube.glb", vkContext, glm::vec3(0, 0, 0));
+  Model cube = Model(modelPath + "cube.glb",
+                     m_device,
+                     m_allocator,
+                     m_samplerCache,
+                     m_immediateCommands,
+                     glm::vec3(0, 0, 0));
   m_models.push_back(std::move(cube));
-  // Model voyager = Model(modelPath + "voyager.gltf", vkContext, glm::vec3(0,
-  // -2, 0)); models.push_back(std::move(voyager));
+  // Model voyager = Model(modelPath + "voyager.gltf", m_device, m_allocator, m_samplerCache, m_immediateCommands, glm::vec3(0, -2, 0));
+  // models.push_back(std::move(voyager));
   Model desk = Model(modelPath + "for_demo/prova_optimized.glb",
-                     vkContext,
+                     m_device,
+                     m_allocator,
+                     m_samplerCache,
+                     m_immediateCommands,
                      glm::vec3(0.0, 1.0f, -3.0f),
                      glm::vec3(0.0, 1.0, 0.0),
                      180.0f,
                      glm::vec3(1.0f));
   m_models.push_back(std::move(desk));
-  // Model rare = Model(modelPath + "for_demo/rare_logo/rare.glb",
-  //                         vkContext,
-  //                         glm::vec3(-1.85, -0.7, -19.5f),
-  //                         glm::vec3(1.0, 0.0, 0.0),
-  //                         -90.0f,
-  //                         glm::vec3(0.1f));
-  //  models.push_back(std::move(rare));
 }
 
 Scene::~Scene()
 {
   // destroy models
   m_models.clear();
-  vkDestroyDescriptorSetLayout(
-    m_vkContext->logicalDevice, Model::s_textureLayout, nullptr);
+  m_lightCubes.clear();
+  if (Model::s_textureLayout != VK_NULL_HANDLE) {
+    vkDestroyDescriptorSetLayout(
+      m_device.device(), Model::s_textureLayout, nullptr);
+    Model::s_textureLayout = VK_NULL_HANDLE;
+  }
 }
 
 void

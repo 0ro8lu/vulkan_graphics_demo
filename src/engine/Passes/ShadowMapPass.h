@@ -3,17 +3,20 @@
 #include "engine/FramebufferAttachment.h"
 
 struct SceneRenderData;
+class GpuDevice;
+class GpuAllocator;
+class SamplerCache;
 
 #include <memory>
-
-struct SMPAttachmentConfig;
 
 class ShadowMapPass
 {
 public:
   struct AttachmentConfig;
 
-  ShadowMapPass(VulkanContext* vkContext,
+  ShadowMapPass(const GpuDevice& device,
+                const GpuAllocator& allocator,
+                const SamplerCache& samplerCache,
                 const AttachmentConfig& attachmentConfig);
   ~ShadowMapPass();
 
@@ -46,18 +49,14 @@ private:
 
   void createDirectionalRenderPass();
 
-  // void createSpotRenderPass(std::array<AttachmentData, 16> attachmentData);
-
   VkPipeline m_shadowMapPipeline;
   VkPipelineLayout m_shadowMapPipelineLayout;
   void createShadowMapPipeline();
 
-  // VkPipeline spotShadowMapPipeline;
-  // VkPipelineLayout spotShadowMapPipelineLayout;
-  // void createSpotShadowMapPipeline();
-
   uint32_t m_directionalShadowmapSize;
   uint32_t m_spotPointShadowmapSize;
 
-  VulkanContext* m_vkContext;
+  const GpuDevice& m_device;
+  const GpuAllocator& m_allocator;
+  const SamplerCache& m_samplerCache;
 };
